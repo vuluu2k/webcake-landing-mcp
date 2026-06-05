@@ -8,6 +8,16 @@ valid element/page skeletons, a page validator, and tools to create or edit page
 The AI agent produces the full `{ page, popup, settings, options, cartConfigs }` JSON; `create_page`
 persists it (source-only — the page opens in the editor where re-saving renders it).
 
+## Two ways to run
+
+| Mode | Command | When |
+|------|---------|------|
+| **CDN / npx** (no clone) | `npx -y webcake-landing-mcp` | Fastest start — npm fetches & runs it, no clone or build. Auto-updates to the latest published version. |
+| **Local** (cloned build) | `node /abs/path/dist/index.js` | Hacking on the server, offline, or pinning a specific build. Run `npm run build` first. |
+
+Both expose the exact same tools. Every IDE config below shows the **local** form; to use **CDN** mode,
+just swap `command`/`args` for the npx form (see [Run without cloning](#run-without-cloning-npx)).
+
 ## Quick Install (Recommended)
 
 Run the auto-install script — it handles everything: clone, install dependencies, build, and configure your IDE.
@@ -68,13 +78,47 @@ Then restart your IDE.
 
 ---
 
-## Manual Setup
+## Run without cloning (npx)
+
+Once published to npm, the server runs straight from the registry — no clone, no build:
+
+```bash
+npx -y webcake-landing-mcp
+```
+
+Or run the latest from GitHub (npx clones + builds via the `prepare` script on the fly):
+
+```bash
+npx -y github:vuluu2k/webcake-landing-mcp
+```
+
+The MCP config is the same as the local one, but `command`/`args` point at `npx` instead of a built file:
+
+```json
+{
+  "mcpServers": {
+    "webcake-landing": {
+      "command": "npx",
+      "args": ["-y", "webcake-landing-mcp"],
+      "env": {
+        "WEBCAKE_API_BASE": "http://localhost:5800",
+        "WEBCAKE_JWT": "<your-jwt>"
+      }
+    }
+  }
+}
+```
+
+> npx caches the package after the first run, so subsequent launches are fast. Use a pinned version
+> (`webcake-landing-mcp@1.0.0`) if you need a reproducible build.
+
+## Manual Setup (local)
 
 ```bash
 git clone https://github.com/vuluu2k/webcake-landing-mcp.git
 cd webcake-landing-mcp
-npm install
-npm run build      # tsc -> dist/ + copies page-schema.json
+npm install        # postinstall `prepare` builds dist/ automatically
+npm run build      # (re)build: tsc -> dist/ + copies page-schema.json
 npm run smoke      # offline self-test of factory + validator (prints "ALL GOOD")
 ```
 
@@ -145,7 +189,7 @@ Restart Claude Desktop. The MCP tools will appear in the chat input (hammer icon
 
 ### 2. Claude Code (CLI)
 
-Run in terminal:
+Run in terminal — **local** build:
 
 ```bash
 claude mcp add webcake-landing \
@@ -153,6 +197,15 @@ claude mcp add webcake-landing \
   -e WEBCAKE_JWT=<your-jwt> \
   -e WEBCAKE_HOST=builder.localhost \
   -- node /absolute-path/webcake-landing-mcp/dist/index.js
+```
+
+Or **CDN / npx** (no clone):
+
+```bash
+claude mcp add webcake-landing \
+  -e WEBCAKE_API_BASE=http://localhost:5800 \
+  -e WEBCAKE_JWT=<your-jwt> \
+  -- npx -y webcake-landing-mcp
 ```
 
 Or create `.claude.json` at project root (or `~/.claude.json` globally):
