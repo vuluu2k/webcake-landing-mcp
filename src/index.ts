@@ -329,6 +329,22 @@ server.tool(
 );
 
 async function main() {
+  // Subcommand dispatch: `webcake-landing-mcp install|uninstall` runs the
+  // bundled IDE installer instead of starting the MCP server. Default (no
+  // subcommand) starts the stdio server as usual.
+  const sub = process.argv[2];
+  if (sub === "install" || sub === "uninstall" || sub === "--help" || sub === "-h") {
+    const { runInstaller } = await import("./install.js");
+    const rest =
+      sub === "uninstall"
+        ? ["--uninstall", ...process.argv.slice(3)]
+        : sub === "--help" || sub === "-h"
+          ? ["--help"]
+          : process.argv.slice(3);
+    await runInstaller(rest);
+    return;
+  }
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // stderr only — stdout is the MCP channel.

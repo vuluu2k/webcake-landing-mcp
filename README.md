@@ -92,6 +92,32 @@ Or run the latest from GitHub (npx clones + builds via the `prepare` script on t
 npx -y github:vuluu2k/webcake-landing-mcp
 ```
 
+### Auto-configure your IDE (`install` subcommand)
+
+`npx` only **runs** the server — unlike `install.sh`/`install.ps1`, it does not write the MCP
+config into your IDE. The bundled `install` subcommand does that step for you, no clone needed:
+
+```bash
+# Interactive — asks for env + which IDE(s) step by step
+npx -y webcake-landing-mcp install
+
+# Non-interactive — configure every supported IDE at once
+npx -y webcake-landing-mcp install --ide all --jwt <your-jwt> --api-base http://localhost:5800
+
+# Just one IDE
+npx -y webcake-landing-mcp install --ide cursor --jwt <your-jwt>
+
+# Remove the server from every IDE config
+npx -y webcake-landing-mcp uninstall
+```
+
+It writes a `webcake-landing` entry (using the `npx` launch form below) into the right config file
+for each target: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment` (VS Code), `codex`,
+or `all`. Flags: `--ide`, `--api-base`, `--jwt`, `--org-id`, `--host`, `--app-base`, `--npx`/`--local`,
+`-y`. Run `npx -y webcake-landing-mcp --help` for the full list.
+
+### Manual config
+
 The MCP config is the same as the local one, but `command`/`args` point at `npx` instead of a built file:
 
 ```json
