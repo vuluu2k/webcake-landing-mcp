@@ -1,0 +1,218 @@
+#!/usr/bin/env node
+/**
+ * Webcake Elements MCP server (stdio).
+ *
+ * Gives Claude the knowledge to build a complete Webcake landing-page source
+ * JSON from a requirement: element catalog, per-element usage hints + specials,
+ * the full page JSON Schema, valid element skeletons, and a page validator.
+ *
+ * Tools:
+ *   - get_generation_guide : conventions, coordinate system, event vocab, workflow
+ *   - list_elements        : catalog of all element types (by category)
+ *   - get_element          : hints + key specials + default skeleton + example for one type
+ *   - new_element          : a structurally-valid default node for a type (optionally renamed)
+ *   - get_page_schema      : the full JSON Schema of a page source
+ *   - validate_page        : structural + semantic validation of a generated page
+ */
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+import { createElement, createPageSource } from "./factory.js";
+import {
+  LIBRARY,
+  GENERATION_GUIDE,
+  CANVAS,
+  CLICK_ACTIONS,
+  HOVER_ACTIONS,
+  EVENT_TRIGGERS,
+} from "./library.js";
+import { validatePage, coercePage, pageSchema } from "./validate.js";
+import { readConfig, buildRequestRedacted, createPage } from "./webcake.js";
+
+const ALL_TYPES = Object.keys(LIBRARY);
+
+function text(value: unknown) {
+  const body = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  return { content: [{ type: "text" as const, text: body }] };
+}
+
+const server = new McpServer({ name: "webcake-landing", version: "1.0.0" });
+
+// 1) Generation guide ---------------------------------------------------------
+server.tool(
+  "get_generation_guide",
+  "Read this FIRST. Conventions for building a Webcake page source: output shape, the absolute-positioning coordinate system, event vocabulary, and the recommended workflow.",
+  async () =>
+    text({
+      guide: GENERATION_GUIDE,
+      canvas: CANVAS,
+      event_triggers: EVENT_TRIGGERS,
+      click_actions: CLICK_ACTIONS,
+      hover_actions: HOVER_ACTIONS,
+    })
+);
+
+// 2) List elements ------------------------------------------------------------
+server.tool(
+  "list_elements",
+  "List every supported element type, grouped by category, with a one-line summary and whether it is a container (can hold children).",
+  async () => {
+    const byCategory: Record<string, any[]> = {};
+    for (const t of ALL_TYPES) {
+      const d = LIBRARY[t];
+      (byCategory[d.category] ||= []).push({
+        type: d.type,
+        container: d.container,
+        summary: d.summary,
+        useWhen: d.useWhen,
+      });
+    }
+    return text({ total: ALL_TYPES.length, categories: byCategory });
+  }
+);
+
+// 3) Get element --------------------------------------------------------------
+server.tool(
+  "get_element",
+  "Get detailed usage for one element type: when to use it, its key `specials` fields, a default skeleton node, and (for common types) a filled example. Call before emitting an element of an unfamiliar type.",
+  { type: z.string().describe("Element type, e.g. 'section', 'text-block', 'button', 'form', 'input', 'countdown'.") },
+  async ({ type }) => {
+    const doc = LIBRARY[type];
+    if (!doc) {
+      return text({
+        error: `Unknown element type "${type}".`,
+        valid_types: ALL_TYPES,
+      });
+    }
+    return text({
+      type: doc.type,
+      category: doc.category,
+      container: doc.container,
+      summary: doc.summary,
+      useWhen: doc.useWhen,
+      keySpecials: doc.keySpecials,
+      skeleton: createElement(type),
+      example: doc.example ?? null,
+    });
+  }
+);
+
+// 4) New element --------------------------------------------------------------
+server.tool(
+  "new_element",
+  "Return a structurally-valid default element node for a type (correct properties/responsive/specials/sizes), with a fresh id. Fill in specials + top/left coordinates afterwards.",
+  {
+    type: z.string().describe("Element type to create."),
+    name: z.string().optional().describe("Optional properties.name override (layer label)."),
+  },
+  async ({ type, name }) => {
+    if (!LIBRARY[type]) {
+      return text({ error: `Unknown element type "${type}".`, valid_types: ALL_TYPES });
+    }
+    return text(createElement(type, name ? { name } : {}));
+  }
+);
+
+// 5) Page schema --------------------------------------------------------------
+server.tool(
+  "get_page_schema",
+  "Return the full JSON Schema (Draft 2020-12) of a Webcake page source object { page: [...], settings: {...} }. Use it to understand the exact structure or for your own validation.",
+  async () => text(pageSchema)
+);
+
+// 6) Validate page ------------------------------------------------------------
+server.tool(
+  "validate_page",
+  "Validate a generated page source against the schema + semantic rules (unique ids, dangling event targets, children only on containers, missing field_name, top-level types). Returns errors (must fix) and warnings. ALWAYS run before returning the final page.",
+  {
+    page: z
+      .any()
+      .describe("The page source object { page:[...], settings:{} } OR a JSON string of it."),
+  },
+  async ({ page }) => {
+    const result = validatePage(page);
+    return text(result);
+  }
+);
+
+// 7) New page skeleton --------------------------------------------------------
+server.tool(
+  "new_page_skeleton",
+  "Return an empty but complete top-level page source { page:[], popup:[], settings:{...defaults}, options:{...}, cartConfigs:{} } matching the real editor shape. Fill `page` with sections (and `popup` with popups), then validate_page and create_page.",
+  { mobileOnly: z.boolean().optional().describe("true if the page renders mobile-only.") },
+  async ({ mobileOnly }) => text(createPageSource({ mobileOnly: mobileOnly ?? false }))
+);
+
+// 8) Create page (persist) ----------------------------------------------------
+server.tool(
+  "create_page",
+  "Persist a generated page source to the configured Webcake backend: creates a NEW page and saves the source (source-only — opens in the editor where re-saving renders it). Validates first. DEFAULTS to dry_run=true (returns the HTTP request it WOULD send, token masked). Set dry_run=false to actually create — that needs WEBCAKE_API_BASE + WEBCAKE_JWT env vars.",
+  {
+    source: z
+      .any()
+      .describe("Full page source { page, popup, settings, options, cartConfigs } (object or JSON string)."),
+    name: z.string().optional().describe("Page name (default 'AI Page')."),
+    dry_run: z
+      .boolean()
+      .optional()
+      .describe("Default TRUE — preview the request without sending. Set false to actually create."),
+  },
+  async ({ source, name, dry_run }) => {
+    const pageName = name ?? "AI Page";
+    const isDry = dry_run !== false; // default true (safe)
+
+    const result = validatePage(source);
+    if (!result.valid) {
+      return text({
+        created: false,
+        reason: "validation_failed",
+        errors: result.errors,
+        warnings: result.warnings,
+        hint: "Fix the errors (run validate_page) before creating.",
+      });
+    }
+    const parsed = coercePage(source);
+    const { config, missing } = readConfig();
+
+    if (isDry) {
+      return text({
+        dry_run: true,
+        validation: { valid: true, warnings: result.warnings, stats: result.stats },
+        env_ready: missing.length === 0,
+        missing_env: missing,
+        request: config
+          ? buildRequestRedacted(config, pageName, parsed)
+          : {
+              note:
+                "Set WEBCAKE_API_BASE + WEBCAKE_JWT to enable real creation. Would POST to {WEBCAKE_API_BASE}/api/v1/ai/create_page_from_source.",
+            },
+        hint: "Re-run with dry_run=false to actually create the page.",
+      });
+    }
+
+    if (!config) {
+      return text({
+        created: false,
+        reason: "missing_env",
+        missing_env: missing,
+        hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT in the MCP server env, then retry.",
+      });
+    }
+
+    const outcome = await createPage(config, pageName, parsed);
+    return text({ created: outcome.ok, ...outcome, warnings: result.warnings });
+  }
+);
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  // stderr only — stdout is the MCP channel.
+  console.error("[webcake-elements] MCP server ready on stdio.");
+}
+
+main().catch((err) => {
+  console.error("[webcake-elements] fatal:", err);
+  process.exit(1);
+});

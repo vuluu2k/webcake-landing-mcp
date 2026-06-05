@@ -1,0 +1,27 @@
+{
+  "name": "webcake-landing-mcp",
+  "version": "1.0.0",
+  "description": "MCP server exposing Webcake landing-page element schemas + AI usage hints, and persisting LLM-generated page sources to a Webcake backend.",
+  "type": "module",
+  "bin": {
+    "webcake-landing-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && cp src/page-schema.json dist/page-schema.json",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "smoke": "node dist/smoke.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "ajv": "^8.17.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  }
+}

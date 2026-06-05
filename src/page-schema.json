@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://webcake/landing-page/page-schema.json",
+  "title": "WebcakePage",
+  "description": "Schema of a Webcake landing page source (the JSON stored in PageSource.source). A page is a list of absolutely-positioned section trees plus global settings. See docs/ai/page-element-schema.md for full conventions. NOTE: this is a descriptive/validation schema (not OpenAI strict-mode); specials and styles are intentionally open (additionalProperties:true) because the editor model is freeform.",
+  "type": "object",
+  "required": ["page"],
+  "additionalProperties": true,
+  "properties": {
+    "page": {
+      "type": "array",
+      "description": "Top-level SECTIONS stacked vertically (index 0 = top). Items are section (or dynamic_page). Popups go in the separate `popup` array, NOT here.",
+      "items": { "$ref": "#/$defs/element" }
+    },
+    "popup": {
+      "type": "array",
+      "description": "Separate top-level array of popup elements (type:\"popup\"). Triggered by events { action:\"open_popup\", target:<popup id> }.",
+      "items": { "$ref": "#/$defs/element" }
+    },
+    "dynamic_pages": {
+      "type": "array",
+      "description": "Dynamic (dataset-bound) page sections. Empty/absent for static pages.",
+      "items": { "$ref": "#/$defs/element" }
+    },
+    "options": {
+      "type": "object",
+      "description": "Editor options.",
+      "additionalProperties": true,
+      "properties": {
+        "currency": { "type": "string", "examples": ["VND", "USD"] },
+        "mobileOnly": { "type": "boolean", "description": "true = page only renders the mobile breakpoint." },
+        "versionID": { "type": ["string", "null"] }
+      }
+    },
+    "cartConfigs": { "type": "object", "additionalProperties": true, "description": "Cart/commerce config; {} when unused." },
+    "settings": {
+      "type": "object",
+      "description": "Page-wide config + SEO + fonts + tracking + custom code (real pages carry ~20-40 keys).",
+      "additionalProperties": true,
+      "properties": {
+        "title": { "type": "string", "description": "SEO title, <= 60 chars." },
+        "description": { "type": "string", "description": "SEO meta description, <= 160 chars." },
+        "keywords": { "type": "string", "description": "Comma-separated keywords." },
+        "favicon": { "type": "string" },
+        "thumbnail": { "type": "string", "description": "Social/share thumbnail URL." },
+        "fontGeneral": { "type": "string", "description": "Default page font-family, e.g. \"'Roboto', sans-serif\"." },
+        "width_section": {
+          "type": "object",
+          "description": "Canvas reference widths.",
+          "properties": { "desktop": { "type": "number" }, "mobile": { "type": "number" } }
+        },
+        "country": { "type": "string", "description": "Dialing/locale code, e.g. \"84\"." },
+        "fb_tracking_code": { "type": "string", "description": "Facebook pixel id." },
+        "tiktok_script": { "type": "string" },
+        "global_track_ids": { "type": "array" },
+        "extra_css": { "type": "string", "description": "Custom CSS injected into the page." },
+        "extra_script": { "type": "string", "description": "Custom JS injected into the page." },
+        "auto_save_draft": { "type": "boolean" },
+        "auto_save_info_user": { "type": "boolean" },
+        "send_info_to_thank_page": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_]{4,32}$",
+      "description": "Unique id within the whole page (~8 chars). Referenced by event.target."
+    },
+    "elementType": {
+      "type": "string",
+      "description": "Element kind. Container types (have children): section, dynamic_page, group, grid, grid-item, carousel, slide, popup, form, gallery, checkbox-group, radio, group-select.",
+      "enum": [
+        "section", "dynamic_page", "group", "grid", "grid-item", "carousel", "slide", "popup",
+        "text-block", "list-paragraph", "image-block", "rectangle", "line", "button", "video",
+        "gallery", "html-box", "editor-blog",
+        "form", "input", "textarea", "select", "checkbox", "checkbox-group", "radio", "address",
+        "country-select", "quantity_input", "input-datetime", "input-file", "signature",
+        "verify-code", "group-select", "group-select-item",
+        "list-product", "search-list-product", "cart-items", "cart-quantity", "product-select", "table",
+        "countdown", "timegroup", "auto-number", "random-number", "notify", "spin-wheel", "survey",
+        "alertMessage"
+      ]
+    },
+    "styles": {
+      "type": "object",
+      "description": "Per-breakpoint CSS. Positioning is absolute (px numbers). additionalProperties allowed for any camelCase CSS property.",
+      "additionalProperties": true,
+      "properties": {
+        "top": { "type": "number", "description": "px, absolute within container. Omit on section." },
+        "left": { "type": "number", "description": "px, absolute within container. Omit on section." },
+        "width": { "type": "number", "description": "px." },
+        "height": { "type": "number", "description": "px. Section uses this as canvas height." },
+        "position": { "type": "string", "enum": ["absolute", "relative", "fixed", "static"] },
+        "zIndex": { "type": "number" },
+        "background": { "type": "string", "description": "rgba(...) or gradient." },
+        "backgroundImage": { "type": "string", "description": "url(...)." },
+        "color": { "type": "string", "description": "rgba(r,g,b,a)." },
+        "fontSize": { "type": "number", "description": "px." },
+        "fontFamily": { "type": "string" },
+        "fontWeight": { "type": ["string", "number"] },
+        "fontStyle": { "type": "string" },
+        "textAlign": { "type": "string", "enum": ["start", "center", "end", "left", "right", "justify"] },
+        "lineHeight": { "type": ["number", "string"] },
+        "letterSpacing": { "type": ["number", "string"] },
+        "textTransform": { "type": "string" },
+        "textDecoration": { "type": "string" },
+        "borderStyle": { "type": "string", "enum": ["solid", "dashed", "dotted", "double", "none"] },
+        "borderWidth": { "type": "number", "description": "px." },
+        "borderColor": { "type": "string" },
+        "borderRadius": { "type": ["string", "number"] },
+        "boxShadow": { "type": "string" },
+        "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+        "mixBlendMode": { "type": "string" },
+        "transform": { "type": "string" },
+        "padding": { "type": ["number", "string"] },
+        "margin": { "type": ["number", "string"] }
+      }
+    },
+    "config": {
+      "type": "object",
+      "description": "Per-breakpoint non-CSS config (lazy-load flags, grid/carousel/countdown options).",
+      "additionalProperties": true,
+      "properties": {
+        "notloaded": { "type": "boolean" },
+        "animation": {
+          "type": "object",
+          "description": "Entrance animation for this element on this breakpoint.",
+          "additionalProperties": true,
+          "properties": {
+            "name": { "type": "string", "description": "animate.css name, or \"none\"." },
+            "delay": { "type": "number" },
+            "duration": { "type": "number" },
+            "repeat": { "type": ["number", "null"] }
+          }
+        },
+        "virtualHeight": { "type": "number" },
+        "overlay": { "type": "string", "description": "Overlay color rgba(...)." },
+        "hiddenEffect": { "type": "object", "additionalProperties": true },
+        "svgMask": { "type": "string" },
+        "lock": { "type": "boolean" },
+        "column": { "type": "number" },
+        "row": { "type": "number" },
+        "slideWidth": { "type": "number" },
+        "iconSize": { "type": "number" },
+        "iconTop": { "type": "number" },
+        "linePaddingLeft": { "type": "number" },
+        "topBgImage": { "type": "number" },
+        "leftBgImage": { "type": "number" },
+        "widthBgImage": { "type": "number" },
+        "heightBgImage": { "type": "number" }
+      }
+    },
+    "responsive": {
+      "type": "object",
+      "required": ["desktop", "mobile"],
+      "additionalProperties": false,
+      "properties": {
+        "desktop": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "config": { "$ref": "#/$defs/config" },
+            "styles": { "$ref": "#/$defs/styles" }
+          }
+        },
+        "mobile": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "config": { "$ref": "#/$defs/config" },
+            "styles": { "$ref": "#/$defs/styles" }
+          }
+        }
+      }
+    },
+    "properties": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string", "description": "Display label in the layer panel." },
+        "movable": { "type": "boolean", "description": "false for section/slide/grid-item/popup." },
+        "sync": { "type": "boolean" },
+        "thumbnail": { "type": "string" }
+      }
+    },
+    "event": {
+      "type": "object",
+      "description": "Interaction. type=trigger, action=behavior, target=id/url/text depending on action.",
+      "required": ["type", "action"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string", "description": "Event id (any string; ~8 chars in real data)." },
+        "type": {
+          "type": "string",
+          "enum": ["click", "hover", "success", "unset"],
+          "description": "Trigger."
+        },
+        "action": {
+          "type": "string",
+          "description": "Behavior. Common click actions and what target holds: none(-), open_link(URL), open_popup(popup id), close_popup(popup id), scroll_to(element/section id), show_section/hide_section(section id), show_hide_element(element id), change_tab(id), lightbox(image id/url), copy(text), collapse(id), set_field_value(field_name + set_value), back_to/back_home(url), share(url), play_audio/stop_audio(id), open_cart/add_to_cart(product id), open_app(provider: botcake|whatsapp|mess_prefill|tiktok_prefill|line_prefill), change_color, custom_js. Hover actions: change_color, change_background, change_text_color, change_underline, change_overline, change_image, animation_hover, show_hide_element.",
+          "examples": [
+            "none", "open_link", "open_popup", "close_popup", "scroll_to",
+            "show_section", "hide_section", "show_hide_element", "copy",
+            "set_field_value", "add_to_cart", "open_app"
+          ]
+        },
+        "target": {
+          "type": ["string", "null"],
+          "description": "Element id, URL, or text depending on action (null for some, e.g. animation_hover)."
+        },
+        "appTarget": {
+          "type": "string",
+          "description": "Secondary target for open_app / link behaviors (often empty string)."
+        },
+        "hoverColor": {
+          "type": "string",
+          "description": "Color for hover color-change actions (often empty string)."
+        },
+        "set_value": {
+          "type": "string",
+          "description": "Value to assign when action = set_field_value."
+        }
+      }
+    },
+    "specials": {
+      "type": "object",
+      "description": "Type-specific content/config. The user-visible CONTENT lives here, NOT in styles. Open object; key fields by type: section{globalSection,globalSectionName,custom_class,imageCompression}; text-block{text(HTML),tag}; list-paragraph{text(<li>..)}; image-block{src,resize}; button{text,required,format,connectedSurvey}; video{typeVideo,video_cdn,img,autoReplay}; gallery{media[]}; form{field_type,form_type,sheetOrder,validate,submit_success,fb_event_type,fb_conversion_value,fb_tracking_currency,tiktok_conversion_value,tiktok_tracking_currency}; input/textarea/select/checkbox/radio/address/...{field_name,field_placeholder,field_type,required,options}; countdown{type,duration,startTime,endTime,showDay,showSecond,showText,language,customTranslation}; survey{options[{id,image,title,value,field_name}],type,multiOption,selectedBackground,selectedBorder}; list-product{format_title,numerical_order,remain_quantity_text}.",
+      "additionalProperties": true,
+      "properties": {
+        "text": { "type": "string", "description": "text-block/button label/list-paragraph (may contain HTML)." },
+        "tag": { "type": "string", "enum": ["p", "h1", "h2", "h3", "h4", "h5", "h6", "span", "div"] },
+        "src": { "type": "string", "description": "image-block image URL." },
+        "media": { "type": "array", "description": "gallery items (URLs or objects)." },
+        "field_name": { "type": "string", "description": "REQUIRED & unique for form inputs — the submitted data column." },
+        "field_placeholder": { "type": "string" },
+        "field_type": { "type": "string", "examples": ["text", "email", "phone", "number"] },
+        "required": { "type": "boolean" },
+        "options": { "type": "array", "description": "choices for select/radio/checkbox-group/survey/group-select-item." },
+        "typeVideo": { "type": "string", "examples": ["youtube", "upload", "vimeo"] },
+        "type": { "type": "string", "description": "sub-type for countdown/survey/etc." },
+        "duration": { "type": ["string", "number"] },
+        "imageCompression": { "type": "boolean" }
+      }
+    },
+    "element": {
+      "type": "object",
+      "required": ["id", "type", "properties", "responsive", "specials"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "$ref": "#/$defs/elementType" },
+        "properties": { "$ref": "#/$defs/properties" },
+        "responsive": { "$ref": "#/$defs/responsive" },
+        "specials": { "$ref": "#/$defs/specials" },
+        "runtime": { "type": "object", "description": "Always {} when generating.", "additionalProperties": true },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/event" } },
+        "children": {
+          "type": "array",
+          "description": "Only on container types. Each child is itself an element.",
+          "items": { "$ref": "#/$defs/element" }
+        }
+      }
+    }
+  }
+}
