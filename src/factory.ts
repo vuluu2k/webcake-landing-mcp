@@ -243,7 +243,6 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       setStyle(el, "color", "rgba(255, 255, 255, 1)");
       setStyle(el, "background", "rgba(0, 0, 0, 1)");
       setStyle(el, "fontSize", 20);
-      setStyle(el, "textAlign", "center");
       el.specials = { type: "minute", duration: "60", showDay: true, showSecond: true, showText: true };
       break;
     case "timegroup":

@@ -292,7 +292,7 @@ export const LIBRARY: Record<string, ElementDoc> = {
   countdown: {
     type: "countdown", category: "marketing", container: false,
     summary: "Countdown timer (minute duration, fixed end time, or daily window).",
-    useWhen: "Urgency: limited offer, flash sale. Renders a row of segment boxes — size width to fit the segments shown (showDay/showSecond) and CENTER the box: left = round((canvas - width)/2). Add styles.textAlign:'center' so the segments sit centered inside the box.",
+    useWhen: "Urgency: limited offer, flash sale. Renders a fixed FOUR-slot flex row (day·hour·minute·second); each visible segment is sized 1/4 of the width regardless of how many show, so HIDING a segment (showDay/showSecond:false) leaves an empty gap on the right (the row is left-aligned, no built-in re-centering). Keep all four (showDay+showSecond:true) so the row fills evenly, and CENTER the whole box on the canvas: left = round((canvas - width)/2).",
     keySpecials: {
       type: "minute | endTime | daily.", duration: "minutes (when type=minute).",
       startTime: "ISO start (endTime/daily).", endTime: "ISO end.",

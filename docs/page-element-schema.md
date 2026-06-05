@@ -44,9 +44,23 @@ Một trang được lưu dưới dạng **một chuỗi JSON** trong cột `sou
   bên trong section/container chứa nó.
 - **Section** không có `top`/`left`; nó có `height` (chiều cao canvas) và xếp dọc tự động.
 - Hai breakpoint độc lập: `desktop` và `mobile`. Mỗi cái có toạ độ + style riêng.
-  - Bề rộng canvas tham chiếu: **desktop ≈ 960px**, **mobile ≈ 420px** (lấy từ default của `dynamic_page`).
+  - Bề rộng canvas **cố định** theo `settings.width_section`: **desktop = 960px**, **mobile = 420px**.
+    `top/left/width/height` được render thành `px` tuyệt đối trên `#e-{id}` (xem `assets/editor/exporter.js`),
+    định vị bên trong section rộng đúng bằng canvas này.
   - `height` mặc định của section = `800`.
 - Vì là absolute, **phải tự tính toạ độ không chồng lấn** giữa các element trong cùng section.
+- Mọi element con phải nằm trong canvas: `0 ≤ left` và `left + width ≤` bề rộng canvas (editor tự kẹp về `canvas − 20`
+  ở mobile / `canvas − 60` ở desktop nếu element rộng quá — tức tràn canvas bị coi là sai).
+
+### Căn giữa & căn chỉnh (TÍNH TOÁN, đừng ước lượng `left` — lệch tâm là lỗi layout phổ biến nhất)
+
+- `textAlign:"center"` chỉ căn giữa **chữ bên trong** box, KHÔNG dịch chuyển box. Muốn box nằm giữa canvas phải tính `left`.
+- Căn giữa MỘT element rộng `w`:  `left = round((canvas − w) / 2)` — desktop dùng 960, mobile dùng 420.
+  Ví dụ box rộng 300 → desktop `left = 330`, mobile `left = 60`.
+- Tiêu đề / text full-width: chọn width rồi căn giữa. Cột nội dung an toàn: desktop width 800 (left 80) / mobile width 380 (left 20), kèm `textAlign:"center"`.
+- HÀNG N phần tử bằng nhau (thẻ feature, đồng hồ đếm ngược, logo, số liệu) — căn giữa cả hàng như một khối:
+  `rowWidth = N*itemWidth + (N−1)*gap`; `startLeft = round((canvas − rowWidth) / 2)`; phần tử thứ i (0-based) `left = startLeft + i*(itemWidth + gap)`.
+- Lặp lại phép căn giữa trên CẢ hai breakpoint với canvas riêng của nó — không tái dùng `left` desktop cho mobile.
 
 ---
 
@@ -200,7 +214,7 @@ Màu **luôn dùng định dạng `rgba(r, g, b, a)`** (theo dữ liệu thật 
 
 | `type` | Container | `specials` chính | Ghi chú |
 |--------|:--------:|------------------|--------|
-| `countdown` | – | `type` (`"minute"`/`"endTime"`/`"daily"`), `duration`, `startTime`, `endTime`, `showDay`, `showSecond`, `showText`, `language`, `customTranslation` | Đồng hồ đếm ngược. |
+| `countdown` | – | `type` (`"minute"`/`"endTime"`/`"daily"`), `duration`, `startTime`, `endTime`, `showDay`, `showSecond`, `showText`, `language`, `customTranslation` | Đồng hồ đếm ngược. Render hàng flex **4 ô cố định** (ngày·giờ·phút·giây), mỗi ô = 1/4 bề rộng dù ẩn bớt → tắt `showDay`/`showSecond` sẽ để **trống lệch sang phải**. Nên giữ đủ 4 ô cho cân, và căn giữa cả box qua `left`. |
 | `timegroup` | – | — | Hiển thị giờ/ngày hiện tại. |
 | `auto-number` | – | — | Số tự tăng (vd lượt xem giả lập). |
 | `random-number` | – | — | Số ngẫu nhiên. |
@@ -359,7 +373,7 @@ Mỗi phần tử trong mảng `events`:
 1. **Luôn** xuất root `{ "page": [...], "settings": {...} }`. Phần tử cấp 1 của `page` **phải** là `type:"section"` (hoặc `dynamic_page` / `popup`).
 2. `id` duy nhất toàn trang; mọi `event.target` phải trỏ tới `id` có thật.
 3. Mỗi element có ĐỦ cả `responsive.desktop` và `responsive.mobile`; element con phải có `top/left/width` ở cả hai.
-4. Toạ độ tuyệt đối, không chồng lấn; tham chiếu canvas desktop ≈ 960px, mobile ≈ 420px; section dùng `height`.
+4. Toạ độ tuyệt đối, không chồng lấn; canvas desktop = 960px, mobile = 420px; section dùng `height`. Giữ `0 ≤ left` và `left + width ≤` canvas. Căn giữa box bằng `left = round((canvas − width)/2)` (đừng ước lượng); với một hàng N phần tử thì căn giữa cả khối hàng.
 5. Nội dung text/ảnh đặt trong `specials` (`text`, `src`, `media`…), KHÔNG đặt trong `styles`.
 6. Màu dùng `rgba(...)`. `fontSize`/`borderWidth`/`top`/`left`/`width`/`height` là **số** (px).
 7. Mọi `input`/`select`/`checkbox`… trong `form` phải có `specials.field_name` duy nhất.
