@@ -77,11 +77,16 @@ jobs:
       - name: Resolve bump type
         id: bump
         if: steps.mode.outputs.resume != 'true'
+        env:
+          # Pass untrusted inputs through env, never interpolated into the shell
+          # script directly — a commit message containing backticks or $(...)
+          # would otherwise be executed by the shell.
+          INPUT_BUMP: ${{ github.event.inputs.bump }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          BUMP="${{ github.event.inputs.bump }}"
+          BUMP="$INPUT_BUMP"
           if [ -z "$BUMP" ]; then
-            MSG="${{ github.event.head_commit.message }}"
-            case "$MSG" in
+            case "$COMMIT_MSG" in
               *"BREAKING CHANGE"*|*"!:"*) BUMP="major" ;;
               feat*|*"feat:"*|*"feat("*) BUMP="minor" ;;
               *) BUMP="patch" ;;
