@@ -27,6 +27,23 @@ const ELEMENT_TARGET_ACTIONS = new Set([
 
 const TOP_LEVEL_TYPES = new Set(["section", "dynamic_page", "popup"]);
 
+// Fixed canvas reference (matches library CANVAS) used for the layout/bounds check.
+const CANVAS_DESKTOP = 960;
+const CANVAS_MOBILE = 420;
+const DEFAULT_SECTION_HEIGHT = 800;
+const BOUNDS_TOL = 1; // px tolerance for rounding
+const MAX_LAYOUT_WARNINGS = 12;
+
+/** Coerce a style value (number or "300px"/"300") to a finite number, else undefined. */
+function num(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (typeof v === "string") {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
 export type ValidationResult = {
   valid: boolean;
   errors: string[];
@@ -147,6 +164,107 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
   }
+
+  // 3) Layout bounds — flag children that fall off their container's canvas (a
+  //    common cause of "off-center / misaligned" pages). Warnings only.
+  let layoutWarnings = 0;
+  const widthSection = page?.settings?.width_section ?? {};
+  const rootCanvasD = num(widthSection.desktop) ?? CANVAS_DESKTOP;
+  const rootCanvasM = num(widthSection.mobile) ?? CANVAS_MOBILE;
+
+  const checkBounds = (
+    container: any,
+    canvasWD: number,
+    canvasHD: number,
+    canvasWM: number,
+    canvasHM: number,
+    path: string
+  ) => {
+    if (!container || !Array.isArray(container.children)) return;
+    container.children.forEach((child: any, idx: number) => {
+      if (!child || typeof child !== "object") return;
+      const cpath = `${path}.children[${idx}]`;
+      const label = `${cpath} (${child.type ?? "?"})`;
+
+      for (const [bp, canvasW, canvasH] of [
+        ["desktop", canvasWD, canvasHD] as const,
+        ["mobile", canvasWM, canvasHM] as const,
+      ]) {
+        const styles = child?.responsive?.[bp]?.styles;
+        if (!styles) continue;
+        const left = num(styles.left) ?? 0;
+        const top = num(styles.top) ?? 0;
+        const width = num(styles.width);
+        const height = num(styles.height);
+
+        if (layoutWarnings < MAX_LAYOUT_WARNINGS) {
+          if (left < -BOUNDS_TOL) {
+            warnings.push(`${label} ${bp}: left=${left} is negative (off-canvas left). Set left ≥ 0.`);
+            layoutWarnings++;
+          } else if (width != null && left + width > canvasW + BOUNDS_TOL) {
+            warnings.push(
+              `${label} ${bp}: left+width=${left + width} exceeds canvas ${canvasW} (overflows right). To center: left = round((${canvasW} - ${width})/2) = ${Math.round((canvasW - width) / 2)}.`
+            );
+            layoutWarnings++;
+          }
+        }
+        if (layoutWarnings < MAX_LAYOUT_WARNINGS && top < -BOUNDS_TOL) {
+          warnings.push(`${label} ${bp}: top=${top} is negative (above its section). Set top ≥ 0.`);
+          layoutWarnings++;
+        }
+        if (
+          layoutWarnings < MAX_LAYOUT_WARNINGS &&
+          canvasH > 0 &&
+          height != null &&
+          top + height > canvasH + BOUNDS_TOL
+        ) {
+          warnings.push(
+            `${label} ${bp}: top+height=${top + height} exceeds container height ${canvasH} (extends below). Move it up or increase the section/container height.`
+          );
+          layoutWarnings++;
+        }
+      }
+
+      // Recurse into nested containers using the child's own box as the canvas.
+      if (Array.isArray(child.children) && child.children.length > 0) {
+        const ds = child?.responsive?.desktop?.styles ?? {};
+        const ms = child?.responsive?.mobile?.styles ?? {};
+        checkBounds(
+          child,
+          num(ds.width) ?? canvasWD,
+          num(ds.height) ?? canvasHD,
+          num(ms.width) ?? canvasWM,
+          num(ms.height) ?? canvasHM,
+          cpath
+        );
+      }
+    });
+  };
+
+  topList.forEach((sec, i) => {
+    const ds = sec?.responsive?.desktop?.styles ?? {};
+    const ms = sec?.responsive?.mobile?.styles ?? {};
+    checkBounds(
+      sec,
+      rootCanvasD,
+      num(ds.height) ?? DEFAULT_SECTION_HEIGHT,
+      rootCanvasM,
+      num(ms.height) ?? DEFAULT_SECTION_HEIGHT,
+      `page[${i}]`
+    );
+  });
+  popups.forEach((p, i) => {
+    const ds = p?.responsive?.desktop?.styles ?? {};
+    const ms = p?.responsive?.mobile?.styles ?? {};
+    checkBounds(
+      p,
+      num(ds.width) ?? rootCanvasD,
+      num(ds.height) ?? DEFAULT_SECTION_HEIGHT,
+      num(ms.width) ?? rootCanvasM,
+      num(ms.height) ?? DEFAULT_SECTION_HEIGHT,
+      `popup[${i}]`
+    );
+  });
 
   return {
     valid: errors.length === 0,

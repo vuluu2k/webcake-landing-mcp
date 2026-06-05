@@ -25,6 +25,15 @@ export function randomId(len = 8): string {
   return s;
 }
 
+/**
+ * Placeholder image URL. There is no image API yet, so generated image elements
+ * get a visible placeholder (sized to the element) instead of an empty src —
+ * otherwise the page renders blank where images should be. Users swap these later.
+ */
+export function imgPlaceholder(w = 600, h = 400, label = "Image"): string {
+  return `https://placehold.co/${Math.round(w)}x${Math.round(h)}?text=${encodeURIComponent(label)}`;
+}
+
 /** Types that carry a `children` array. */
 export const CONTAINER_TYPES = new Set([
   "section",
@@ -151,7 +160,7 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       setBox(el, 110, 80);
       setStyle(el, "position", "absolute");
       el.specials.imageCompression = true;
-      el.specials.src = "";
+      el.specials.src = imgPlaceholder(600, 400);
       break;
     case "button":
       seedPosition(el);
@@ -162,11 +171,12 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       seedPosition(el);
       setBox(el, 350, 200);
       el.specials.imageCompression = true;
+      el.specials.img = imgPlaceholder(640, 360, "Video");
       break;
     case "gallery":
       seedPosition(el);
       setBox(el, 350, 400);
-      el.specials.media = [];
+      el.specials.media = [imgPlaceholder(600, 400, "1"), imgPlaceholder(600, 400, "2"), imgPlaceholder(600, 400, "3")];
       el.children = [];
       break;
     case "popup":
@@ -233,6 +243,7 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       setStyle(el, "color", "rgba(255, 255, 255, 1)");
       setStyle(el, "background", "rgba(0, 0, 0, 1)");
       setStyle(el, "fontSize", 20);
+      setStyle(el, "textAlign", "center");
       el.specials = { type: "minute", duration: "60", showDay: true, showSecond: true, showText: true };
       break;
     case "timegroup":

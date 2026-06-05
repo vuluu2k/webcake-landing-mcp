@@ -163,9 +163,9 @@ export const LIBRARY: Record<string, ElementDoc> = {
   },
   "image-block": {
     type: "image-block", category: "content", container: false,
-    summary: "Image. specials.src is the image URL (image may also be set via styles.backgroundImage).",
-    useWhen: "Photos, logos, illustrations, screenshots. config.overlay tints the image.",
-    keySpecials: { src: "image URL.", resize: "resize mode.", overlay: "(config) overlay color rgba(...)." },
+    summary: "Image. The editor renders the image from specials.src. config.overlay tints it.",
+    useWhen: "Add images where a landing page would have them: hero/product shot, feature icons, about photo, logos. There is NO image API yet — set specials.src to a PLACEHOLDER URL sized to the box: https://placehold.co/<width>x<height> (or https://picsum.photos/<w>/<h> for a photo). NEVER leave src empty (it renders blank). The user replaces placeholders later.",
+    keySpecials: { src: "image URL — REQUIRED. Use https://placehold.co/WxH (matching width×height) if you don't have a real image.", resize: "resize mode.", overlay: "(config) overlay color rgba(...)." },
     example: {
       id: "hero_img", type: "image-block",
       properties: { name: "Image Block", movable: true, sync: true },
@@ -173,7 +173,7 @@ export const LIBRARY: Record<string, ElementDoc> = {
         desktop: { config: {}, styles: { top: 40, left: 540, width: 360, height: 300, position: "absolute" } },
         mobile: { config: {}, styles: { top: 260, left: 60, width: 300, height: 240, position: "absolute" } },
       },
-      specials: { src: "https://statics.pancake.vn/.../hero.png", imageCompression: true },
+      specials: { src: "https://placehold.co/360x300?text=Product", imageCompression: true },
       runtime: {}, events: [],
     },
   },
@@ -211,14 +211,14 @@ export const LIBRARY: Record<string, ElementDoc> = {
   video: {
     type: "video", category: "content", container: false,
     summary: "Video player (YouTube/upload/etc).",
-    useWhen: "Demo or promo videos.",
-    keySpecials: { typeVideo: "youtube | upload | vimeo…", video_cdn: "video URL/id.", img: "poster/thumbnail.", autoReplay: "boolean — loop." },
+    useWhen: "Demo or promo videos. Set specials.img to a poster placeholder (https://placehold.co/640x360) when there's no real thumbnail.",
+    keySpecials: { typeVideo: "youtube | upload | vimeo…", video_cdn: "video URL/id.", img: "poster/thumbnail — use a placeholder url if none.", autoReplay: "boolean — loop." },
   },
   gallery: {
     type: "gallery", category: "content", container: true,
     summary: "Multi-image gallery.",
-    useWhen: "Photo grids/galleries with several images.",
-    keySpecials: { media: "array of image URLs / objects." },
+    useWhen: "Photo grids/galleries with several images. No image API — fill specials.media with placeholder URLs (https://placehold.co/600x400).",
+    keySpecials: { media: "array of image URLs (use placeholders if you have no real images)." },
   },
   "html-box": {
     type: "html-box", category: "content", container: false,
@@ -292,7 +292,7 @@ export const LIBRARY: Record<string, ElementDoc> = {
   countdown: {
     type: "countdown", category: "marketing", container: false,
     summary: "Countdown timer (minute duration, fixed end time, or daily window).",
-    useWhen: "Urgency: limited offer, flash sale.",
+    useWhen: "Urgency: limited offer, flash sale. Renders a row of segment boxes — size width to fit the segments shown (showDay/showSecond) and CENTER the box: left = round((canvas - width)/2). Add styles.textAlign:'center' so the segments sit centered inside the box.",
     keySpecials: {
       type: "minute | endTime | daily.", duration: "minutes (when type=minute).",
       startTime: "ISO start (endTime/daily).", endTime: "ISO end.",
@@ -337,11 +337,28 @@ ELEMENT NODE (every element)
 COORDINATE SYSTEM (critical)
 - Absolute-positioning canvas (NOT flexbox). Children carry top/left/width/height in px (numbers).
 - section has NO top/left; it has height (canvas height, default ${CANVAS.defaultSectionHeight}) and position:"relative".
-- Reference width: desktop ≈ ${CANVAS.desktopWidth}px, mobile ≈ ${CANVAS.mobileWidth}px. Provide BOTH breakpoints; do not overlap elements within a section.
+- Canvas width is FIXED: desktop = ${CANVAS.desktopWidth}px, mobile = ${CANVAS.mobileWidth}px (settings.width_section). Provide BOTH breakpoints; do not overlap elements within a section.
+- Every child must stay on-canvas: 0 ≤ left and left + width ≤ canvas width (${CANVAS.desktopWidth} desktop / ${CANVAS.mobileWidth} mobile). Same for top + height ≤ section height.
+
+CENTERING & ALIGNMENT (do the math — do NOT eyeball \`left\`; off-center layouts are the #1 defect)
+- \`textAlign:"center"\` only centers text INSIDE the element box. It does NOT move the box. To center the box on the canvas you MUST compute \`left\`.
+- Center ONE element of width w:  left = round((CANVAS - w) / 2).
+    desktop: left = round((${CANVAS.desktopWidth} - w) / 2)   ·   mobile: left = round((${CANVAS.mobileWidth} - w) / 2).
+    e.g. a 300px box → desktop left = ${(CANVAS.desktopWidth - 300) / 2}, mobile left = ${Math.round((CANVAS.mobileWidth - 300) / 2)}.
+- Full-width text/headline: pick a content width and center it. A safe content column is desktop width 800 (left 80) / mobile width 380 (left 20), with textAlign:"center".
+- A ROW of N equal items (feature cards, countdown, logos, stats) — center the whole row as a block:
+    rowWidth = N*itemWidth + (N-1)*gap
+    startLeft = round((CANVAS - rowWidth) / 2)
+    item i (0-based) left = startLeft + i*(itemWidth + gap)   ← gives equal outer margins and equal gaps.
+    Pick itemWidth+gap so rowWidth ≤ CANVAS. On mobile, either shrink items to fit ${CANVAS.mobileWidth}px or stack them vertically (same left, increasing top).
+- Keep a consistent left edge for stacked content in a section (e.g. all centered on the same axis) so the section reads as aligned, not ragged.
+- Mirror the centering on BOTH breakpoints with each breakpoint's own canvas width — never reuse a desktop \`left\` on mobile.
 
 RULES
 - Visible content goes in "specials" (text-block.specials.text, image-block.specials.src…), NEVER in "styles".
 - Colors as rgba(r,g,b,a). fontSize/borderWidth/top/left/width/height are NUMBERS (px).
+- IMAGES: a real landing page has images (hero/product shot, feature icons, about photo). There is NO image API yet, so set image-block specials.src to a PLACEHOLDER URL sized to the box: "https://placehold.co/<width>x<height>" (or "https://picsum.photos/<w>/<h>" for a photo). NEVER leave src empty — it renders blank and the page looks broken. gallery.media = array of such URLs; video.specials.img = a poster placeholder. The user replaces these later.
+- CONTRAST: text must contrast with the section background (dark text on light sections, light text on dark sections). Don't put light-gray text on white or faint text on a dark background.
 - movable:false for section/slide/grid-item/popup; otherwise true. runtime is always {}.
 - Every form input MUST have a unique specials.field_name.
 - events item: { "id", "type":"click"|"hover"|"success"|"unset", "action", "target", "appTarget":"", "hoverColor":"" }. For element-targeting actions (open_popup, close_popup, scroll_to, show_section, hide_section, show_hide_element) target = the target element's id; for open_link target = URL; for copy target = the text; target may be null (e.g. animation_hover).
