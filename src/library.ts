@@ -349,8 +349,9 @@ RULES
 - Do NOT invent prices, phone numbers, addresses, or statistics. Output text in the requested language.
 
 WORKFLOW (recommended)
-1. Call get_generation_guide (this) once.
+1. Call get_generation_guide (this) once, then new_page_skeleton for the top-level shape.
 2. For each element type you'll use, call get_element to learn its specials & see an example.
 3. Optionally call new_element to get a correct skeleton, then fill specials + coordinates.
-4. Assemble { page, settings }.
-5. Call validate_page and fix every error before returning the final JSON.`;
+4. Assemble { page, popup, settings, options, cartConfigs }.
+5. Call validate_page and fix every error.
+6. To save: call list_organizations, show the orgs to the user and ask which to use (default to is_default). Then create_page (dry_run first, then dry_run:false with the chosen organization_id).`;

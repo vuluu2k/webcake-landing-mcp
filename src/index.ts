@@ -28,7 +28,7 @@ import {
   EVENT_TRIGGERS,
 } from "./library.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
-import { readConfig, buildRequestRedacted, createPage } from "./webcake.js";
+import { readConfig, buildRequestRedacted, createPage, listOrganizations } from "./webcake.js";
 
 const ALL_TYPES = Object.keys(LIBRARY);
 
@@ -144,23 +144,47 @@ server.tool(
   async ({ mobileOnly }) => text(createPageSource({ mobileOnly: mobileOnly ?? false }))
 );
 
-// 8) Create page (persist) ----------------------------------------------------
+// 8) List organizations ------------------------------------------------------
+server.tool(
+  "list_organizations",
+  "List the account's Webcake organizations (id, name, is_default). The default org (type===1, usually the personal workspace) is where pages normally go. Call this BEFORE create_page, show the options to the user and ask which org to use — defaulting to the is_default one. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+  {},
+  async () => {
+    const { config, missing } = readConfig();
+    if (!config) {
+      return text({
+        ok: false,
+        reason: "missing_env",
+        missing_env: missing,
+        hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT in the MCP server env.",
+      });
+    }
+    return text(await listOrganizations(config));
+  }
+);
+
+// 9) Create page (persist) ----------------------------------------------------
 server.tool(
   "create_page",
-  "Persist a generated page source to the configured Webcake backend: creates a NEW page and saves the source (source-only — opens in the editor where re-saving renders it). Validates first. DEFAULTS to dry_run=true (returns the HTTP request it WOULD send, token masked). Set dry_run=false to actually create — that needs WEBCAKE_API_BASE + WEBCAKE_JWT env vars.",
+  "Persist a generated page source to the configured Webcake backend: creates a NEW page and saves the source (source-only — opens in the editor where re-saving renders it). Validates first. DEFAULTS to dry_run=true (returns the HTTP request it WOULD send, token masked). Set dry_run=false to actually create — that needs WEBCAKE_API_BASE + WEBCAKE_JWT env vars. The page lands in `organization_id` if given (call list_organizations and ask the user; default to the is_default org). Without an org the page is personal (org=null).",
   {
     source: z
       .any()
       .describe("Full page source { page, popup, settings, options, cartConfigs } (object or JSON string)."),
     name: z.string().optional().describe("Page name (default 'AI Page')."),
+    organization_id: z
+      .union([z.string(), z.number()])
+      .optional()
+      .describe("Organization to create the page in (from list_organizations). Omit for a personal page; falls back to WEBCAKE_ORG_ID env if set."),
     dry_run: z
       .boolean()
       .optional()
       .describe("Default TRUE — preview the request without sending. Set false to actually create."),
   },
-  async ({ source, name, dry_run }) => {
+  async ({ source, name, organization_id, dry_run }) => {
     const pageName = name ?? "AI Page";
     const isDry = dry_run !== false; // default true (safe)
+    const orgId = organization_id != null ? `${organization_id}` : undefined;
 
     const result = validatePage(source);
     if (!result.valid) {
@@ -181,8 +205,9 @@ server.tool(
         validation: { valid: true, warnings: result.warnings, stats: result.stats },
         env_ready: missing.length === 0,
         missing_env: missing,
+        target_organization_id: orgId ?? config?.orgId ?? null,
         request: config
-          ? buildRequestRedacted(config, pageName, parsed)
+          ? buildRequestRedacted(config, pageName, parsed, orgId)
           : {
               note:
                 "Set WEBCAKE_API_BASE + WEBCAKE_JWT to enable real creation. Would POST to {WEBCAKE_API_BASE}/api/v1/ai/create_page_from_source.",
@@ -200,7 +225,7 @@ server.tool(
       });
     }
 
-    const outcome = await createPage(config, pageName, parsed);
+    const outcome = await createPage(config, pageName, parsed, orgId);
     return text({ created: outcome.ok, ...outcome, warnings: result.warnings });
   }
 );

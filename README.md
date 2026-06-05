@@ -28,6 +28,7 @@ editor `page_source` shape.
 | `new_page_skeleton` | An empty but complete top-level source `{ page:[], popup:[], settings:{…}, options:{…}, cartConfigs:{} }`. |
 | `get_page_schema` | Full JSON Schema (Draft 2020-12) of a page source. |
 | `validate_page` | Structural + semantic validation (ids, event targets, containers, field_name). |
+| `list_organizations` | List the account's organizations (id, name, is_default). Ask the user which to use; default = the `is_default` org. |
 | `create_page` | Persist a generated source to the backend (creates a new page, source-only). **Defaults to `dry_run=true`.** |
 
 ## Build
@@ -103,6 +104,7 @@ Env vars:
 | `WEBCAKE_API_BASE` | Backend base URL, e.g. `http://localhost:5800` (required to save). |
 | `WEBCAKE_JWT` | Account JWT (required to save). Expires — refresh when needed. |
 | `WEBCAKE_HOST` | Optional `Host` header (Phoenix routes by host, e.g. `builder.localhost`). |
+| `WEBCAKE_ORG_ID` | Optional default organization id for `create_page` (overridden by its `organization_id` arg). Omit → personal page. |
 | `WEBCAKE_APP_BASE` | Optional base used to build editor/preview URLs in the result. |
 
 > Persisting writes a real page to whatever `WEBCAKE_API_BASE` points at, using the
