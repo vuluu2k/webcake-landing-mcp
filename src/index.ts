@@ -46,7 +46,24 @@ function text(value: unknown) {
   return { content: [{ type: "text" as const, text: body }] };
 }
 
-const server = new McpServer({ name: "webcake-landing", version: "1.0.0" });
+const INSTRUCTIONS = `webcake-landing builds and edits Webcake landing pages (the editor "page_source" JSON).
+
+RULES (follow for every request):
+- INTAKE FIRST: before generating a new page, ask the user 3–6 concrete questions (goal/page type, brand + tone + language, sections in order, primary CTA + destination, form fields, colors/logo URLs, desktop+mobile or mobile-only, which organization) and confirm a short outline. Do not assume.
+- Never invent prices, phone numbers, addresses, or statistics — ask or leave a placeholder.
+- ALWAYS call validate_page and fix every error before create_page / update_page.
+- create_page and update_page DEFAULT to dry_run=true. Show the dry-run, then only send dry_run=false after the user confirms.
+- EDIT existing pages surgically: get_page → change ONLY what was asked → keep every other element, its id, and coordinates → validate_page → update_page. Never regenerate the whole tree for a small change.
+- Organizations: call list_organizations and ask which to use; default to the is_default org. Endpoints are owner-scoped (only the account's own pages).
+
+MODEL (essentials):
+- Top-level: { page:[sections], popup:[popups], settings:{}, options:{currency,mobileOnly,versionID}, cartConfigs:{} }. Popups are a SEPARATE top-level array, NOT inside page.
+- Element: { id, type, properties, responsive:{desktop,mobile:{config,styles}}, specials, children, runtime, events }. Absolute canvas: children carry numeric top/left/width/height (px) per breakpoint (desktop≈960, mobile≈420); sections own a height.
+- Visible content lives in specials (text, src, field_name…), never in styles. Colors as rgba(). Animation in config.animation={name,delay,duration,repeat}. Form inputs need a unique specials.field_name (use canonical keys: full_name, phone_number, email, address, quantity).
+
+Start by calling get_generation_guide. Tools: get_generation_guide, list_elements, get_element, new_element, new_page_skeleton, get_page_schema, validate_page, list_organizations, create_page, list_pages, get_page, update_page.`;
+
+const server = new McpServer({ name: "webcake-landing", version: "1.0.0" }, { instructions: INSTRUCTIONS });
 
 // 1) Generation guide ---------------------------------------------------------
 server.tool(
