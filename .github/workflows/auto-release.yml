@@ -1,0 +1,313 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: prod
+    if: "!contains(github.event.head_commit.message, 'chore(release):')"
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Configure git
+        run: |
+          git config user.name "vuluu2k"
+          git config user.email "vuluu040320@gmail.com"
+
+      - name: Detect resume mode (tag pushed but never published)
+        id: mode
+        run: |
+          git fetch --tags --force origin >/dev/null 2>&1 || true
+          PKG=$(node -p "require('./package.json').name")
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          CURRENT_TAG="v${CURRENT_VERSION}"
+
+          TAG_ON_ORIGIN="0"
+          if git ls-remote --tags origin "refs/tags/${CURRENT_TAG}" | grep -q "refs/tags/${CURRENT_TAG}$"; then
+            TAG_ON_ORIGIN="1"
+          fi
+
+          PUBLISHED="0"
+          if npm view "${PKG}@${CURRENT_VERSION}" version >/dev/null 2>&1; then
+            PUBLISHED="1"
+          fi
+
+          if [ "$TAG_ON_ORIGIN" = "1" ] && [ "$PUBLISHED" = "0" ]; then
+            echo "Resume mode: tag ${CURRENT_TAG} exists on origin but ${PKG}@${CURRENT_VERSION} is not on npm — skipping bump/commit/tag, going straight to publish + GitHub Release."
+            echo "resume=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Normal release flow (tag_on_origin=${TAG_ON_ORIGIN}, published=${PUBLISHED})."
+            echo "resume=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${CURRENT_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve bump type
+        id: bump
+        if: steps.mode.outputs.resume != 'true'
+        run: |
+          BUMP="${{ github.event.inputs.bump }}"
+          if [ -z "$BUMP" ]; then
+            MSG="${{ github.event.head_commit.message }}"
+            case "$MSG" in
+              *"BREAKING CHANGE"*|*"!:"*) BUMP="major" ;;
+              feat*|*"feat:"*|*"feat("*) BUMP="minor" ;;
+              *) BUMP="patch" ;;
+            esac
+          fi
+          echo "type=$BUMP" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version (skipping reserved npm versions and existing git tags)
+        id: version
+        if: steps.mode.outputs.resume != 'true'
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          OLD_VERSION=$(node -p "require('./package.json').version")
+          NEW_VERSION=$(npm version ${{ steps.bump.outputs.type }} --no-git-tag-version)
+          NEW_VERSION="${NEW_VERSION#v}"
+
+          # Make sure we know about every tag the remote already has so we
+          # don't try to recreate one that exists upstream.
+          git fetch --tags --force origin >/dev/null 2>&1 || true
+
+          # Skip versions that are already published OR were unpublished
+          # (npm reserves unpublished version numbers permanently), and
+          # versions whose git tag already exists locally or on the remote.
+          while true; do
+            TIME_JSON=$(npm view "$PKG" time --json 2>/dev/null || echo "{}")
+            NPM_RESERVED=$(node -e "
+              const t = JSON.parse(process.argv[1] || '{}');
+              process.stdout.write(t['${NEW_VERSION}'] ? '1' : '0');
+            " "$TIME_JSON")
+
+            TAG_EXISTS="0"
+            if git rev-parse -q --verify "refs/tags/v${NEW_VERSION}" >/dev/null 2>&1; then
+              TAG_EXISTS="1"
+            elif git ls-remote --tags origin "refs/tags/v${NEW_VERSION}" | grep -q "refs/tags/v${NEW_VERSION}$"; then
+              TAG_EXISTS="1"
+            fi
+
+            if [ "$NPM_RESERVED" = "1" ] || [ "$TAG_EXISTS" = "1" ]; then
+              if [ "$NPM_RESERVED" = "1" ]; then
+                echo "Version ${NEW_VERSION} is taken or reserved on npm — bumping patch."
+              fi
+              if [ "$TAG_EXISTS" = "1" ]; then
+                echo "Git tag v${NEW_VERSION} already exists — bumping patch."
+              fi
+              NEW_VERSION=$(npm version patch --no-git-tag-version)
+              NEW_VERSION="${NEW_VERSION#v}"
+            else
+              break
+            fi
+          done
+
+          echo "old=$OLD_VERSION" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Final version: $NEW_VERSION"
+
+      - name: Resolve prev tag
+        id: context
+        if: steps.mode.outputs.resume != 'true'
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 "HEAD^" 2>/dev/null || git describe --tags --abbrev=0 2>/dev/null || echo "")
+          DATE=$(date -u +%Y-%m-%d)
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Install deps
+        run: npm ci --ignore-scripts
+
+      - name: Build + smoke gate
+        run: |
+          npm run build
+          npm run smoke
+
+      - name: Install Claude Code CLI
+        if: steps.mode.outputs.resume != 'true'
+        run: npm i -g @anthropic-ai/claude-code
+
+      - name: Generate changelog with Claude
+        if: steps.mode.outputs.resume != 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+          REL_DATE: ${{ steps.context.outputs.date }}
+          PREV_TAG: ${{ steps.context.outputs.prev_tag }}
+        run: |
+          RANGE="${PREV_TAG:+${PREV_TAG}..HEAD}"
+          RANGE="${RANGE:-HEAD}"
+
+          PROMPT=$(cat <<EOF
+          You are the release manager for webcake-landing-mcp, an MCP (Model Context
+          Protocol) server that gives AI agents the knowledge to build and persist
+          Webcake landing-page source JSON (element catalog, page JSON Schema,
+          validator, and create/update_page tools against a Webcake backend).
+
+          Write the CHANGELOG entry for version ${NEW_VERSION} (${REL_DATE}).
+
+          Investigate the changes yourself using the tools available:
+          - Run "git log ${RANGE} --stat -- src/" to see commits touching src/.
+          - Run "git diff ${RANGE} -- src/" or "git diff ${RANGE} --stat -- src/" when you need more detail.
+          - Read CHANGELOG.md to match the existing tone and section ordering.
+          - Read src/index.js / src/index.ts if you need to map changes to public MCP tool names.
+
+          Output strictly Keep a Changelog format:
+
+          ## [${NEW_VERSION}] - ${REL_DATE}
+
+          ### Added
+          - ...
+
+          ### Changed
+          - ...
+
+          ### Fixed
+          - ...
+
+          Rules:
+          - Only include sections that have entries; omit empty sections.
+          - One bullet per user-visible change. Merge duplicate or noisy commits.
+          - Skip purely internal commits (CI, formatting, scripts) UNLESS nothing user-visible changed — then use a single "### Internal" section.
+          - Refer to MCP tools by their public name (e.g. get_element, validate_page, create_page) and to fields by their JSON key (e.g. specials, settings.options).
+          - Each bullet: one sentence, present tense, ends with a period. No commit hashes, no emoji, no links.
+          - Write the final entry to .release_notes.md and print it. Do NOT modify CHANGELOG.md yourself.
+          EOF
+          )
+
+          claude -p "$PROMPT" \
+            --output-format text \
+            --allowedTools "Bash(git log:*)" \
+            --allowedTools "Bash(git diff:*)" \
+            --allowedTools "Read" \
+            --allowedTools "Write" \
+            --permission-mode acceptEdits \
+            > .claude_output.log
+
+          if [ ! -s .release_notes.md ]; then
+            echo "Claude did not produce .release_notes.md" >&2
+            cat .claude_output.log >&2
+            exit 1
+          fi
+          echo "--- Release notes ---"
+          cat .release_notes.md
+
+      - name: Prepend entry to CHANGELOG.md
+        if: steps.mode.outputs.resume != 'true'
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            awk -v notes_file=".release_notes.md" '
+              BEGIN { inserted=0 }
+              /^## \[/ && !inserted {
+                while ((getline line < notes_file) > 0) print line
+                close(notes_file)
+                print ""
+                inserted=1
+              }
+              { print }
+              END {
+                if (!inserted) {
+                  while ((getline line < notes_file) > 0) print line
+                }
+              }
+            ' CHANGELOG.md > CHANGELOG.md.new
+            mv CHANGELOG.md.new CHANGELOG.md
+          else
+            {
+              echo "# Changelog"
+              echo ""
+              cat .release_notes.md
+            } > CHANGELOG.md
+          fi
+
+      - name: Commit, tag and push
+        if: steps.mode.outputs.resume != 'true'
+        run: |
+          git add package.json CHANGELOG.md
+          git diff --cached --quiet || git add -u
+          git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin HEAD:main
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Resolve final tag
+        id: final
+        run: |
+          if [ "${{ steps.mode.outputs.resume }}" = "true" ]; then
+            echo "tag=${{ steps.mode.outputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "version=${{ steps.mode.outputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "version=${{ steps.version.outputs.new }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract release notes from CHANGELOG.md (resume mode)
+        if: steps.mode.outputs.resume == 'true'
+        run: |
+          VERSION="${{ steps.mode.outputs.version }}"
+          awk -v ver="$VERSION" '
+            BEGIN { inSection=0 }
+            /^## \[/ {
+              if (inSection) exit
+              if (index($0, "[" ver "]") > 0) {
+                inSection=1
+                next
+              }
+            }
+            inSection { print }
+          ' CHANGELOG.md > .release_notes.md
+          if [ ! -s .release_notes.md ]; then
+            echo "Could not extract CHANGELOG section for ${VERSION} — using fallback notes." >&2
+            echo "Release of ${VERSION}." > .release_notes.md
+          fi
+          echo "--- Resume-mode release notes ---"
+          cat .release_notes.md
+
+      - name: Publish to npm
+        run: npm publish --access public --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.final.outputs.tag }}" >/dev/null 2>&1; then
+            echo "GitHub Release ${{ steps.final.outputs.tag }} already exists — skipping."
+          else
+            gh release create "${{ steps.final.outputs.tag }}" \
+              --title "${{ steps.final.outputs.tag }}" \
+              --notes-file .release_notes.md
+          fi
