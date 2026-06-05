@@ -43,3 +43,7 @@ See `.claude/skills/webcake-landing/SKILL.md` for the full workflow and
   hard-code a token, account, or page data in the repo. Scan before pushing (the repo is public).
 - The backend endpoints this MCP calls live in `landing_page_backend`
   (`LandingPageWeb.V1.AiController`, scope `/api/v1/ai`).
+
+When editing `src/`, follow the `webcake-mcp-dev` skill
+(`.claude/skills/webcake-mcp-dev/SKILL.md`) — it has the add-a-tool / add-an-element
+recipes and the four-files-stay-in-sync rule. Architecture overview is in `CLAUDE.md`.
