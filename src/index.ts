@@ -28,7 +28,16 @@ import {
   EVENT_TRIGGERS,
 } from "./library.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
-import { readConfig, buildRequestRedacted, createPage, listOrganizations } from "./webcake.js";
+import {
+  readConfig,
+  buildRequestRedacted,
+  createPage,
+  listOrganizations,
+  listPages,
+  getPageSource,
+  updatePageSource,
+  buildUpdateRequestRedacted,
+} from "./webcake.js";
 
 const ALL_TYPES = Object.keys(LIBRARY);
 
@@ -227,6 +236,76 @@ server.tool(
 
     const outcome = await createPage(config, pageName, parsed, orgId);
     return text({ created: outcome.ok, ...outcome, warnings: result.warnings });
+  }
+);
+
+// 10) List pages --------------------------------------------------------------
+server.tool(
+  "list_pages",
+  "List the pages owned by the account (id, name, organization_id, updated_at), most-recent first. Use it to let the user pick a page to edit (then get_page → modify → update_page). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+  {},
+  async () => {
+    const { config, missing } = readConfig();
+    if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
+    return text(await listPages(config));
+  }
+);
+
+// 11) Get page (read source) --------------------------------------------------
+server.tool(
+  "get_page",
+  "Fetch an existing page's decoded source tree { page, popup, settings, options, cartConfigs } so you can EDIT it. Returns name + organization_id too. Edit the returned `source`, then validate_page and update_page. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+  { page_id: z.string().describe("The page id (from list_pages or a URL).") },
+  async ({ page_id }) => {
+    const { config, missing } = readConfig();
+    if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
+    return text(await getPageSource(config, page_id));
+  }
+);
+
+// 12) Update page (edit existing) ---------------------------------------------
+server.tool(
+  "update_page",
+  "Overwrite an EXISTING page's source with an edited tree (source-only; re-render in the editor for preview/publish). Validates first. DEFAULTS to dry_run=true (preview the request, token masked). Set dry_run=false to actually save. Typical flow: get_page → edit the source → validate_page → update_page. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+  {
+    page_id: z.string().describe("The page id to update (must be owned by the account)."),
+    source: z
+      .any()
+      .describe("The full edited page source { page, popup, settings, options, cartConfigs } (object or JSON string)."),
+    dry_run: z.boolean().optional().describe("Default TRUE — preview without sending. Set false to actually save."),
+  },
+  async ({ page_id, source, dry_run }) => {
+    const isDry = dry_run !== false;
+    const result = validatePage(source);
+    if (!result.valid) {
+      return text({
+        updated: false,
+        reason: "validation_failed",
+        errors: result.errors,
+        warnings: result.warnings,
+        hint: "Fix the errors (run validate_page) before updating.",
+      });
+    }
+    const parsed = coercePage(source);
+    const { config, missing } = readConfig();
+
+    if (isDry) {
+      return text({
+        dry_run: true,
+        page_id,
+        validation: { valid: true, warnings: result.warnings, stats: result.stats },
+        env_ready: missing.length === 0,
+        missing_env: missing,
+        request: config
+          ? buildUpdateRequestRedacted(config, page_id, parsed)
+          : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT to enable real updates." },
+        hint: "Re-run with dry_run=false to actually save the edit.",
+      });
+    }
+    if (!config) return text({ updated: false, reason: "missing_env", missing_env: missing });
+
+    const outcome = await updatePageSource(config, page_id, parsed);
+    return text({ updated: outcome.ok, ...outcome, warnings: result.warnings });
   }
 );
 

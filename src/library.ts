@@ -348,10 +348,28 @@ RULES
 - ANIMATION: each breakpoint's config has config.animation = { "name":"none", "delay":0, "duration":3, "repeat":null }. Keep "none" unless an entrance animation is wanted.
 - Do NOT invent prices, phone numbers, addresses, or statistics. Output text in the requested language.
 
+INTAKE — ask the user BEFORE generating (don't assume; ask 3–6 short, concrete questions, offer sensible defaults):
+- Goal / page type: lead-gen, product/COD sale, event, invitation, app promo, portfolio…?
+- Brand: name, what they sell, tone (premium/playful/minimal), language (vi/en…).
+- Sections wanted (in order): e.g. hero, features, pricing, testimonials, FAQ, contact form, footer.
+- Primary CTA + where it goes: open a form popup, scroll to form, call/Zalo, open link?
+- Form fields to capture (if any): name, phone, email, address, quantity…? (use canonical field_names: full_name, phone_number, email, address, quantity).
+- Branding details: primary color (rgba/hex), logo/image URLs, must-keep text, things to avoid.
+- Target: desktop+mobile or mobile-only? Which organization to save into (list_organizations)?
+Confirm a short outline (sections + CTA) with the user before building the full JSON.
+NEVER invent prices, phone numbers, addresses, or statistics — ask or leave placeholders the user can fill.
+
 WORKFLOW (recommended)
+0. INTAKE: ask the questions above, confirm the section outline.
 1. Call get_generation_guide (this) once, then new_page_skeleton for the top-level shape.
 2. For each element type you'll use, call get_element to learn its specials & see an example.
 3. Optionally call new_element to get a correct skeleton, then fill specials + coordinates.
 4. Assemble { page, popup, settings, options, cartConfigs }.
 5. Call validate_page and fix every error.
-6. To save: call list_organizations, show the orgs to the user and ask which to use (default to is_default). Then create_page (dry_run first, then dry_run:false with the chosen organization_id).`;
+6. To save: call list_organizations, show the orgs to the user and ask which to use (default to is_default). Then create_page (dry_run first, then dry_run:false with the chosen organization_id).
+
+EDITING an existing page
+- list_pages → let the user pick (or take a page_id from a URL).
+- get_page(page_id) → you get the live { page, popup, settings, ... }. Edit it surgically: change only the elements the user asked for (text/styles/specials/events); keep every other element, its id, and coordinates intact. Never regenerate the whole tree for a small change.
+- To add an element: build it with new_element, give it a unique id, set top/left/width/height inside the right section's children.
+- validate_page → update_page(page_id, source) (dry_run first, then dry_run:false).`;

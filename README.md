@@ -30,6 +30,9 @@ editor `page_source` shape.
 | `validate_page` | Structural + semantic validation (ids, event targets, containers, field_name). |
 | `list_organizations` | List the account's organizations (id, name, is_default). Ask the user which to use; default = the `is_default` org. |
 | `create_page` | Persist a generated source to the backend (creates a new page, source-only). **Defaults to `dry_run=true`.** |
+| `list_pages` | List the account's pages (id, name, organization_id, updated_at) to pick one to edit. |
+| `get_page` | Fetch an existing page's decoded source tree so you can edit it. |
+| `update_page` | Overwrite an existing page's source with an edited tree. **Defaults to `dry_run=true`.** |
 
 ## Build
 

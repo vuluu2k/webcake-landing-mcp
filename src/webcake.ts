@@ -25,6 +25,9 @@ export type WebcakeConfig = {
 
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
 const ORGS_ENDPOINT = "/api/v1/org/organizations";
+const PAGES_ENDPOINT = "/api/v1/ai/pages";
+const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
+const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
 
 export function readConfig(): { config: WebcakeConfig | null; missing: string[] } {
   const base = process.env.WEBCAKE_API_BASE;
@@ -168,6 +171,116 @@ export async function createPage(
     editor_url: app && editorPath ? `${app}${editorPath}` : editorPath,
     preview_url: app && previewPath ? `${app}${previewPath}` : previewPath,
     organization_id: (orgId ?? config.orgId) ?? null,
+    raw: data,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Read / list / edit existing pages
+// ---------------------------------------------------------------------------
+
+export type PageSummary = {
+  id: string;
+  name: string;
+  organization_id: number | string | null;
+  engine?: number;
+  updated_at?: string;
+};
+
+async function getJson(url: string, config: WebcakeConfig) {
+  let res: Response;
+  try {
+    res = await fetch(url, { method: "GET", headers: authHeaders(config) });
+  } catch (e: any) {
+    return { ok: false, status: 0, json: null, text: "", error: `Network error calling ${url}: ${e?.message ?? e}` };
+  }
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* non-JSON */
+  }
+  return { ok: res.ok, status: res.status, json, text, error: res.ok ? undefined : `Backend returned ${res.status}: ${text.slice(0, 300)}` };
+}
+
+/** List pages owned by the account (most-recent first). */
+export async function listPages(
+  config: WebcakeConfig
+): Promise<{ ok: boolean; status: number; pages?: PageSummary[]; error?: string }> {
+  const r = await getJson(`${config.base}${PAGES_ENDPOINT}`, config);
+  if (!r.ok) return { ok: false, status: r.status, error: r.error };
+  const pages: PageSummary[] = r.json?.data?.pages ?? r.json?.pages ?? [];
+  return { ok: true, status: r.status, pages };
+}
+
+/** Read a page's decoded source tree (must be owned by the account). */
+export async function getPageSource(
+  config: WebcakeConfig,
+  pageId: string
+): Promise<{ ok: boolean; status: number; page_id?: string; name?: string; organization_id?: number | string | null; source?: any; error?: string }> {
+  const url = `${config.base}${PAGE_SOURCE_ENDPOINT}?page_id=${encodeURIComponent(pageId)}`;
+  const r = await getJson(url, config);
+  if (!r.ok) return { ok: false, status: r.status, error: r.error };
+  const d = r.json?.data ?? r.json ?? {};
+  return {
+    ok: true,
+    status: r.status,
+    page_id: d.page_id,
+    name: d.name,
+    organization_id: d.organization_id ?? null,
+    source: d.source,
+  };
+}
+
+/** Build (but do not send) the update request — for dry-run previews. */
+export function buildUpdateRequestRedacted(config: WebcakeConfig, pageId: string, source: unknown) {
+  const body = JSON.stringify({ page_id: pageId, source });
+  return {
+    method: "POST",
+    url: `${config.base}${UPDATE_ENDPOINT}`,
+    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
+    body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
+  };
+}
+
+/** Overwrite an existing page's source (source-only). */
+export async function updatePageSource(
+  config: WebcakeConfig,
+  pageId: string,
+  source: unknown
+): Promise<CreateOutcome> {
+  const url = `${config.base}${UPDATE_ENDPOINT}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders(config),
+      body: JSON.stringify({ page_id: pageId, source }),
+    });
+  } catch (e: any) {
+    return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+  }
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* non-JSON */
+  }
+  const data = json?.data ?? json;
+  const pageIdOut = data?.page_id;
+  const app = config.appBase;
+  if (!res.ok || !pageIdOut) {
+    return { ok: false, status: res.status, raw: json ?? text.slice(0, 600), error: `Backend returned ${res.status}` };
+  }
+  return {
+    ok: true,
+    status: res.status,
+    page_id: pageIdOut,
+    editor_url: app && data?.editor_url ? `${app}${data.editor_url}` : data?.editor_url,
+    preview_url: app && data?.preview_url ? `${app}${data.preview_url}` : data?.preview_url,
+    organization_id: data?.organization_id ?? null,
     raw: data,
   };
 }
