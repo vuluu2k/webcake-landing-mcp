@@ -20,9 +20,14 @@ const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateSchema = ajv.compile(pageSchema);
 
 // Actions whose `target` is expected to be an element id (vs a URL / text).
+// Actions whose `target` is an existing element id (so a missing target is a
+// dangling-reference warning). NOTE: play_audio/stop_audio are intentionally NOT
+// here — their target is an audio file URL, not an element id (render_v4 event
+// dispatcher), so checking them produced false-positive warnings. `collapse`
+// targets an element id and IS checked.
 const ELEMENT_TARGET_ACTIONS = new Set([
   "open_popup", "close_popup", "scroll_to", "show_section", "hide_section",
-  "show_hide_element", "change_tab", "play_audio", "stop_audio",
+  "show_hide_element", "change_tab", "collapse",
 ]);
 
 const TOP_LEVEL_TYPES = new Set(["section", "dynamic_page", "popup"]);

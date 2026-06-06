@@ -45,7 +45,8 @@ export const CONTAINER_TYPES = new Set([
   "slide",
   "popup",
   "form",
-  "gallery",
+  // NOTE: "gallery" is intentionally NOT here — gallery.js reads specials.media only,
+  // it never reads vm.children. gallery is a leaf element.
   "checkbox-group",
   "radio",
   "group-select",
@@ -177,7 +178,7 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       seedPosition(el);
       setBox(el, 350, 400);
       el.specials.media = [imgPlaceholder(600, 400, "1"), imgPlaceholder(600, 400, "2"), imgPlaceholder(600, 400, "3")];
-      el.children = [];
+      // gallery has NO children — content comes entirely from specials.media (gallery.js never reads vm.children)
       break;
     case "popup":
       el.properties.movable = false;
@@ -206,6 +207,8 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       seedPosition(el);
       setBox(el, 150, 36);
       if (FIELD_TYPES.has(type)) el.specials.field_name = `${type.replace(/-/g, "_")}_${el.id}`;
+      // cart-quantity is NOT in FIELD_TYPES but its renderer requires field_name — seed it explicitly.
+      if (type === "cart-quantity") el.specials.field_name = `cart_quantity_${el.id}`;
       break;
     case "signature":
       seedPosition(el);
@@ -243,7 +246,7 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       setStyle(el, "color", "rgba(255, 255, 255, 1)");
       setStyle(el, "background", "rgba(0, 0, 0, 1)");
       setStyle(el, "fontSize", 20);
-      el.specials = { type: "minute", duration: "60", showDay: true, showSecond: true, showText: true };
+      el.specials = { type: "minute", duration: "60", showDay: true, showSecond: true, showText: true, repeat: false, customize: false, customMessage: "", dailyStart: "", dailyEnd: "" };
       break;
     case "timegroup":
       seedPosition(el);
@@ -263,10 +266,12 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
       el.responsive.mobile.styles.left = 0;
       el.responsive.desktop.styles.top = 0;
       el.responsive.desktop.styles.left = 0;
+      el.specials.html = "";
       break;
     case "html-box":
       seedPosition(el);
       setBox(el, 280, 310);
+      el.specials.html = "";
       break;
     case "spin-wheel":
       seedPosition(el);
@@ -334,6 +339,7 @@ export function createElement(type: string, overrides: { name?: string } = {}): 
         imageWidth: 100,
         multiOption: false,
         alignment: "center",
+        hoveredBorder: "rgba(28,0,194,1)",
         options: [
           { id: randomId(), image: "", title: "Option 1", value: "value1", field_name: `sv_${el.id}_1` },
           { id: randomId(), image: "", title: "Option 2", value: "value2", field_name: `sv_${el.id}_2` },

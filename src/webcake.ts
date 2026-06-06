@@ -157,11 +157,15 @@ export async function createPage(
   const app = config.appBase;
 
   if (!res.ok || !pageId) {
+    // The backend's failure envelope is { success:false, message } on 422; auth
+    // plugs return plain-text 401/403 (json is null). Surface the real reason
+    // instead of a bare status so the user/LLM sees e.g. "Page not found…".
+    const backendMsg = json?.message ?? json?.reason ?? (json ? undefined : text.slice(0, 200));
     return {
       ok: false,
       status: res.status,
       raw: json ?? text.slice(0, 600),
-      error: `Backend returned ${res.status}${pageId ? "" : " (no page_id in response)"}`,
+      error: `Backend returned ${res.status}${backendMsg ? `: ${backendMsg}` : pageId ? "" : " (no page_id in response)"}`,
     };
   }
   return {
@@ -272,7 +276,13 @@ export async function updatePageSource(
   const pageIdOut = data?.page_id;
   const app = config.appBase;
   if (!res.ok || !pageIdOut) {
-    return { ok: false, status: res.status, raw: json ?? text.slice(0, 600), error: `Backend returned ${res.status}` };
+    const backendMsg = json?.message ?? json?.reason ?? (json ? undefined : text.slice(0, 200));
+    return {
+      ok: false,
+      status: res.status,
+      raw: json ?? text.slice(0, 600),
+      error: `Backend returned ${res.status}${backendMsg ? `: ${backendMsg}` : ""}`,
+    };
   }
   return {
     ok: true,

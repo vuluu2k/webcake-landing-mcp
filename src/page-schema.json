@@ -33,6 +33,7 @@
       }
     },
     "cartConfigs": { "type": "object", "additionalProperties": true, "description": "Cart/commerce config; {} when unused." },
+    "svariations": { "description": "Product/variation data carried by editor-saved sources (cart/commerce pages). Open passthrough — preserve it verbatim across get_page -> edit -> update_page; do not drop it." },
     "settings": {
       "type": "object",
       "description": "Page-wide config + SEO + fonts + tracking + custom code (real pages carry ~20-40 keys).",
