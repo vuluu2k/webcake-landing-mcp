@@ -44,6 +44,12 @@ CENTERING & ALIGNMENT (do the math — do NOT eyeball \`left\`; off-center layou
 - Keep a consistent left edge for stacked content in a section (e.g. all centered on the same axis) so the section reads as aligned, not ragged.
 - Mirror the centering on BOTH breakpoints with each breakpoint's own canvas width — never reuse a desktop \`left\` on mobile.
 
+STICKY / FIXED HEADER (and any overlay element) — reserve space so nothing hides behind it
+- A sticky/fixed header (set via the per-breakpoint config.sticky on the section) OVERLAYS the page; it does NOT push the sections below it down. So the next section's top content sits UNDER the header and gets hidden — this is the #1 header defect.
+- When you add a sticky header of height H (typically 60–72px): push the first section's top content DOWN by ≥ H — increase the \`top\` of the hero's topmost elements by H (and add H to that section's height so the band stays clear), OR keep an empty H-px band at the very top of the hero. Do it on BOTH breakpoints (the header height can differ per breakpoint).
+- Do NOT duplicate the brand/shop name: if the header shows the shop name, remove or reposition any shop-name line that sat at the very top of the hero — otherwise the two overlap (a classic symptom: a half-hidden shop-name behind the header).
+- A NON-sticky header is simpler — it's just the first section in \`page\`, stacks normally, and pushes the hero down on its own (no offset needed). Only add the offset when the header is sticky/fixed.
+
 RULES
 - Visible content goes in "specials" (text-block.specials.text, image-block.specials.src…), NEVER in "styles".
 - Colors as rgba(r,g,b,a). fontSize/borderWidth/top/left/width/height are NUMBERS (px).
@@ -53,21 +59,22 @@ RULES
 - Every form input MUST have a unique specials.field_name.
 - events item: { "id", "type", "action", "target", ...action-specific extra fields }. TRIGGER (type): click & hover on any element; success & error on a FORM (success = after a successful submit, error = on validation failure); delay on any element (when it scrolls into view); unset on init. Action vocab per trigger: click→CLICK_ACTIONS, hover→HOVER_ACTIONS, success→SUCCESS_ACTIONS, error→ERROR_ACTIONS, delay→DELAY_ACTIONS (all returned by get_generation_guide). For element-targeting actions (open_popup, close_popup, scroll_to, show_section, hide_section, show_hide_element, change_tab, collapse) target = the target element's id; open_link/download_file target = URL; open_sms/send_email/phone_call target = phone/email; copy target = text (or element id when copyType='elementValue'); set_field_value target = field_name; target may be null (e.g. animation_hover). Each action also reads extra fields (e.g. open_link→targetURL/delayTime, scroll_to→scrollMore, change_tab→moveTo/tabIndex, lightbox→typeLightbox/alt, show_hide_element→onlyMode, open_app→appTarget+provider fields, set_field_value→set_value) — see the action maps for the full list.
 - ANIMATION: each breakpoint's config has config.animation = { "name":"none", "delay":0, "duration":3, "repeat":null }. Keep "none" unless an entrance animation is wanted.
-- Do NOT invent prices, phone numbers, addresses, or statistics. Output text in the requested language.
+- Real data the page DISPLAYS must come from the user — never invent it: phone/hotline/Zalo, price (+ original price), address, shop/brand name, links/URLs, email, opening hours, exact stats/social-proof numbers. If a value the page needs is missing, ASK for it (in intake, or pause before generating); use a clearly-labelled placeholder ONLY when the user explicitly declines, and tell them exactly what to fill. Output text in the requested language.
 
-INTAKE — ask the user BEFORE generating (don't assume; ask 3–6 short, concrete questions, offer sensible defaults):
-- Goal / page type: lead-gen, product/COD sale, event, invitation, app promo, portfolio…?
-- Brand: name, what they sell, tone (premium/playful/minimal), language (vi/en…).
-- Sections wanted (in order): e.g. hero, features, pricing, testimonials, FAQ, contact form, footer.
+INTAKE — ask the user BEFORE generating, EVERY time (even a "quick"/"test" page). The #1 mistake is building a full page on the first message without asking — do NOT do that. Ask ONE short batch of 3–6 concrete questions (offer sensible defaults so the user answers fast), enough to understand the page's purpose, name, look and layout:
+- Goal / page type: what is the page FOR? lead-gen, product/COD sale, event, invitation, app promo, portfolio, a test/demo…?
+- Brand: page/shop name, what they sell, tone (premium/playful/minimal), language (vi/en…).
+- Product + price (sales/ads pages): the exact product, price (+ original price if discounted), and the offer/promo.
+- Sections wanted (in order): e.g. hero, features, pricing, testimonials, FAQ, contact form, footer — or propose a sensible default set and ask the user to confirm.
 - Primary CTA + where it goes: open a form popup, scroll to form, call/Zalo, open link?
 - Form fields to capture (if any): name, phone, email, address, quantity…? (use canonical field_names: full_name, phone_number, email, address, quantity).
-- Branding details: primary color (rgba/hex), logo/image URLs, must-keep text, things to avoid.
+- Branding / look: primary color (rgba/hex), logo/image URLs, must-keep text, things to avoid.
 - Target: desktop+mobile or mobile-only? Which organization to save into (list_organizations)?
-Confirm a short outline (sections + CTA) with the user before building the full JSON.
-NEVER invent prices, phone numbers, addresses, or statistics — ask or leave placeholders the user can fill.
+Then RESTATE a short outline (sections + CTA + colors) and WAIT for the user's confirmation before assembling the JSON. Do NOT generate + persist on the same turn as the request.
+NEVER invent prices, phone numbers, addresses, or statistics — ask, or leave a clear placeholder ONLY when the user declines to provide it.
 
 WORKFLOW (recommended)
-0. INTAKE: ask the questions above, confirm the section outline.
+0. INTAKE (never skip — even for a quick/test page): ask the essentials above, WAIT for the answers, restate a short outline (sections + CTA + colors), and get the user's "yes" BEFORE any new_page_skeleton / create_page. Do not generate on the same turn as the request.
 1. Call get_generation_guide (this) once, then new_page_skeleton for the top-level shape.
 2. For each element type you'll use, call get_element to learn its specials & see an example.
 3. Optionally call new_element to get a correct skeleton, then fill specials + coordinates.

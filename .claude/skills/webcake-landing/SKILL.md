@@ -11,7 +11,7 @@ metadata:
 
 > Workflow + rules for using the **webcake-landing** MCP to build a complete Webcake
 > `page_source` from a brief, and to edit existing pages. The same rules are served at
-> runtime via the server `instructions` (src/index.ts) — this skill is the long form.
+> runtime via the server `instructions` (src/domains/landing/instructions.ts) — this skill is the long form.
 
 ## Tools (12)
 
@@ -40,7 +40,7 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 
 ## Workflow — new page
 
-1. **INTAKE** (ask first; offer defaults; don't assume): goal/page type · brand (name, what they sell, tone, language) · sections in order · primary CTA + destination · form fields · colors/logo/image URLs · desktop+mobile or mobile-only · which organization. Confirm a short outline.
+1. **INTAKE — every time, even a quick/test page** (ask first, offer defaults, don't assume, and do NOT jump straight to building): page purpose/goal · brand/page name · what they sell + price (sales/ads pages) · primary color + logo/branding · sections & layout in order · primary CTA + destination · form fields · desktop+mobile or mobile-only · which organization. Then RESTATE a short outline (sections + CTA + colors) and wait for the user's confirmation before generating. Don't generate + persist on the same turn as the request.
 2. `get_generation_guide`, then `new_page_skeleton`.
 3. `get_element` per type (specials + example); `new_element` for valid skeletons.
 4. Assemble `{ page, popup, settings, options, cartConfigs }`; fill `specials`, set coordinates (no overlaps).
@@ -58,7 +58,7 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 
 ## Rules
 
-- INTAKE before generating; never invent prices/phones/addresses/stats.
+- INTAKE every time before generating (even a "test" page) — confirm purpose, name, colors, layout + an outline first, and don't build on the same turn as the request; never invent prices/phones/addresses/stats.
 - `validate_page` before any create/update; fix every error.
 - `dry_run` first; send `dry_run:false` only after user confirms.
 - Edit surgically; preserve ids + coordinates.
