@@ -124,5 +124,64 @@ for (const [type, doc] of Object.entries(LIBRARY)) {
   check(`example ${type} valid`, rr.valid, rr.errors);
 }
 
+console.log("== validate: form-data binding checks ==");
+const mkBox = () => ({ desktop: { config: {}, styles: {} }, mobile: { config: {}, styles: {} } });
+const bindingsBad = {
+  page: [
+    {
+      id: "secf", type: "section",
+      properties: { name: "F", movable: false, sync: true },
+      responsive: { desktop: { config: {}, styles: { position: "relative", height: 800 } }, mobile: { config: {}, styles: { position: "relative", height: 800 } } },
+      specials: {}, runtime: {}, events: [],
+      children: [
+        {
+          id: "frm1", type: "form",
+          properties: { name: "Form", movable: true, sync: true },
+          responsive: mkBox(), specials: {}, runtime: {}, events: [],
+          children: [
+            { id: "i1", type: "input", properties: {}, responsive: mkBox(), specials: { field_name: "phone_number" }, events: [] },
+            { id: "i2", type: "input", properties: {}, responsive: mkBox(), specials: { field_name: "phone_number" }, events: [] },
+            { id: "rad1", type: "radio", properties: {}, responsive: mkBox(),
+              specials: { field_name: "opt", options: [{ id: "o1", events_option: [{ id: "e", type: "showhide", promoId: "ghost_target" }] }] },
+              runtime: {}, events: [], children: [] },
+            { id: "sv1", type: "survey", properties: {}, responsive: mkBox(), specials: { field_name: "sv", connectedForm: "missing_field" }, events: [] },
+            { id: "b1", type: "button", properties: {}, responsive: mkBox(), specials: { text: "X" },
+              events: [{ id: "ev", type: "click", action: "set_field_value", target: "w-nope" }] },
+          ],
+        },
+      ],
+    },
+  ],
+};
+const rbb = validatePage(bindingsBad);
+check("dup field_name in form warned", rbb.warnings.some((w) => w.includes('field_name "phone_number"') && w.includes("used 2")), rbb.warnings);
+check("dangling option promoId warned", rbb.warnings.some((w) => w.includes("promoId") && w.includes("ghost_target")), rbb.warnings);
+check("dangling connectedForm warned", rbb.warnings.some((w) => w.includes("connectedForm") && w.includes("missing_field")), rbb.warnings);
+check("dangling set_field_value element ref warned", rbb.warnings.some((w) => w.includes("set_field_value") && w.includes("w-nope")), rbb.warnings);
+
+const bindingsGood = {
+  page: [
+    {
+      id: "secg", type: "section",
+      properties: { name: "G", movable: false, sync: true },
+      responsive: { desktop: { config: {}, styles: { position: "relative", height: 800 } }, mobile: { config: {}, styles: { position: "relative", height: 800 } } },
+      specials: {}, runtime: {}, events: [],
+      children: [
+        {
+          id: "frm2", type: "form",
+          properties: { name: "Form", movable: true, sync: true },
+          responsive: mkBox(), specials: {}, runtime: {}, events: [],
+          children: [
+            { id: "n1", type: "input", properties: {}, responsive: mkBox(), specials: { field_name: "full_name" }, events: [] },
+            { id: "p1", type: "input", properties: {}, responsive: mkBox(), specials: { field_name: "phone_number" }, events: [] },
+          ],
+        },
+      ],
+    },
+  ],
+};
+const rbg = validatePage(bindingsGood);
+check("clean form has no binding warnings", rbg.warnings.length === 0, rbg.warnings);
+
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);

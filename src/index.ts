@@ -25,6 +25,9 @@ import {
   CANVAS,
   CLICK_ACTIONS,
   HOVER_ACTIONS,
+  SUCCESS_ACTIONS,
+  ERROR_ACTIONS,
+  DELAY_ACTIONS,
   EVENT_TRIGGERS,
 } from "./library.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
@@ -78,6 +81,9 @@ server.tool(
       event_triggers: EVENT_TRIGGERS,
       click_actions: CLICK_ACTIONS,
       hover_actions: HOVER_ACTIONS,
+      success_actions: SUCCESS_ACTIONS,
+      error_actions: ERROR_ACTIONS,
+      delay_actions: DELAY_ACTIONS,
     })
 );
 
@@ -152,7 +158,7 @@ server.tool(
 // 6) Validate page ------------------------------------------------------------
 server.tool(
   "validate_page",
-  "Validate a generated page source against the schema + semantic rules (unique ids, dangling event targets, children only on containers, missing field_name, top-level types). Returns errors (must fix) and warnings. ALWAYS run before returning the final page.",
+  "Validate a generated page source against the schema + semantic rules (unique ids, dangling event targets, children only on containers, missing field_name, top-level types) plus form-data bindings (duplicate field_name within one form, dangling option-event promoId / connectedSurvey / connectedForm / set_field_value targets). Returns errors (must fix) and warnings. ALWAYS run before returning the final page.",
   {
     page: z
       .any()

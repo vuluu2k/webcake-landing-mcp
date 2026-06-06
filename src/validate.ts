@@ -1,7 +1,10 @@
 /**
  * Page validation: JSON-Schema structural check (ajv, draft 2020-12) plus
  * semantic checks the schema can't express (unique ids, dangling event targets,
- * children only on containers, missing field_name, top-level types).
+ * children only on containers, missing field_name, top-level types). Also checks
+ * form-data bindings: duplicate field_name within a single form, and dangling
+ * option-level event targets (specials.options[].events_option promoId) and
+ * survey/field cross-wiring (connectedSurvey / connectedForm / set_field_value).
  */
 import { readFileSync } from "node:fs";
 import Ajv2020Module from "ajv/dist/2020.js";
@@ -84,6 +87,12 @@ export function validatePage(input: unknown): ValidationResult {
   // 2) Semantic
   const ids = new Map<string, number>();
   const eventTargets: { from: string; action: string; target: string }[] = [];
+  // option-level events (specials.options[].events_option) targeting an element id
+  const optionTargets: { from: string; kind: string; target: string }[] = [];
+  // survey/field cross-wiring (specials.connectedSurvey / connectedForm)
+  const connectRefs: { from: string; key: string; target: string }[] = [];
+  // form nodes — used to check field_name uniqueness within each form's scope
+  const forms: any[] = [];
   let elementCount = 0;
 
   const topList: any[] = Array.isArray(page?.page)
@@ -137,6 +146,34 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
 
+    // collect form-data bindings: option-level events (showhide/collapse promoId)
+    // and survey/field cross-wiring; and remember form scopes for field_name checks.
+    const sp = node.specials;
+    if (sp && typeof sp === "object") {
+      if (Array.isArray(sp.options)) {
+        for (const opt of sp.options) {
+          if (!opt || !Array.isArray(opt.events_option)) continue;
+          for (const ev of opt.events_option) {
+            if (
+              ev &&
+              (ev.type === "showhide" || ev.type === "collapse") &&
+              typeof ev.promoId === "string" &&
+              ev.promoId.trim() !== ""
+            ) {
+              optionTargets.push({ from: node.id ?? path, kind: ev.type, target: ev.promoId });
+            }
+          }
+        }
+      }
+      for (const key of ["connectedSurvey", "connectedForm"] as const) {
+        const v = sp[key];
+        if (typeof v === "string" && v.trim() !== "") {
+          connectRefs.push({ from: node.id ?? path, key, target: v });
+        }
+      }
+    }
+    if (type === "form") forms.push(node);
+
     if (Array.isArray(node.children)) {
       node.children.forEach((c: any, idx: number) => walk(c, `${path}.children[${idx}]`));
     }
@@ -160,12 +197,62 @@ export function validatePage(input: unknown): ValidationResult {
     if (count > 1) errors.push(`Duplicate id "${id}" used ${count} times — ids must be unique.`);
   }
 
+  // Does `target` fail to resolve to any element id? (ids may be stored with or
+  // without the runtime `w-`/`#w-` prefix.)
+  const danglesId = (target: string) => {
+    const cleaned = target.replace(/^#?w-/, "");
+    return !ids.has(target) && !ids.has(cleaned);
+  };
+
   // dangling element-target events
   for (const t of eventTargets) {
     if (ELEMENT_TARGET_ACTIONS.has(t.action)) {
-      const cleaned = t.target.replace(/^#?w-/, "");
-      if (!ids.has(t.target) && !ids.has(cleaned)) {
+      if (danglesId(t.target)) {
         warnings.push(`event on "${t.from}" action="${t.action}" target="${t.target}" does not match any element id.`);
+      }
+    } else if (t.action === "set_field_value" && /^#?w-/.test(t.target) && danglesId(t.target)) {
+      // set_field_value target is a field_name OR an element id; only an explicit
+      // element ref (w- prefix) can dangle — a bare field_name is not an id.
+      warnings.push(`event on "${t.from}" action="set_field_value" target="${t.target}" looks like an element id but matches none.`);
+    }
+  }
+
+  // dangling option-level event targets (specials.options[].events_option promoId)
+  for (const t of optionTargets) {
+    if (danglesId(t.target)) {
+      warnings.push(`option event on "${t.from}" type="${t.kind}" promoId="${t.target}" does not match any element id.`);
+    }
+  }
+
+  // dangling survey/field cross-wiring
+  for (const r of connectRefs) {
+    if (danglesId(r.target)) {
+      warnings.push(`"${r.from}" specials.${r.key}="${r.target}" does not match any element id.`);
+    }
+  }
+
+  // field_name uniqueness WITHIN each form — duplicate names collide in the
+  // submitted data. (A nested form is its own data scope, so stop at one.)
+  const collectFieldNames = (n: any, acc: string[]) => {
+    if (!n || !Array.isArray(n.children)) return;
+    for (const c of n.children) {
+      if (!c || typeof c !== "object") continue;
+      if (c.type === "form") continue;
+      const fn = c.specials?.field_name;
+      if (typeof fn === "string" && fn.trim() !== "") acc.push(fn.trim());
+      collectFieldNames(c, acc);
+    }
+  };
+  for (const form of forms) {
+    const names: string[] = [];
+    collectFieldNames(form, names);
+    const counts = new Map<string, number>();
+    for (const fn of names) counts.set(fn, (counts.get(fn) || 0) + 1);
+    for (const [fn, count] of counts) {
+      if (count > 1) {
+        warnings.push(
+          `form "${form.id ?? "?"}": field_name "${fn}" used ${count} times — inputs in one form need a unique field_name (data collides on submit).`
+        );
       }
     }
   }

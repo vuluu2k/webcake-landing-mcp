@@ -1841,3 +1841,71 @@ The MCP's `page-schema.json` currently lists all of these except `svariations`. 
 **Success envelope contract.**
 
 Backend responses use a dynamic key: `{ "success": true, "fallback": "with_data", "<key>": <data> }` where `<key>` is `"data"` for create/update/get/list-pages endpoints and `"organizations"` for the org list endpoint. Failure responses are HTTP 422 with `{ "success": false, "message": "…", "fallback": "with_reason" }`. Auth failures are plain-text 401/403.
+
+---
+
+## Event Model
+
+Derived from the runtime dispatcher `render_v4/event/index.js`, the form handlers in `render_v4/src/elements/form.js`, and the scroll-in handler in `render_v4/lazyload/index.js`. Every element carries an `events` array; each item is:
+
+```jsonc
+{ "id": "ev1", "type": "click", "action": "open_popup", "target": "<popup id>", /* + action-specific extra fields */ }
+```
+
+### Triggers (`type`)
+
+| type | Fires when | Lives on |
+|------|-----------|----------|
+| `click` | element is clicked | any element |
+| `hover` | mouseenter/mouseleave | any element |
+| `success` | a form submit succeeds | a **form** element |
+| `error` | form validation fails | a **form** element |
+| `delay` | element scrolls into view (timed) | any element |
+| `unset` | page init (e.g. initial `collapse`) | any element |
+
+### Click actions (target + extra event-object fields)
+
+| action | target | extra fields |
+|--------|--------|--------------|
+| `none` | — | — |
+| `open_link` | URL | `targetURL` ('_blank'\|'_self'), `open_link_with_params`, `send_to_thank_page`, `delayTime` (s) |
+| `open_popup` | popup id | `animation`, `reverseAnimation` |
+| `close_popup` | popup id | `animation` |
+| `scroll_to` | element/section id | `scrollMore` (bonus px) |
+| `show_section` / `hide_section` | section id | — |
+| `show_hide_element` | element id (comma-list ok) | `onlyMode` ('show'\|'hide'), `animation`, `animationOut` |
+| `change_tab` | gallery/carousel id | `moveTo` ('prev'\|'next'\|'index'), `tabIndex` |
+| `lightbox` | image/video/iframe URL | `typeLightbox` ('image'\|'video'\|'iframe'), `alt` |
+| `copy` | text — or element id when `copyType='elementValue'` | `copyType` |
+| `collapse` | element id | — |
+| `set_field_value` | field_name (or `w-<id>`) | `set_value` |
+| `back_to` | none (history.back) | — |
+| `share` | platform: 'Facebook'\|'Twitter'\|'Custom' | — |
+| `play_audio` / `stop_audio` | audio file URL (NOT an id) | — |
+| `open_sms` | phone number | `smsBody` |
+| `send_email` | email address | — |
+| `download_file` | file URL | `nameFile` |
+| `close_webview` | none | — |
+| `open_cart` | none | — |
+| `add_to_cart` | (unused) | uses `specials.sprod/svariant/squantity` or `event.sprod_id/svariant/squantity` |
+| `open_app` | destination URL/phone/ref | `appTarget` (botcake\|botcake_dynamic\|whatsapp\|mess_prefill\|tiktok_prefill\|line_prefill\|others), `wa_custom_text`, `line_custom_text`, `formIdLink` |
+| `change_color` | (self / `target_element`) | `change_color_type`, `change_color`, `target_mode`, `target_element` |
+| `custom_js` | none | `custom_js` (code string) |
+
+### Hover actions
+
+`change_color` (extra: `change_color`, `change_color_type`, `hoverText`, `hoverBorder`, `target_mode`, `target_element`), `change_background` (`hoverColor`), `change_text_color` (`hoverText`), `change_underline`, `change_overline`, `animation_hover`, `show_hide_element` (target = element id; `animation`, `animationOut`).
+
+### Success actions (form, after submit)
+
+`phone_call` (phone), `open_sms` (phone, `smsBody`), `send_email` (email), `open_link` (URL, `targetURL`), `scroll_to` (id, `scrollMore`), `open_popup` (id), `close_popup` (id), `download_file` (URL, `nameFile`), `show_hide_element` (id, `onlyMode`), `show_section` (id), `hide_section` (id), `close_webview`, `change_tab` (id, `moveTo`, `tabIndex`).
+
+### Error actions (form, on validation failure)
+
+`open_popup` (id), `close_popup` (id), `show_hide_element` (id, `onlyMode`).
+
+### Delay actions (any element, on scroll-into-view)
+
+`show_element`, `hide_element` — both read `delay_multiplier` (ms, default 1000).
+
+> The MCP exposes these vocabularies live via `get_generation_guide` (`click_actions`, `hover_actions`, `success_actions`, `error_actions`, `delay_actions`) and `validate_page` checks element-id targets — including option-level `events_option` `promoId`, `connectedSurvey`/`connectedForm`, and `set_field_value` element refs.
