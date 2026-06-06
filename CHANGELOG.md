@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-06-06
+
+### Added
+- New `webcake-landing-mcp login` subcommand authenticates via the browser automatically: it opens a loopback callback server, launches the Webcake connect page, and saves the received JWT to `~/.webcake-landing-mcp/auth.json`, eliminating manual token copy-paste.
+- New `webcake-landing-mcp serve [--port N]` subcommand (also accepts the `PORT` env var) starts a Streamable-HTTP server at `/mcp`, enabling the server to run as a Claude custom connector accessible via a public URL with multi-user support.
+- A `/health` endpoint (`GET /` or `GET /health`) is available on the HTTP server for hosting-platform health checks.
+
+### Changed
+- Credential resolution in `readConfig` now follows a three-tier priority: per-request HTTP header overrides first, then environment variables, then the saved `~/.webcake-landing-mcp/auth.json` written by `login` — so a one-time browser connect replaces pasting `WEBCAKE_JWT` into the environment.
+- All five persistence tools (`list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page`) now read the caller's Webcake JWT from the `x-webcake-jwt` or `Authorization: Bearer` request headers in remote/HTTP mode, so a hosted server is multi-user without baking a shared token into the environment.
+- Missing-credential error messages and dry-run hints from persistence tools now mention the `x-webcake-jwt` header as an alternative to the `WEBCAKE_JWT` env var.
+
 ## [1.0.7] - 2026-06-06
 
 ### Changed
