@@ -17,6 +17,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
 import { ICON_SVG, ICON_MIME } from "./branding.js";
+import { guideHtml } from "./web-guide.js";
 
 const MCP_PATH = "/mcp";
 
@@ -87,13 +88,13 @@ export async function startHttpServer(port: number): Promise<void> {
       // (the container healthcheck uses `Accept: */*`) still get the JSON health.
       const accept = String(req.headers["accept"] ?? "");
       if (path === "/" && accept.includes("text/html")) {
+        // Public base URL, honoring the reverse proxy (Coolify/Traefik/Cloudflare).
+        const fwdHost = req.headers["x-forwarded-host"];
+        const host = (Array.isArray(fwdHost) ? fwdHost[0] : fwdHost) || req.headers.host || "localhost";
+        const fwdProto = req.headers["x-forwarded-proto"];
+        const proto = (Array.isArray(fwdProto) ? fwdProto[0] : fwdProto)?.split(",")[0] || "https";
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        return res.end(
-          `<!doctype html><meta charset="utf-8"><title>Webcake Landing MCP</title>` +
-            `<link rel="icon" type="${ICON_MIME}" href="/favicon.svg">` +
-            `<body style="font-family:system-ui;padding:40px">` +
-            `<h2>Webcake Landing MCP</h2><p>Streamable-HTTP MCP server. Endpoint: <code>${MCP_PATH}</code>.</p></body>`,
-        );
+        return res.end(guideHtml(`${proto}://${host}`));
       }
       return sendJson(res, 200, { ok: true, server: "webcake-landing", transport: "streamable-http", endpoint: MCP_PATH });
     }
