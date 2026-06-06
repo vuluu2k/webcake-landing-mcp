@@ -1,4 +1,4 @@
-# 🍰 WebCake Landing MCP
+# <img src="docs/assets/webcake-icon.svg" alt="Webcake" width="26" height="26" align="absmiddle"> WebCake Landing MCP
 
 **English** · [Tiếng Việt](./README.vi.md)
 
@@ -58,12 +58,52 @@ persists it (source-only — the page opens in the editor where re-saving render
 
 | Method | Best for | Auth |
 |--------|----------|------|
-| **npx (local stdio)** — add to an IDE with one command | Daily use on your machine | browser `login`, a JWT, or none (reference tools) |
-| **Remote HTTP (`serve`)** — run as a connector behind a URL | A hosted/shared server (e.g. Coolify) | per-request `x-webcake-jwt` header / `?jwt=` |
+| **npx (local)** — runs on your machine | Personal daily use, full control | browser `login`, a JWT, or none (reference tools) |
+| **Hosted URL** — use our live server, nothing to install | No Node.js, teams, the claude.ai dialog | your personal `?jwt=` link / `x-webcake-jwt` header |
 
 The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
 
 > 🛠️ Prefer a shell-script installer (`install.sh`/`install.ps1`), a cloned local build, or hand-written per-IDE config? See **[docs/manual-install.md](docs/manual-install.md)**.
+
+## 🚀 Get connected — the 2 main ways
+
+Pick **one**. Both hand your AI tool (Claude, Cursor, …) the full Webcake landing toolkit. No coding.
+
+### ① `npx` — runs on your machine (recommended for personal use)
+
+Zero install, always the latest version. **One line** grabs your token *and* writes the IDE config:
+
+```bash
+npx -y webcake-landing-mcp install
+```
+
+Just want to run the server (configure by hand later)?
+
+```bash
+npx -y webcake-landing-mcp
+```
+
+✅ Best for: daily personal use, local development, full control. Needs Node.js 18+.
+
+### ② Remote URL `…/mcp?jwt=` — hosted, nothing to install
+
+Use the server we already host. Grab **your personal link** (your token is baked in) and paste it into your client's *Add custom connector* / config:
+
+```
+https://mcp.toolvn.io.vn/mcp?jwt=<YOUR_TOKEN>
+```
+
+Two ways to get the link:
+- **Easiest** — open **<https://webcake.io/mcp-remote>** in your Webcake dashboard → it builds & copies the link for you.
+- **By hand** — see the step-by-step guide below.
+
+You can also add extra params: `&env=prod`, `&org_id=…`, `&api_base=…`.
+
+✅ Best for: no Node.js, team/shared use, the **claude.ai** connector dialog (URL-only, no headers).
+⚠️ The link contains your personal token — treat it like a password, always use **HTTPS**.
+
+> 📖 **Full hand-config for every IDE** (Claude Desktop, Claude Code, Cursor, Windsurf, claude.ai…) is in the
+> step-by-step guide → **[docs/connect-mcp.md](docs/connect-mcp.md)** · Tiếng Việt: **[docs/ket-noi-mcp.md](docs/ket-noi-mcp.md)**.
 
 ## Install (npx)
 
@@ -127,34 +167,25 @@ The MCP config is the same as the local one, but `command`/`args` point at `npx`
 > npx caches the package after the first run, so subsequent launches are fast. Use a pinned version
 > (`webcake-landing-mcp@1.0.0`) if you need a reproducible build.
 
-## Run as a remote connector (Streamable HTTP)
+## Use the hosted server — nothing to install
 
-The server also speaks the **remote MCP** (Streamable HTTP) transport, so it can be added through
-Claude's **"Add custom connector"** dialog via a URL — not just as a local stdio server.
+It's **already live** at **`https://mcp.toolvn.io.vn/mcp`** — we run it for you. No server to set up, no
+machine to keep awake. Just point your AI client at the URL and go.
 
-Start it in HTTP mode (default port `8787`, or set `PORT` / `--port`):
+**Grab your personal link** (your token is baked in) the easy way → open **<https://webcake.io/mcp-remote>**
+and hit **Copy**:
 
-```bash
-npx -y webcake-landing-mcp serve --port 8787
-# → MCP endpoint at http://localhost:8787/mcp   (GET / or /health returns a status JSON)
+```
+https://mcp.toolvn.io.vn/mcp?jwt=<YOUR_TOKEN>
 ```
 
-Expose it over **HTTPS** at a public URL (a reverse proxy, a tunnel like `ngrok http 8787`, or any
-host), then in Claude → **Add custom connector**:
+Optional extras: `&env=prod`, `&org_id=…`, `&api_base=…`. Hand each teammate a link with their own `jwt` →
+per-user, no OAuth. ⚠️ The link carries your personal token — treat it like a password, always over **HTTPS**.
 
-- **Name**: `webcake-landing`
-- **Remote MCP server URL**: `https://<your-host>/mcp`
+### Sending the token as a header (safer)
 
-The dialog has no header field, so to pass a token through it, **put it in the URL**:
-`https://<your-host>/mcp?jwt=<ljwt>` (also accepts `&api_base=…`, `&org_id=…`, `&host=…`, `&app_base=…`).
-Give each person a URL with their own `jwt` → **per-user without OAuth**. An explicit `x-webcake-jwt` header
-still wins over the query. ⚠️ A token in a URL can land in access/proxy logs — require **HTTPS** and disable
-query-string logging on your reverse proxy; a header (or OAuth) is safer when the client supports it.
-
-### Auth — per-request, multi-user (no shared token)
-
-In stdio mode the JWT comes from env. In HTTP mode each request carries the caller's **own** credentials
-via headers, so a hosted server is multi-user and never bakes in a shared secret:
+Clients that support headers should send the token as a header instead of putting it in the URL (so it never
+lands in logs). Any header that's missing falls back to the matching env var:
 
 | Header | Maps to | Notes |
 |--------|---------|-------|
@@ -164,61 +195,12 @@ via headers, so a hosted server is multi-user and never bakes in a shared secret
 | `x-webcake-api-base` | `WEBCAKE_API_BASE` | overrides the env preset's API base |
 | `x-webcake-app-base` | `WEBCAKE_APP_BASE` | overrides the env preset's app base |
 
-Any header that is absent falls back to the corresponding env var — so you can also run it **single-user**
-by setting `WEBCAKE_API_BASE` + `WEBCAKE_JWT` in the host's env and keeping the URL private.
+> The reference + generation tools (`get_generation_guide`, `list_elements`, `validate_page`, …) need **no
+> token** — only the persistence tools (`create_page`, `update_page`, …) use it. Without a JWT, those return
+> `missing_env` instead of touching the network.
 
-> ⚠️ The reference + generation tools (`get_generation_guide`, `list_elements`, `validate_page`, …) need
-> no secret; only the persistence tools (`create_page`, `update_page`, …) use the JWT. If a request has no
-> JWT, those tools return `missing_env` instead of touching the network.
->
-> Note: the claude.ai connector dialog has **no header field** (only OAuth, which this server does not
-> implement yet). Two ways around it: put the token in the URL as `?jwt=<ljwt>` (above — per-user, but the
-> token shows up in logs), or use a header-capable client (`mcp-remote --header …`, below). A token in the
-> server's env instead gives a shared **single-account** for everyone on that URL.
-
-### Test it locally (no public URL needed)
-
-`localhost` can't be used in the claude.ai dialog (Anthropic fetches the URL from its own servers). To try the
-running `serve` server on your machine:
-
-- **MCP Inspector** (GUI — easiest): `npx @modelcontextprotocol/inspector` → Transport **Streamable HTTP** →
-  URL `http://localhost:8787/mcp` → under Headers add `x-webcake-jwt` (+ `x-webcake-api-base`) → Connect → call tools.
-- **`mcp-remote`** (use the remote server from a stdio client like Claude Desktop, with headers):
-  ```json
-  { "mcpServers": { "webcake-remote": { "command": "npx",
-    "args": ["-y", "mcp-remote", "http://localhost:8787/mcp",
-             "--header", "x-webcake-jwt:<ljwt>",
-             "--header", "x-webcake-api-base:https://api.webcake.io"] } } }
-  ```
-- **curl**: `initialize` (read the `mcp-session-id` response header) → `tools/list` → `tools/call`, all with
-  `Accept: application/json, text/event-stream`.
-
-### Deploy on a VPS
-
-1. **Build + run as a service** — `/etc/systemd/system/webcake-mcp.service`:
-   ```ini
-   [Service]
-   WorkingDirectory=/opt/webcake-landing-mcp
-   ExecStart=/usr/bin/node dist/index.js serve --port 8787
-   Environment=WEBCAKE_API_BASE=https://api.webcake.io
-   Environment=WEBCAKE_JWT=<ljwt>          # single-account only — see auth note below
-   Restart=always
-   [Install]
-   WantedBy=multi-user.target
-   ```
-   `sudo systemctl enable --now webcake-mcp` (build once: `npm install && npm run build`).
-2. **HTTPS + domain** (claude.ai requires https) — e.g. Caddy auto-TLS, `/etc/caddy/Caddyfile`:
-   ```
-   mcp.yourdomain.com { reverse_proxy localhost:8787 }
-   ```
-3. **Add to claude.ai** → Remote MCP server URL = `https://mcp.yourdomain.com/mcp`.
-
-**Auth on a shared server:**
-- **Single-account** (works with the dialog today): `WEBCAKE_JWT` in the service env → everyone using the
-  connector shares that one Webcake account. Keep the URL private / gated; the token expires (~90 days).
-- **Per-user** (each person their own account): give each person a URL with their own `?jwt=<ljwt>` (works
-  through the dialog, but the token appears in logs), or use a header-capable client (`mcp-remote --header …`),
-  or add **OAuth** (not implemented) for the cleanest flow.
+> 📖 **Full step-by-step for every IDE** (Claude Desktop, Claude Code, Cursor, Windsurf, claude.ai) →
+> **[docs/connect-mcp.md](docs/connect-mcp.md)** · Tiếng Việt: **[docs/ket-noi-mcp.md](docs/ket-noi-mcp.md)**.
 
 ## Connect once — grab your token automatically (`login`)
 
@@ -243,8 +225,8 @@ It opens your browser → (log into Webcake if needed) → the token is saved to
 
 You're already logged in to Webcake in your browser, so `login` just opens a Webcake "connect"
 page that reads your **`ljwt`** (landing) cookie and hands the token back to a localhost callback —
-no copy-paste. The saved token is used by **both** the stdio server and a single-user `serve`
-deployment (env vars still take precedence). The landing JWT lasts ~90 days, so you rarely reconnect.
+no copy-paste. The saved token is then read automatically (env vars still take precedence).
+The landing JWT lasts ~90 days, so you rarely reconnect.
 
 Two URLs, don't mix them up:
 
@@ -270,7 +252,7 @@ For safety, only honor `redirect_uri` values on `http://127.0.0.1:*` / `http://l
 flow can also be done entirely in the SPA, no backend route needed.)
 
 > Multi-user remote (the claude.ai connector dialog) can't do this browser loopback — there each
-> user sends their own token via the `x-webcake-jwt` header (see the remote-connector section above).
+> user sends their own token via the `x-webcake-jwt` header (see the hosted-server section above).
 
 ## Environment Variables
 
@@ -301,15 +283,14 @@ truth for the API + app bases:
 | `prod` | `https://api.webcake.io` | `https://webcake.io` |
 
 ```bash
-node dist/index.js serve --env staging        # remote server on the staging backend
-node dist/index.js login --env local          # connect against your local SPA + API
-WEBCAKE_ENV=prod node dist/index.js           # stdio, prod (env var form)
+npx -y webcake-landing-mcp login --env local       # connect against your local SPA + API
+WEBCAKE_ENV=staging npx -y webcake-landing-mcp      # run against the staging backend
+WEBCAKE_ENV=prod npx -y webcake-landing-mcp         # prod (env var form)
 ```
 
-Explicit `WEBCAKE_API_BASE` / `WEBCAKE_APP_BASE` (or `--api-base`) still override the
-preset, field by field. On the remote HTTP server a client can override the server's
-environment per request with the **`x-webcake-env`** header or **`?env=`** query
-(e.g. `…/mcp?jwt=<token>&env=staging`) — so one server can serve multiple environments.
+Explicit `WEBCAKE_API_BASE` / `WEBCAKE_APP_BASE` (or `--api-base`) still override the preset, field
+by field. On the hosted server you can override the environment per request with the
+**`x-webcake-env`** header or **`?env=`** query (e.g. `…/mcp?jwt=<token>&env=staging`).
 
 ### How to get `WEBCAKE_JWT`
 
@@ -330,93 +311,8 @@ cloned-build variants, see **[docs/manual-install.md](docs/manual-install.md#con
 
 ## Usage Examples
 
-### Example 1: Build a new landing page from a brief
-
-**Prompt:**
-```
-Build me a WebCake landing page for "Acme Coffee" — a hero with a CTA, a 3-feature
-section, and a signup form. Persist it to my default org.
-```
-
-**AI agent will automatically:**
-
-**Step 1** — Call `get_generation_guide` to learn conventions (canvas, coordinate system, events, workflow)
-
-**Step 2** — Call `new_page_skeleton` for an empty top-level source, then `get_element` for each type it uses:
-
-```
-get_element({ type: "section" })
-get_element({ type: "text-block" })
-get_element({ type: "button" })
-get_element({ type: "form" })
-```
-
-**Step 3** — Assemble the full `{ page, popup, settings, options, cartConfigs }` JSON, then validate:
-
-```
-validate_page({ source })
-→ { ok: false, errors: ["BUTTON-2: event target 'POPUP-9' not found"] }   # fix every error, re-validate
-validate_page({ source })
-→ { ok: true, errors: [] }
-```
-
-**Step 4** — Persist (dry-run first, then for real):
-
-```
-list_organizations({})                          → pick the org
-create_page({ source })                         → dry-run preview (JWT masked)
-create_page({ source, dry_run: false })         → { page_id, editor_url, preview_url }
-```
-
-Open the page in the editor and re-save to render `app`/`app_css`.
-
----
-
-### Example 2: Edit an existing page
-
-**Prompt:**
-```
-On my "Acme Coffee" landing page, change the hero headline to "Freshly Roasted Daily"
-and make the CTA button green.
-```
-
-**AI agent edits surgically — never regenerates the whole tree:**
-
-```
-# Step 1: find the page
-list_pages({})
-→ [{ id: "page_42", name: "Acme Coffee", organization_id: "org_1", ... }]
-
-# Step 2: fetch its decoded source tree
-get_page({ page_id: "page_42" })
-
-# Step 3: change ONLY the headline text + button color, keep every other id/coordinate,
-#         then validate and write back
-validate_page({ source })                       → ok
-update_page({ page_id: "page_42", source })     → dry-run preview
-update_page({ page_id: "page_42", source, dry_run: false })
-```
-
----
-
-### Example 3: Inspect an element type before using it
-
-**Prompt:**
-```
-What specials does a form element need, and show me a valid example.
-```
-
-**AI agent calls:**
-
-```
-get_element({ type: "form" })
-→ {
-    hints: "Each input needs a unique specials.field_name…",
-    specials: { ... },
-    skeleton: { ... },     # structurally-valid default node
-    example: { ... }       # filled, realistic example
-  }
-```
+Three end-to-end walkthroughs — build a page from a brief, edit one surgically, and inspect
+an element type — live in **[docs/usage-examples.md](docs/usage-examples.md)**.
 
 ---
 
