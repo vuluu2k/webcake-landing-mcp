@@ -18,7 +18,7 @@
  */
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import { saveSavedConfig, resolveEnv, ENVIRONMENTS } from "../persistence/config.js";
 
 // Base URLs come from the named environment (the global --env flag / WEBCAKE_ENV),
@@ -53,9 +53,87 @@ function openBrowser(url: string) {
   }
 }
 
-const SUCCESS_HTML = `<!doctype html><meta charset="utf-8"><title>Connected</title>
-<body style="font-family:system-ui;text-align:center;padding:48px">
-<h2>✓ Connected to Webcake</h2><p>You can close this tab and return to your terminal.</p></body>`;
+// Chrome won't let a page close a tab it didn't open (window.close() is blocked),
+// so instead we bring the user's terminal back to the foreground from Node. We
+// snapshot whatever app is frontmost just before opening the browser (that's the
+// terminal that ran the command) and re-activate it once the token arrives.
+// macOS only (AppleScript); a no-op elsewhere — the success page still shows.
+function captureFrontmostApp(): Promise<string | undefined> {
+  if (process.platform !== "darwin") return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: string | undefined) => {
+      if (done) return;
+      done = true;
+      resolve(v);
+    };
+    const child = execFile(
+      "osascript",
+      ["-e", 'tell application "System Events" to get name of first application process whose frontmost is true'],
+      (err, stdout) => finish(err ? undefined : stdout.trim() || undefined),
+    );
+    // Never let login stall: the first run may hang on the macOS Automation
+    // permission prompt. Give up after 2s (re-focus is just a nicety).
+    setTimeout(() => {
+      try { child.kill(); } catch { /* noop */ }
+      finish(undefined);
+    }, 2000).unref();
+  });
+}
+
+function activateApp(name: string | undefined) {
+  if (!name || process.platform !== "darwin") return;
+  // Re-focus by process name via System Events (works for terminals whose app
+  // name differs from the process, e.g. iTerm/Terminal/Warp/VS Code).
+  execFile(
+    "osascript",
+    ["-e", `tell application "System Events" to set frontmost of (first application process whose name is "${name.replace(/"/g, '\\"')}") to true`],
+    () => {},
+  );
+}
+
+const SUCCESS_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Connected to Webcake</title>
+<style>
+  :root{color-scheme:light dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:linear-gradient(135deg,#eef2ff 0%,#faf5ff 100%);color:#1e293b}
+  @media(prefers-color-scheme:dark){body{background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%);color:#e2e8f0}}
+  .card{background:#fff;border-radius:20px;padding:48px 40px;max-width:420px;width:calc(100% - 32px);
+    text-align:center;box-shadow:0 20px 60px rgba(79,70,229,.18);animation:rise .5s cubic-bezier(.2,.8,.2,1)}
+  @media(prefers-color-scheme:dark){.card{background:#1e293b;box-shadow:0 20px 60px rgba(0,0,0,.5)}}
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .badge{width:84px;height:84px;margin:0 auto 24px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#22c55e,#16a34a);box-shadow:0 8px 24px rgba(34,197,94,.4);animation:pop .45s .15s both cubic-bezier(.2,1.4,.4,1)}
+  @keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
+  .badge svg{width:44px;height:44px;stroke:#fff;stroke-width:3.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .badge path{stroke-dasharray:32;stroke-dashoffset:32;animation:draw .4s .4s forwards ease-out}
+  @keyframes draw{to{stroke-dashoffset:0}}
+  h1{margin:0 0 10px;font-size:1.55rem;font-weight:700}
+  p{margin:0;font-size:1rem;line-height:1.6;color:#64748b}
+  @media(prefers-color-scheme:dark){p{color:#94a3b8}}
+  .hint{margin-top:24px;display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;
+    background:#f1f5f9;font-size:.9rem;color:#475569}
+  @media(prefers-color-scheme:dark){.hint{background:#0f172a;color:#94a3b8}}
+  .hint code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;color:#4f46e5}
+  @media(prefers-color-scheme:dark){.hint code{color:#a5b4fc}}
+</style></head>
+<body>
+  <main class="card">
+    <div class="badge"><svg viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg></div>
+    <h1>Connected to Webcake</h1>
+    <p>Your account is linked. You can close this tab now.</p>
+    <div class="hint">👉 Return to your <code>terminal</code> to continue</div>
+  </main>
+  <script>
+    // The terminal is re-focused from the CLI side. Still try window.close() for
+    // browsers that allow it (no-op in Chrome for tabs it didn't open) — no alert,
+    // which would only steal focus back from the terminal.
+    setTimeout(function(){ try { window.close(); } catch (e) {} }, 800);
+  </script>
+</body></html>`;
 
 function resolveConnectUrl(opts: LoginOpts, appBase: string): string {
   if (opts.connectUrl) return opts.connectUrl; // explicit --connect-url override
@@ -72,6 +150,9 @@ export async function runLogin(argv: string[]): Promise<void> {
   const appBase = process.env.WEBCAKE_APP_BASE || preset.appBase;
   const connectUrl = resolveConnectUrl(opts, appBase);
   const state = randomBytes(16).toString("hex");
+  // Remember the terminal that's frontmost now, so we can re-focus it once the
+  // browser hands the token back (Chrome can't auto-close its own tab).
+  const terminalApp = await captureFrontmostApp();
 
   await new Promise<void>((resolve, reject) => {
     const server = createServer((req, res) => {
@@ -94,6 +175,8 @@ export async function runLogin(argv: string[]): Promise<void> {
       });
       res.writeHead(200, { "content-type": "text/html" }).end(SUCCESS_HTML);
       console.error(`\n✓ Connected. Token saved to ${path} (api ${apiBase}).`);
+      // Pull the terminal back to the front (best-effort; no-op off macOS).
+      activateApp(terminalApp);
       server.close();
       resolve();
     });
