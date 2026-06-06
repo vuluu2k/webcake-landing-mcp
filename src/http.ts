@@ -16,6 +16,7 @@ import { createServer as createHttpServer, type IncomingMessage, type ServerResp
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
+import { ICON_SVG, ICON_MIME } from "./branding.js";
 
 const MCP_PATH = "/mcp";
 
@@ -72,8 +73,28 @@ export async function startHttpServer(port: number): Promise<void> {
   const httpServer = createHttpServer(async (req, res) => {
     const path = (req.url ?? "").split("?")[0];
 
+    // Brand icon — clients (e.g. the claude.ai connector) fetch a favicon from the
+    // server origin; without one they show a generic globe. Served raw as SVG.
+    if (req.method === "GET" && (path === "/favicon.ico" || path === "/favicon.svg" || path === "/icon.svg")) {
+      res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
+      return res.end(ICON_SVG);
+    }
+
     // Lightweight health check for hosting platforms.
     if (req.method === "GET" && (path === "/" || path === "/health")) {
+      // A browser/connector probing the root with `Accept: text/html` gets a tiny
+      // page that links the favicon (helps icon discovery); programmatic probes
+      // (the container healthcheck uses `Accept: */*`) still get the JSON health.
+      const accept = String(req.headers["accept"] ?? "");
+      if (path === "/" && accept.includes("text/html")) {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        return res.end(
+          `<!doctype html><meta charset="utf-8"><title>Webcake Landing MCP</title>` +
+            `<link rel="icon" type="${ICON_MIME}" href="/favicon.svg">` +
+            `<body style="font-family:system-ui;padding:40px">` +
+            `<h2>Webcake Landing MCP</h2><p>Streamable-HTTP MCP server. Endpoint: <code>${MCP_PATH}</code>.</p></body>`,
+        );
+      }
       return sendJson(res, 200, { ok: true, server: "webcake-landing", transport: "streamable-http", endpoint: MCP_PATH });
     }
     if (path !== MCP_PATH) return rpcError(res, 404, `Not found. Send MCP requests to ${MCP_PATH}.`);

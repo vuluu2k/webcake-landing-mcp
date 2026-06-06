@@ -9,10 +9,19 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { landingDomain } from "./domains/landing/index.js";
 import { registerTools } from "./tools/index.js";
+import { ICON_DATA_URI, ICON_MIME, BRAND } from "./branding.js";
 
 export function createServer(): McpServer {
   const server = new McpServer(
-    { name: "webcake-landing", version: "1.0.0" },
+    {
+      name: "webcake-landing",
+      version: "1.0.0",
+      // Shown by MCP clients (e.g. the claude.ai connector) instead of a generic
+      // globe. icons is per the MCP spec; the data URI keeps it self-contained.
+      title: BRAND.title,
+      websiteUrl: BRAND.websiteUrl,
+      icons: [{ src: ICON_DATA_URI, mimeType: ICON_MIME, sizes: ["any"] }],
+    },
     { instructions: landingDomain.instructions }
   );
   registerTools(server, landingDomain);
