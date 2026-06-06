@@ -42,12 +42,15 @@ See `.claude/skills/webcake-landing/SKILL.md` for the full workflow and
   element knowledge + default node shapes in `src/domains/landing/elements/`; validation in
   `src/domains/landing/validate.ts`; domain-agnostic primitives in `src/core/`.
 - Two transports share `createServer()` (`src/server.ts`): stdio (default) and a remote Streamable-HTTP
-  server (`node dist/index.js serve [--port N]`, `src/http.ts`). In HTTP mode credentials are per-request
-  via headers (`x-webcake-jwt` / `Authorization: Bearer`, `x-webcake-org-id`, …; see
-  `src/persistence/config.ts#configFromHeaders`), falling back to env — so a hosted server is multi-user.
+  server (`node dist/index.js serve [--port N] [--env local|staging|prod]`, `src/http.ts`). In HTTP mode
+  credentials are per-request via headers (`x-webcake-jwt` / `Authorization: Bearer`, `x-webcake-env`,
+  `x-webcake-org-id`, …; see `src/persistence/config.ts#configFromHeaders`), falling back to env — so a
+  hosted server is multi-user.
 - `node dist/index.js login` (`src/auth/login.ts`) grabs the JWT via the browser (a localhost loopback
   receives a redirect from the Webcake `/mcp-connect` endpoint that reads the `jwt` cookie) and saves it to
   `~/.webcake-landing-mcp/auth.json`. `readConfig` precedence: per-request overrides → env → that file.
+  `WEBCAKE_ENV` / `--env` (`local|staging|prod`, the `ENVIRONMENTS` table in `config.ts`) supplies the
+  default API + app base URLs; explicit `WEBCAKE_API_BASE` / `WEBCAKE_APP_BASE` still win.
 - **Never commit secrets.** The JWT is read from the `WEBCAKE_JWT` env var only — never
   hard-code a token, account, or page data in the repo. Scan before pushing (the repo is public).
 - The backend endpoints this MCP calls live in `landing_page_backend`

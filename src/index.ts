@@ -17,8 +17,39 @@
  */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
+import { ENVIRONMENTS, ENV_NAMES, isEnvName } from "./persistence/config.js";
+
+/**
+ * Global `--env <local|staging|prod>` flag (or `--env=<name>`): selects the API +
+ * app base URLs from a named preset by setting WEBCAKE_ENV, which readConfig + login
+ * then pick up. Explicit WEBCAKE_API_BASE / WEBCAKE_APP_BASE still win. An unknown
+ * value from the flag fails fast; an unknown WEBCAKE_ENV is dropped so explicit
+ * bases (or per-request headers) still resolve. stderr only — stdout is the MCP channel.
+ */
+function applyEnvFlag(argv: string[]): void {
+  let fromFlag: string | undefined;
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--env") fromFlag = argv[i + 1];
+    else if (a.startsWith("--env=")) fromFlag = a.slice("--env=".length);
+  }
+  const name = fromFlag ?? process.env.WEBCAKE_ENV;
+  if (!name) return;
+  if (!isEnvName(name)) {
+    console.error(`[webcake] unknown environment "${name}". Valid: ${ENV_NAMES.join(", ")}.`);
+    if (fromFlag) process.exit(1); // explicit flag typo → fail fast
+    delete process.env.WEBCAKE_ENV; // bad WEBCAKE_ENV → ignore, fall through to explicit bases
+    return;
+  }
+  process.env.WEBCAKE_ENV = name;
+  const p = ENVIRONMENTS[name];
+  console.error(`[webcake] environment "${name}" — api ${p.apiBase}, app ${p.appBase}`);
+}
 
 async function main() {
+  // Resolve the named environment (--env / WEBCAKE_ENV) before any config is read.
+  applyEnvFlag(process.argv);
+
   // Subcommand dispatch: `webcake-landing-mcp install|uninstall` runs the
   // bundled IDE installer instead of starting the MCP server. Default (no
   // subcommand) starts the stdio server as usual.

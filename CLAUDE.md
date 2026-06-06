@@ -95,9 +95,12 @@ When touching the model, preserve these (they live in the schema, the guide, and
 
 ## Environment variables (persistence tools only)
 
-`WEBCAKE_API_BASE` + `WEBCAKE_JWT` are required to hit the backend; `WEBCAKE_ORG_ID` (default org),
-`WEBCAKE_HOST` (Phoenix host-routing header), `WEBCAKE_APP_BASE` (for editor/preview URLs in results)
-are optional. The backend endpoints this calls live in the separate `landing_page_backend` repo
+`WEBCAKE_API_BASE` + `WEBCAKE_JWT` are required to hit the backend; `WEBCAKE_ENV`
+(`local|staging|prod`, or the global `--env` flag) fills in `WEBCAKE_API_BASE` + `WEBCAKE_APP_BASE`
+from a preset — single source of truth: `ENVIRONMENTS` in [src/persistence/config.ts](src/persistence/config.ts)
+(explicit vars and the per-request `x-webcake-env` header / `?env=` query still win); `WEBCAKE_ORG_ID`
+(default org), `WEBCAKE_HOST` (Phoenix host-routing header), `WEBCAKE_APP_BASE` (for editor/preview URLs
+in results) are optional. The backend endpoints this calls live in the separate `landing_page_backend` repo
 (`LandingPageWeb.V1.AiController`, scope `/api/v1/ai`).
 
 ## Release flow

@@ -19,14 +19,12 @@
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { saveSavedConfig } from "../persistence/config.js";
+import { saveSavedConfig, resolveEnv, ENVIRONMENTS } from "../persistence/config.js";
 
-// Production defaults — the connect page lives on the SPA (webcake.io), the API
-// lives on api.webcake.io. For local dev override with --connect-url / --api-base
-// (e.g. http://localhost:5173/mcp-connect and http://localhost:5800) or the
-// WEBCAKE_APP_BASE / WEBCAKE_API_BASE env vars.
-const DEFAULT_CONNECT_URL = "https://webcake.io/mcp-connect";
-const DEFAULT_API_BASE = "https://api.webcake.io";
+// Base URLs come from the named environment (the global --env flag / WEBCAKE_ENV),
+// defaulting to prod so zero-config `login` still connects via webcake.io. Override
+// per field with --connect-url / --api-base or WEBCAKE_APP_BASE / WEBCAKE_API_BASE.
+// The connect page lives on the SPA (appBase + /mcp-connect); the API lives on apiBase.
 
 type LoginOpts = { connectUrl?: string; apiBase?: string; orgId?: string; port?: number; open: boolean };
 
@@ -59,19 +57,21 @@ const SUCCESS_HTML = `<!doctype html><meta charset="utf-8"><title>Connected</tit
 <body style="font-family:system-ui;text-align:center;padding:48px">
 <h2>✓ Connected to Webcake</h2><p>You can close this tab and return to your terminal.</p></body>`;
 
-function resolveConnectUrl(opts: LoginOpts): string {
+function resolveConnectUrl(opts: LoginOpts, appBase: string): string {
   if (opts.connectUrl) return opts.connectUrl;
   if (process.env.WEBCAKE_CONNECT_URL) return process.env.WEBCAKE_CONNECT_URL;
-  // The connect page is on the SPA (WEBCAKE_APP_BASE), NOT the API base.
-  const appBase = process.env.WEBCAKE_APP_BASE;
-  if (appBase) return `${appBase.replace(/\/+$/, "")}/mcp-connect`;
-  return DEFAULT_CONNECT_URL;
+  // The connect page is on the SPA (appBase, from the env preset), NOT the API base.
+  return `${appBase.replace(/\/+$/, "")}/mcp-connect`;
 }
 
 export async function runLogin(argv: string[]): Promise<void> {
   const opts = parseArgs(argv);
-  const connectUrl = resolveConnectUrl(opts);
-  const apiBase = opts.apiBase || process.env.WEBCAKE_API_BASE || DEFAULT_API_BASE;
+  // Named environment (set by the global --env flag / WEBCAKE_ENV); prod is the
+  // zero-config default. Explicit --api-base / WEBCAKE_APP_BASE still win per field.
+  const preset = resolveEnv(process.env.WEBCAKE_ENV) ?? ENVIRONMENTS.prod;
+  const apiBase = opts.apiBase || process.env.WEBCAKE_API_BASE || preset.apiBase;
+  const appBase = process.env.WEBCAKE_APP_BASE || preset.appBase;
+  const connectUrl = resolveConnectUrl(opts, appBase);
   const state = randomBytes(16).toString("hex");
 
   await new Promise<void>((resolve, reject) => {
@@ -88,15 +88,13 @@ export async function runLogin(argv: string[]): Promise<void> {
       }
       const path = saveSavedConfig({
         jwt: token,
-        ...(apiBase ? { base: apiBase.replace(/\/+$/, "") } : {}),
+        base: apiBase.replace(/\/+$/, ""),
+        appBase: appBase.replace(/\/+$/, ""),
         ...(opts.orgId ? { orgId: opts.orgId } : {}),
         savedAt: new Date().toISOString(),
       });
       res.writeHead(200, { "content-type": "text/html" }).end(SUCCESS_HTML);
-      console.error(`\n✓ Connected. Token saved to ${path}`);
-      if (!apiBase) {
-        console.error("  tip: also set WEBCAKE_API_BASE (or pass --api-base) so the server knows the backend URL.");
-      }
+      console.error(`\n✓ Connected. Token saved to ${path} (api ${apiBase}).`);
       server.close();
       resolve();
     });

@@ -147,14 +147,14 @@ npx -y github:vuluu2k/webcake-landing-mcp
 config into your IDE. The bundled `install` subcommand does that step for you, no clone needed:
 
 ```bash
-# Interactive — asks for env + which IDE(s) step by step
+# Interactive — pick environment, log in via browser (or paste a JWT), pick IDE(s)
 npx -y webcake-landing-mcp install
 
-# Non-interactive — configure every supported IDE at once
-npx -y webcake-landing-mcp install --ide all --jwt <your-jwt> --api-base http://localhost:5800
+# Non-interactive — configure every supported IDE at once (env + token via flags)
+npx -y webcake-landing-mcp install --ide all --env prod --jwt <your-jwt>
 
-# Just one IDE
-npx -y webcake-landing-mcp install --ide cursor --jwt <your-jwt>
+# Local dev — point at your local stack (localhost:5800 / :5173)
+npx -y webcake-landing-mcp install --ide cursor --env local --jwt <your-jwt>
 
 # Remove the server from every IDE config
 npx -y webcake-landing-mcp uninstall
@@ -162,8 +162,10 @@ npx -y webcake-landing-mcp uninstall
 
 It writes a `webcake-landing` entry (using the `npx` launch form below) into the right config file
 for each target: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment` (VS Code), `codex`,
-or `all`. Flags: `--ide`, `--api-base`, `--jwt`, `--org-id`, `--host`, `--app-base`, `--npx`/`--local`,
-`-y`. Run `npx -y webcake-landing-mcp --help` for the full list.
+or `all`. Interactively it asks for the **environment** (`local`/`staging`/`prod`, which sets the API +
+app URLs) and whether to **log in via the browser or paste a JWT**. Flags: `--ide`, `--env`, `--jwt`,
+`--org-id`, `--api-base`/`--app-base`/`--host` (advanced overrides), `--npx`/`--local`, `-y`. Run
+`npx -y webcake-landing-mcp install --help` for the full list.
 
 ### Manual config
 
@@ -176,7 +178,7 @@ The MCP config is the same as the local one, but `command`/`args` point at `npx`
       "command": "npx",
       "args": ["-y", "webcake-landing-mcp"],
       "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
+        "WEBCAKE_ENV": "prod",
         "WEBCAKE_JWT": "<your-jwt>"
       }
     }
@@ -301,7 +303,11 @@ Instead of copying a JWT by hand, run:
 # Production — zero config (defaults: connect via webcake.io, API via api.webcake.io):
 npx -y webcake-landing-mcp login
 
-# Local dev — point at your local SPA (5173) + API (5800):
+# Local dev / staging — pick a named environment (see Environments below):
+node dist/index.js login --env local      # SPA :5173 + API :5800
+node dist/index.js login --env staging    # staging.webcake.io + api.staging.webcake.io
+
+# …or point at custom URLs explicitly (these override --env):
 node dist/index.js login \
   --connect-url http://localhost:5173/mcp-connect \
   --api-base http://localhost:5800
@@ -346,7 +352,8 @@ flow can also be done entirely in the SPA, no backend route needed.)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `WEBCAKE_API_BASE` | No* | Backend base URL, e.g. `http://localhost:5800`. Required to persist. |
+| `WEBCAKE_ENV` | No | Named environment: `local` \| `staging` \| `prod`. Fills in `WEBCAKE_API_BASE` + `WEBCAKE_APP_BASE` from a preset (see table below). Also settable with the `--env <name>` flag. Explicit vars win. |
+| `WEBCAKE_API_BASE` | No* | Backend base URL, e.g. `http://localhost:5800`. Required to persist (or set `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | No* | Account JWT (dashboard auth). Required to persist — expires, refresh when needed. |
 | `WEBCAKE_ORG_ID` | No | Default organization id for `create_page` (overridden by its `organization_id` arg). Omit → personal page. |
 | `WEBCAKE_HOST` | No | Optional `Host` header (Phoenix routes by host, e.g. `builder.localhost`). |
@@ -359,6 +366,28 @@ flow can also be done entirely in the SPA, no backend route needed.)
 
 > Persisting writes a real page to whatever `WEBCAKE_API_BASE` points at, using the JWT as that account.
 > Start against local/staging.
+
+### Environments (`--env` / `WEBCAKE_ENV`)
+
+Instead of setting both base URLs by hand, pick a named environment — one source of
+truth for the API + app bases:
+
+| `--env` / `WEBCAKE_ENV` | API base (`WEBCAKE_API_BASE`) | App base (`WEBCAKE_APP_BASE`) |
+|-------------------------|-------------------------------|-------------------------------|
+| `local` | `http://localhost:5800` | `http://localhost:5173` |
+| `staging` | `https://api.staging.webcake.io` | `https://staging.webcake.io` |
+| `prod` | `https://api.webcake.io` | `https://webcake.io` |
+
+```bash
+node dist/index.js serve --env staging        # remote server on the staging backend
+node dist/index.js login --env local          # connect against your local SPA + API
+WEBCAKE_ENV=prod node dist/index.js           # stdio, prod (env var form)
+```
+
+Explicit `WEBCAKE_API_BASE` / `WEBCAKE_APP_BASE` (or `--api-base`) still override the
+preset, field by field. On the remote HTTP server a client can override the server's
+environment per request with the **`x-webcake-env`** header or **`?env=`** query
+(e.g. `…/mcp?jwt=<token>&env=staging`) — so one server can serve multiple environments.
 
 ### How to get `WEBCAKE_JWT`
 

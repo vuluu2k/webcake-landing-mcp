@@ -22,6 +22,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
+import { ENVIRONMENTS, isEnvName, type EnvName } from "./persistence/config.js";
+import { runLogin } from "./auth/login.js";
 
 const NAME = "webcake-landing";
 const PKG = "webcake-landing-mcp";
@@ -300,18 +302,19 @@ function printHelp() {
 ${c.bold}webcake-landing-mcp install${c.reset} — configure the MCP server in your IDE(s)
 
 ${c.bold}Usage${c.reset}
-  npx -y ${PKG} install                 # interactive (asks step by step)
-  npx -y ${PKG} install --ide all       # non-interactive, all IDEs
-  npx -y ${PKG} install --ide claude-code --jwt <JWT> --api-base http://localhost:5800
+  npx -y ${PKG} install                 # interactive: pick environment, log in (or paste a JWT), pick IDEs
+  npx -y ${PKG} install --ide all       # non-interactive, all IDEs (defaults to --env prod)
+  npx -y ${PKG} install --ide claude-code --env local --jwt <JWT>
   npx -y ${PKG} uninstall               # remove from every IDE config
 
 ${c.bold}Flags${c.reset}
   --ide <list>      comma list: claude-desktop, claude-code, cursor, windsurf, augment, codex, all
-  --api-base <url>  WEBCAKE_API_BASE (default http://localhost:5800)
-  --jwt <token>     WEBCAKE_JWT (account token; optional, needed to persist)
-  --org-id <id>     WEBCAKE_ORG_ID (optional)
-  --host <host>     WEBCAKE_HOST (optional)
-  --app-base <url>  WEBCAKE_APP_BASE (optional)
+  --env <name>      WEBCAKE_ENV: local | staging | prod (default prod) — sets the API + app base URLs
+  --jwt <token>     WEBCAKE_JWT (account token; optional — or log in via the browser interactively)
+  --org-id <id>     WEBCAKE_ORG_ID (optional default organization)
+  --api-base <url>  override the --env API base (advanced)
+  --app-base <url>  override the --env app base (advanced)
+  --host <host>     WEBCAKE_HOST (advanced; Phoenix host-routing header)
   --npx | --local   force the launch command form (default: auto-detect)
   -y, --yes         accept defaults, skip confirmations
   --uninstall       remove the server from all IDE configs
@@ -329,33 +332,67 @@ export async function runInstaller(argv: string[]): Promise<void> {
 
   const interactive = !o.ide && process.stdin.isTTY && process.stdout.isTTY;
 
-  // 1) env
-  const env: Env = {};
-  let apiBase = o.apiBase ?? process.env.WEBCAKE_API_BASE ?? "";
-  let jwt = o.jwt ?? process.env.WEBCAKE_JWT ?? "";
-  let orgId = o.orgId ?? process.env.WEBCAKE_ORG_ID ?? "";
-  const host = o.host ?? process.env.WEBCAKE_HOST ?? "";
-  const appBase = o.appBase ?? process.env.WEBCAKE_APP_BASE ?? "";
+  // 1) environment — one choice sets the API + app base URLs (replaces the old
+  //    separate WEBCAKE_API_BASE / WEBCAKE_APP_BASE prompts). The global --env flag
+  //    / WEBCAKE_ENV is already validated in index.ts (applyEnvFlag).
+  let envName: EnvName = isEnvName(process.env.WEBCAKE_ENV) ? process.env.WEBCAKE_ENV : "prod";
+  if (interactive && !isEnvName(process.env.WEBCAKE_ENV)) {
+    log(`\n${c.bold}1) Environment${c.reset} ${c.gray}(sets the Webcake API + app URLs)${c.reset}`);
+    log(`  1) prod      ${c.gray}${ENVIRONMENTS.prod.apiBase}${c.reset}  ${c.gray}(default)${c.reset}`);
+    log(`  2) staging   ${c.gray}${ENVIRONMENTS.staging.apiBase}${c.reset}`);
+    log(`  3) local     ${c.gray}${ENVIRONMENTS.local.apiBase}${c.reset}`);
+    const pick = (await ask("  Select [1=prod, Enter to accept]: ")).trim();
+    envName = ({ "1": "prod", "2": "staging", "3": "local" } as Record<string, EnvName>)[pick] ?? "prod";
+  }
+  process.env.WEBCAKE_ENV = envName; // so `login` below connects to the same environment
+  const preset = ENVIRONMENTS[envName];
 
-  if (interactive) {
-    log(`\n${c.bold}1) Config${c.reset} ${c.gray}(Enter to skip — reference tools work with no creds)${c.reset}`);
-    apiBase =
-      (await ask(`  WEBCAKE_API_BASE [${apiBase || "http://localhost:5800"}]: `)) ||
-      apiBase ||
-      "http://localhost:5800";
-    jwt = (await ask(`  WEBCAKE_JWT (account token, optional): `)) || jwt;
-    orgId = (await ask(`  WEBCAKE_ORG_ID (optional): `)) || orgId;
-  } else if (!apiBase) {
-    apiBase = "http://localhost:5800";
+  // 2) authentication — interactively ASK how to authenticate: browser login (token
+  //    saved to ~/.webcake-landing-mcp/auth.json) or a pasted JWT. An explicit --jwt
+  //    skips the prompt; a non-TTY falls back to the WEBCAKE_JWT env var (for scripted
+  //    installs). Reference/validation tools work with no auth at all.
+  let jwt = o.jwt ?? "";
+  let authNote = jwt ? "JWT (from --jwt)" : "";
+  if (interactive && !jwt) {
+    log(`\n${c.bold}2) Authentication${c.reset} ${c.gray}(only needed to save pages to your account)${c.reset}`);
+    log(`  1) Log in via browser   ${c.gray}(recommended — opens Webcake, saves a token)${c.reset}`);
+    log(`  2) Paste a JWT token`);
+    log(`  3) Skip for now         ${c.gray}(reference/validation tools still work)${c.reset}`);
+    const pick = (await ask("  Select [1]: ")).trim() || "1";
+    if (pick === "1") {
+      info(`Connecting to ${preset.appBase} …`);
+      try {
+        await runLogin([]); // reads WEBCAKE_ENV for the connect URL + API base; saves auth.json
+        authNote = "browser login (saved to auth.json)";
+      } catch (e: any) {
+        warn(`Login didn't complete (${e?.message ?? e}). Paste a JWT now, or run \`${PKG} login\` later.`);
+        jwt = (await ask("  WEBCAKE_JWT (or Enter to skip): ")).trim();
+      }
+    } else if (pick === "2") {
+      jwt = (await ask("  WEBCAKE_JWT: ")).trim();
+    }
+  } else if (!interactive) {
+    jwt = jwt || process.env.WEBCAKE_JWT || ""; // scripted / CI: fall back to ambient env
+  }
+  if (!authNote) authNote = jwt ? "JWT" : "none — reference tools only";
+
+  // 3) optional default organization for create_page
+  let orgId = o.orgId ?? process.env.WEBCAKE_ORG_ID ?? "";
+  if (interactive && !orgId) {
+    orgId = (await ask(`\n${c.bold}3) WEBCAKE_ORG_ID${c.reset} ${c.gray}(optional, Enter to skip): ${c.reset}`)).trim();
   }
 
-  if (apiBase) env.WEBCAKE_API_BASE = apiBase;
+  // env block written into IDE configs: WEBCAKE_ENV drives the URLs. A pasted JWT is
+  // written too; a browser login lives in auth.json instead. --api-base/--app-base/
+  // --host stay as advanced overrides for non-standard setups.
+  const env: Env = { WEBCAKE_ENV: envName };
   if (jwt) env.WEBCAKE_JWT = jwt;
   if (orgId) env.WEBCAKE_ORG_ID = orgId;
-  if (host) env.WEBCAKE_HOST = host;
-  if (appBase) env.WEBCAKE_APP_BASE = appBase;
+  if (o.apiBase) env.WEBCAKE_API_BASE = o.apiBase;
+  if (o.appBase) env.WEBCAKE_APP_BASE = o.appBase;
+  if (o.host) env.WEBCAKE_HOST = o.host;
 
-  // 2) which IDEs
+  // 4) which IDEs
   let ides: string[] = [];
   if (o.ide) {
     ides = o.ide
@@ -363,7 +400,7 @@ export async function runInstaller(argv: string[]): Promise<void> {
       .map((s) => IDE_ALIASES[s.trim().toLowerCase()])
       .filter(Boolean);
   } else if (interactive) {
-    log(`\n${c.bold}2) Which IDE(s) to configure?${c.reset}`);
+    log(`\n${c.bold}4) Which IDE(s) to configure?${c.reset}`);
     log("  1) Claude Desktop   2) Claude Code (CLI)   3) Cursor");
     log("  4) Windsurf         5) Augment (VS Code)   6) Codex");
     log("  7) All              0) Skip");
@@ -392,14 +429,14 @@ export async function runInstaller(argv: string[]): Promise<void> {
     return;
   }
 
-  // 3) write
+  // 5) write
   const launch = resolveLaunch(o);
-  log(`\n${c.bold}3) Writing config${c.reset} ${c.gray}(launch: ${launch.command} ${launch.args.join(" ")})${c.reset}`);
+  log(`\n${c.bold}5) Writing config${c.reset} ${c.gray}(launch: ${launch.command} ${launch.args.join(" ")})${c.reset}`);
   runConfigure(ides, launch, env);
 
-  // 4) summary
+  // 6) summary
   log(`\n${c.green}${c.bold}✓ Done.${c.reset}`);
-  log(`  ${c.gray}API base : ${apiBase || "(unset)"}${c.reset}`);
-  log(`  ${c.gray}JWT      : ${jwt ? jwt.slice(0, 8) + "…" : "(unset — reference tools still work)"}${c.reset}`);
+  log(`  ${c.gray}Environment : ${envName}  (api ${o.apiBase || preset.apiBase})${c.reset}`);
+  log(`  ${c.gray}Auth        : ${authNote}${c.reset}`);
   log(`  Restart your IDE, then ask the AI: “Build a Webcake landing page”.\n`);
 }

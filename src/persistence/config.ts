@@ -12,6 +12,9 @@
  * { config: null, missing } when required values are absent so the persistence
  * tools can report exactly what to provide.
  *
+ *   WEBCAKE_ENV       optional named environment (local|staging|prod) — fills in the
+ *                     API + app base URLs from a preset (see ENVIRONMENTS below). An
+ *                     explicit WEBCAKE_API_BASE / WEBCAKE_APP_BASE still wins over it.
  *   WEBCAKE_API_BASE  e.g. http://localhost:5800   (required to call the backend)
  *   WEBCAKE_JWT       the account JWT               (required to call the backend)
  *   WEBCAKE_ORG_ID    optional default organization id for create_page
@@ -24,12 +27,43 @@ import { join } from "node:path";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import type { WebcakeConfig } from "./types.js";
 
+/**
+ * Named deployment environments — the single source of truth for the API + app
+ * base URLs. Selecting one (via the `--env` flag, WEBCAKE_ENV, the `x-webcake-env`
+ * header, or `?env=` in the URL) fills in both bases so callers don't repeat them.
+ * Explicit WEBCAKE_API_BASE / WEBCAKE_APP_BASE (or per-request overrides) win over
+ * the preset. `apiBase` is the backend; `appBase` is the SPA (editor/preview/connect).
+ */
+export const ENVIRONMENTS = {
+  local: { apiBase: "http://localhost:5800", appBase: "http://localhost:5173" },
+  staging: { apiBase: "https://api.staging.webcake.io", appBase: "https://staging.webcake.io" },
+  prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io" },
+} as const;
+
+export type EnvName = keyof typeof ENVIRONMENTS;
+export const ENV_NAMES = Object.keys(ENVIRONMENTS) as EnvName[];
+
+/** True when `v` names a known environment (local|staging|prod). */
+export function isEnvName(v: unknown): v is EnvName {
+  return typeof v === "string" && Object.prototype.hasOwnProperty.call(ENVIRONMENTS, v);
+}
+
+/** The base URLs for a named environment, or undefined when the name is absent/unknown. */
+export function resolveEnv(name: string | undefined): { apiBase: string; appBase: string } | undefined {
+  return isEnvName(name) ? ENVIRONMENTS[name] : undefined;
+}
+
 /** Request-scoped overrides for the env config (used by the HTTP transport). */
-export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "host" | "appBase">>;
+export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "host" | "appBase">> & {
+  /** Named environment (local|staging|prod) — fills in base/appBase when not given explicitly. */
+  env?: string;
+};
 
 export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeConfig | null; missing: string[] } {
   const saved = readSavedConfig();
-  const base = overrides.base ?? process.env.WEBCAKE_API_BASE ?? saved.base;
+  // A named environment supplies default base URLs; explicit values still win.
+  const preset = resolveEnv(overrides.env ?? process.env.WEBCAKE_ENV);
+  const base = overrides.base ?? process.env.WEBCAKE_API_BASE ?? preset?.apiBase ?? saved.base;
   const jwt = overrides.jwt ?? process.env.WEBCAKE_JWT ?? saved.jwt;
   const missing: string[] = [];
   if (!base) missing.push("WEBCAKE_API_BASE");
@@ -41,7 +75,7 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
       jwt: jwt!,
       orgId: overrides.orgId ?? process.env.WEBCAKE_ORG_ID ?? saved.orgId,
       host: overrides.host ?? process.env.WEBCAKE_HOST ?? saved.host,
-      appBase: (overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? saved.appBase)?.replace(/\/+$/, ""),
+      appBase: (overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase)?.replace(/\/+$/, ""),
     },
     missing: [],
   };
@@ -60,9 +94,10 @@ function header(headers: HeaderBag, name: string): string | undefined {
  * send its own credentials per request instead of a server-wide env token:
  *   x-webcake-jwt        the account JWT (or `Authorization: Bearer <jwt>`)
  *   x-webcake-org-id     organization id
- *   x-webcake-api-base   backend base URL (usually set once via env instead)
+ *   x-webcake-env        named environment (local|staging|prod) for the base URLs
+ *   x-webcake-api-base   backend base URL (overrides the env preset)
  *   x-webcake-host       Host header override
- *   x-webcake-app-base   editor/preview URL base
+ *   x-webcake-app-base   editor/preview URL base (overrides the env preset)
  * Any header that is absent falls back to the corresponding env var in readConfig.
  */
 export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
@@ -74,6 +109,7 @@ export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
     orgId: header(headers, "x-webcake-org-id"),
     host: header(headers, "x-webcake-host"),
     appBase: header(headers, "x-webcake-app-base"),
+    env: header(headers, "x-webcake-env"),
   };
 }
 

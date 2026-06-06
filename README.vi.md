@@ -147,23 +147,25 @@ npx -y github:vuluu2k/webcake-landing-mcp
 Lệnh con `install` đi kèm sẽ làm hộ bạn bước đó, không cần clone:
 
 ```bash
-# Tương tác — hỏi env + chọn IDE từng bước
+# Tương tác — chọn môi trường, đăng nhập qua trình duyệt (hoặc dán JWT), chọn IDE
 npx -y webcake-landing-mcp install
 
-# Không tương tác — cấu hình mọi IDE hỗ trợ cùng lúc
-npx -y webcake-landing-mcp install --ide all --jwt <your-jwt> --api-base http://localhost:5800
+# Không tương tác — cấu hình mọi IDE hỗ trợ cùng lúc (env + token qua cờ)
+npx -y webcake-landing-mcp install --ide all --env prod --jwt <your-jwt>
 
-# Chỉ một IDE
-npx -y webcake-landing-mcp install --ide cursor --jwt <your-jwt>
+# Local dev — trỏ vào stack local của bạn (localhost:5800 / :5173)
+npx -y webcake-landing-mcp install --ide cursor --env local --jwt <your-jwt>
 
 # Gỡ server khỏi mọi cấu hình IDE
 npx -y webcake-landing-mcp uninstall
 ```
 
 Nó ghi entry `webcake-landing` (dùng dạng khởi chạy `npx` bên dưới) vào đúng file cấu hình của từng IDE:
-`claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment` (VS Code), `codex`, hoặc `all`. Cờ:
-`--ide`, `--api-base`, `--jwt`, `--org-id`, `--host`, `--app-base`, `--npx`/`--local`, `-y`. Chạy
-`npx -y webcake-landing-mcp --help` để xem đầy đủ.
+`claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment` (VS Code), `codex`, hoặc `all`. Khi tương
+tác, nó hỏi **môi trường** (`local`/`staging`/`prod` — mặc định `prod`, dùng để đặt API + app URL) và cho
+chọn **đăng nhập qua trình duyệt hay dán JWT**. Cờ: `--ide`, `--env`, `--jwt`, `--org-id`,
+`--api-base`/`--app-base`/`--host` (ghi đè nâng cao), `--npx`/`--local`, `-y`. Chạy
+`npx -y webcake-landing-mcp install --help` để xem đầy đủ.
 
 ### Cấu hình thủ công
 
@@ -176,7 +178,7 @@ Cấu hình MCP giống bản local, chỉ khác `command`/`args` trỏ tới `n
       "command": "npx",
       "args": ["-y", "webcake-landing-mcp"],
       "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
+        "WEBCAKE_ENV": "prod",
         "WEBCAKE_JWT": "<your-jwt>"
       }
     }
@@ -344,7 +346,8 @@ SPA cũng được, khỏi cần route backend.)
 
 | Biến | Bắt buộc | Mô tả |
 |----------|----------|-------------|
-| `WEBCAKE_API_BASE` | Không* | Base URL backend, ví dụ `http://localhost:5800`. Cần để lưu trang. |
+| `WEBCAKE_ENV` | Không | Môi trường có tên: `local` \| `staging` \| `prod`. Điền sẵn `WEBCAKE_API_BASE` + `WEBCAKE_APP_BASE` từ preset (xem bảng bên dưới). Cũng đặt được qua cờ `--env <name>`. Biến tường minh sẽ thắng. |
+| `WEBCAKE_API_BASE` | Không* | Base URL backend, ví dụ `http://localhost:5800`. Cần để lưu trang (hoặc đặt `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | Không* | JWT tài khoản (auth dashboard). Cần để lưu trang — sẽ hết hạn, làm mới khi cần. |
 | `WEBCAKE_ORG_ID` | Không | Organization mặc định cho `create_page` (bị ghi đè bởi tham số `organization_id`). Bỏ trống → trang cá nhân. |
 | `WEBCAKE_HOST` | Không | Header `Host` tuỳ chọn (Phoenix route theo host, ví dụ `builder.localhost`). |
@@ -357,6 +360,28 @@ SPA cũng được, khỏi cần route backend.)
 
 > Lưu trang sẽ ghi một trang thật vào nơi `WEBCAKE_API_BASE` trỏ tới, dùng JWT làm tài khoản đó.
 > Hãy bắt đầu với local/staging.
+
+### Môi trường (`--env` / `WEBCAKE_ENV`)
+
+Thay vì đặt thủ công cả hai base URL, hãy chọn một môi trường có tên — một nguồn sự thật duy nhất
+cho API + app base (mặc định là `prod`):
+
+| `--env` / `WEBCAKE_ENV` | API base (`WEBCAKE_API_BASE`) | App base (`WEBCAKE_APP_BASE`) |
+|-------------------------|-------------------------------|-------------------------------|
+| `local` | `http://localhost:5800` | `http://localhost:5173` |
+| `staging` | `https://api.staging.webcake.io` | `https://staging.webcake.io` |
+| `prod` *(mặc định)* | `https://api.webcake.io` | `https://webcake.io` |
+
+```bash
+node dist/index.js serve --env staging        # server remote trỏ backend staging
+node dist/index.js login --env local          # đăng nhập vào SPA + API local
+WEBCAKE_ENV=prod node dist/index.js           # stdio, prod (dạng biến môi trường)
+```
+
+`WEBCAKE_API_BASE` / `WEBCAKE_APP_BASE` (hoặc `--api-base`) tường minh vẫn ghi đè preset theo từng
+trường. Trên server HTTP remote, client có thể ghi đè môi trường của server theo từng request bằng
+header **`x-webcake-env`** hoặc query **`?env=`** (ví dụ `…/mcp?jwt=<token>&env=staging`) — nên một
+server phục vụ được nhiều môi trường.
 
 ### Cách lấy `WEBCAKE_JWT`
 

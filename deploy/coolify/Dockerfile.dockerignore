@@ -1,0 +1,18 @@
+# Scoped ignore for deploy/coolify/Dockerfile.
+# BuildKit reads "<dockerfile-path>.dockerignore" before the context root's .dockerignore,
+# so this trims the build context WITHOUT adding a repo-root .dockerignore.
+# Patterns are relative to the build context (the repo root). The image rebuilds
+# node_modules and dist/ from source anyway, so neither is needed in the context.
+node_modules
+dist
+.git
+.github
+.omc
+.claude
+docs
+deploy
+*.log
+README*.md
+CHANGELOG.md
+install.sh
+install.ps1

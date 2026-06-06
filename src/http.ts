@@ -43,6 +43,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 // require HTTPS, and disable query-string logging on your reverse proxy.
 const QUERY_AUTH: Record<string, string> = {
   jwt: "x-webcake-jwt",
+  env: "x-webcake-env",
   api_base: "x-webcake-api-base",
   org_id: "x-webcake-org-id",
   host: "x-webcake-host",

@@ -1,0 +1,54 @@
+# Coolify deployment for the webcake-landing MCP server (REMOTE Streamable-HTTP mode).
+#
+# In Coolify:  + New  ->  Docker Compose  ->  pick this repo, then set
+#   Base Directory:          /
+#   Docker Compose Location:  /deploy/coolify/docker-compose.yml
+# Deploy once, then add a Domain to the `webcake-mcp` service (port 8787) in the
+# Coolify UI — Coolify generates the Traefik routing + TLS for that domain.
+#
+# Your MCP endpoint is then   https://<your-domain>/mcp
+# and a health probe lives at  https://<your-domain>/health
+# See ./README.md for the full walkthrough and how clients pass their Webcake JWT.
+
+services:
+  webcake-mcp:
+    build:
+      # Build context = repo root, so the Dockerfile can see src/, package.json, …
+      context: ../..
+      dockerfile: deploy/coolify/Dockerfile
+    # tini as PID 1: proper signal forwarding + zombie reaping for `node`.
+    init: true
+    restart: unless-stopped
+    environment:
+      # Port the server listens on (read by `serve`); keep in sync with `expose`.
+      PORT: 8787
+      # Target environment — picks the API + app base URLs by name (one source of truth):
+      #   local   → api http://localhost:5800           app http://localhost:5173
+      #   staging → api https://api.staging.webcake.io  app https://staging.webcake.io
+      #   prod    → api https://api.webcake.io           app https://webcake.io
+      # Clients can still override it per request via the `x-webcake-env` header / `?env=`.
+      WEBCAKE_ENV: prod
+      # ---- Optional overrides ---------------------------------------------------
+      # This server is MULTI-USER: each client sends its OWN Webcake JWT per request
+      # (header `x-webcake-jwt` / `Authorization: Bearer`, or `?jwt=` in the URL), so
+      # you normally do NOT set a token here. The explicit URLs below override WEBCAKE_ENV.
+      # Add values in Coolify's "Environment Variables" UI (never commit secrets),
+      # then uncomment the line(s) you need so they reach the container:
+      # WEBCAKE_API_BASE: ${WEBCAKE_API_BASE}
+      # WEBCAKE_APP_BASE: ${WEBCAKE_APP_BASE}
+      # WEBCAKE_HOST: ${WEBCAKE_HOST}
+      # WEBCAKE_ORG_ID: ${WEBCAKE_ORG_ID}
+      # WEBCAKE_JWT: ${WEBCAKE_JWT}   # SINGLE-TENANT only — a shared server secret
+    # Coolify's reverse proxy routes your Domain to this internal container port.
+    expose:
+      - "8787"
+    # For local `docker compose up` (or non-Coolify hosts) publish the port instead:
+    # ports:
+    #   - "8787:8787"
+    healthcheck:
+      # Node has global fetch (no curl/wget needed in the alpine image).
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

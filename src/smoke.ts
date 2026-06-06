@@ -11,6 +11,7 @@ import {
   ELEMENTS,
 } from "./domains/landing/elements/index.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
+import { readConfig, resolveEnv, ENV_NAMES } from "./persistence/config.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -230,6 +231,25 @@ const bindingsGood = {
 };
 const rbg = validatePage(bindingsGood);
 check("clean form has no binding warnings", rbg.warnings.length === 0, rbg.warnings);
+
+console.log("== config: named environment presets (local/staging/prod) ==");
+{
+  // Deterministic: isolate from any ambient WEBCAKE_* and the saved auth.json on the dev box.
+  for (const k of ["WEBCAKE_API_BASE", "WEBCAKE_APP_BASE", "WEBCAKE_ENV", "WEBCAKE_JWT", "WEBCAKE_ORG_ID", "WEBCAKE_HOST"]) delete process.env[k];
+  process.env.WEBCAKE_CONFIG_DIR = "/nonexistent/webcake-smoke";
+  check("env names are local/staging/prod", setEq(new Set<string>(ENV_NAMES), ["local", "staging", "prod"]), ENV_NAMES);
+  check(
+    "staging preset resolves to api+app bases",
+    resolveEnv("staging")?.apiBase === "https://api.staging.webcake.io" && resolveEnv("staging")?.appBase === "https://staging.webcake.io"
+  );
+  check("unknown env name → undefined", resolveEnv("bogus") === undefined);
+  const prod = readConfig({ env: "prod", jwt: "t" }).config;
+  check("readConfig(env=prod) fills api+app base", prod?.base === "https://api.webcake.io" && prod?.appBase === "https://webcake.io", prod);
+  const local = readConfig({ env: "local", jwt: "t" }).config;
+  check("readConfig(env=local) fills api+app base", local?.base === "http://localhost:5800" && local?.appBase === "http://localhost:5173", local);
+  check("explicit base overrides the preset", readConfig({ env: "prod", base: "http://x:1", jwt: "t" }).config?.base === "http://x:1");
+  check("unknown env leaves base missing", readConfig({ env: "bogus", jwt: "t" }).missing.includes("WEBCAKE_API_BASE"));
+}
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);
