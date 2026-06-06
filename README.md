@@ -1,4 +1,50 @@
-# WebCake Landing MCP Server
+# 🍰 WebCake Landing MCP
+
+**English** · [Tiếng Việt](./README.vi.md)
+
+> **Describe a landing page in plain words — your AI builds it, checks it, and ships it straight to WebCake.**
+
+> *"Build a landing page for my coffee shop — a hero with a sign-up button, a 3-feature section, and a lead form. Save it to my workspace."*
+
+…and a real, **editable** WebCake page appears in your account. No dragging boxes, no learning the schema, no hand-writing JSON.
+
+---
+
+## 🧩 How it works
+
+This server is the **bridge** between your AI assistant and WebCake. The AI never *guesses* what a WebCake
+page looks like — it asks this MCP, which knows the entire element model, validates the result, and saves it for you.
+
+```text
+   You              AI assistant            webcake-landing MCP            WebCake
+  ┌──────┐  prompt  ┌────────────┐  tools  ┌──────────────────────┐  API  ┌──────────┐
+  │ idea │ ───────► │  Claude /  │ ──────► │ • knows the element  │ ────► │  a real  │
+  │      │          │  Cursor /  │         │   model + AI hints   │       │ editable │
+  │      │ ◄─────── │  Windsurf  │ ◄────── │ • builds + validates │ ◄──── │  page in │
+  └──────┘ page URL └────────────┘ result  │ • saves to your acct │       │  WebCake │
+                                           └──────────────────────┘       └──────────┘
+```
+
+1. **You ask** in plain language — goal, brand, sections, CTA, form fields.
+2. **The AI learns the model** from the MCP: the element catalog, the absolute-positioning canvas, the event vocabulary — so it builds a *real* WebCake page, not a guess.
+3. **It assembles + validates** the full `{ page, popup, settings, options }` JSON. `validate_page` catches off-canvas boxes, dangling CTAs, and missing form fields **before** anything is saved.
+4. **It persists** to your WebCake account — dry-run preview first, then for real.
+5. **You get an editor link** — open it, tweak, publish. The AI did the heavy lifting.
+
+### Why it's reliable
+
+| | |
+|---|---|
+| 📚 **Knows the real model** | Serves WebCake's actual element catalog (40+ types — hero, form, countdown, gallery, product list…), each with its exact `specials` and AI hints, drawn straight from the editor's renderers. |
+| ✅ **Validates before saving** | Structural + semantic checks (unique ids, on-canvas layout, working CTAs, unique form fields) so the page isn't broken when it lands. |
+| 🛡️ **Safe by default** | Every write is **dry-run first** (preview the request, token masked) — nothing touches your account until you confirm. |
+| ✏️ **Edits surgically** | Ask for one change ("make the CTA green") and it edits *only* that element — every other id, coordinate, and block stays exactly as it was. |
+
+> 💡 **Lead-gen, events, invitations, app promos** — or **selling COD/online**? It speaks WebCake's commerce model too (product lists, variations, cart).
+
+---
+
+## Under the hood
 
 MCP (Model Context Protocol) server that teaches AI agents how to build a complete
 **WebCake landing-page source JSON** from a requirement — and persist it to a WebCake backend.
