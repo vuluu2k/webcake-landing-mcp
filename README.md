@@ -54,15 +54,18 @@ valid element/page skeletons, a page validator, and tools to create or edit page
 The AI agent produces the full `{ page, popup, settings, options, cartConfigs }` JSON; `create_page`
 persists it (source-only — the page opens in the editor where re-saving renders it).
 
-## Two ways to run
+## Setup methods (pick one)
 
-| Mode | Command | When |
-|------|---------|------|
-| **CDN / npx** (no clone) | `npx -y webcake-landing-mcp` | Fastest start — npm fetches & runs it, no clone or build. Auto-updates to the latest published version. |
-| **Local** (cloned build) | `node /abs/path/dist/index.js` | Hacking on the server, offline, or pinning a specific build. Run `npm run build` first. |
+| # | Method | Best for | Auth | Jump to |
+|---|--------|----------|------|---------|
+| 1 | **Local stdio** — add to an IDE (Claude Desktop / Cursor / …) via `npx` or a built file | Daily use on your machine | env `WEBCAKE_JWT`, or `login`, or none (reference tools) | [IDE config](#configuration-by-ide--ai-tool) |
+| 2 | **`login`** — grab the token through the browser (no copy-paste) | Avoiding a manual token paste (stdio / single-user remote) | browser session → saved `auth.json` | [Connect once](#connect-once--grab-your-token-automatically-login) |
+| 3 | **Remote HTTP (`serve`)** — run as an HTTP server, test with MCP Inspector / `mcp-remote` / curl | Trying the remote transport locally | per-request `x-webcake-jwt` header, or env | [Remote](#run-as-a-remote-connector-streamable-http) |
+| 4 | **VPS + claude.ai connector** — deploy public HTTPS, add as a custom connector | Sharing one hosted server | single-account (env token); per-user needs OAuth (not implemented) | [Deploy on a VPS](#deploy-on-a-vps) |
 
-Both expose the exact same tools. Every IDE config below shows the **local** form; to use **CDN** mode,
-just swap `command`/`args` for the npx form (see [Run without cloning](#run-without-cloning-npx)).
+Two **run forms** apply to any method: **`npx -y webcake-landing-mcp …`** (no clone, auto-updates) or **`node /abs/path/dist/index.js …`** (a cloned build — run `npm run build` first). The IDE configs below show the local form; swap `command`/`args` for the npx form to use CDN mode.
+
+The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
 
 ## Quick Install (Recommended)
 
@@ -222,9 +225,52 @@ by setting `WEBCAKE_API_BASE` + `WEBCAKE_JWT` in the host's env and keeping the 
 > no secret; only the persistence tools (`create_page`, `update_page`, …) use the JWT. If a request has no
 > JWT, those tools return `missing_env` instead of touching the network.
 >
-> Note: the basic claude.ai connector dialog may not let you set custom headers (it offers OAuth, which this
-> server does not implement yet). For the header-based flow, use a client/proxy that can inject headers, or
-> run single-user with env vars behind a private URL.
+> Note: the basic claude.ai connector dialog has **no field for custom headers** (it only offers OAuth, which
+> this server does not implement yet). So through that dialog you get **single-account** auth (a token in the
+> server's env); for **per-user** auth use a header-capable client (`mcp-remote --header …`, below) or add OAuth.
+
+### Test it locally (no public URL needed)
+
+`localhost` can't be used in the claude.ai dialog (Anthropic fetches the URL from its own servers). To try the
+running `serve` server on your machine:
+
+- **MCP Inspector** (GUI — easiest): `npx @modelcontextprotocol/inspector` → Transport **Streamable HTTP** →
+  URL `http://localhost:8787/mcp` → under Headers add `x-webcake-jwt` (+ `x-webcake-api-base`) → Connect → call tools.
+- **`mcp-remote`** (use the remote server from a stdio client like Claude Desktop, with headers):
+  ```json
+  { "mcpServers": { "webcake-remote": { "command": "npx",
+    "args": ["-y", "mcp-remote", "http://localhost:8787/mcp",
+             "--header", "x-webcake-jwt:<ljwt>",
+             "--header", "x-webcake-api-base:https://api.webcake.io"] } } }
+  ```
+- **curl**: `initialize` (read the `mcp-session-id` response header) → `tools/list` → `tools/call`, all with
+  `Accept: application/json, text/event-stream`.
+
+### Deploy on a VPS
+
+1. **Build + run as a service** — `/etc/systemd/system/webcake-mcp.service`:
+   ```ini
+   [Service]
+   WorkingDirectory=/opt/webcake-landing-mcp
+   ExecStart=/usr/bin/node dist/index.js serve --port 8787
+   Environment=WEBCAKE_API_BASE=https://api.webcake.io
+   Environment=WEBCAKE_JWT=<ljwt>          # single-account only — see auth note below
+   Restart=always
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   `sudo systemctl enable --now webcake-mcp` (build once: `npm install && npm run build`).
+2. **HTTPS + domain** (claude.ai requires https) — e.g. Caddy auto-TLS, `/etc/caddy/Caddyfile`:
+   ```
+   mcp.yourdomain.com { reverse_proxy localhost:8787 }
+   ```
+3. **Add to claude.ai** → Remote MCP server URL = `https://mcp.yourdomain.com/mcp`.
+
+**Auth on a shared server:**
+- **Single-account** (works with the dialog today): `WEBCAKE_JWT` in the service env → everyone using the
+  connector shares that one Webcake account. Keep the URL private / gated; the token expires (~90 days).
+- **Per-user** (each person their own account): needs **OAuth** (not implemented). Until then, per-user works
+  only via a header-capable client (`mcp-remote` with `--header x-webcake-jwt:…`), not the claude.ai dialog.
 
 ## Manual Setup (local)
 
@@ -257,9 +303,9 @@ It opens your browser → (log into Webcake if needed) → the token is saved to
 `~/.webcake-landing-mcp/auth.json`, which the server then reads automatically.
 
 You're already logged in to Webcake in your browser, so `login` just opens a Webcake "connect"
-page that reads your `jwt` cookie server-side and hands the token back to a localhost callback —
+page that reads your **`ljwt`** (landing) cookie and hands the token back to a localhost callback —
 no copy-paste. The saved token is used by **both** the stdio server and a single-user `serve`
-deployment (env vars still take precedence). JWTs last 90–365 days, so you rarely reconnect.
+deployment (env vars still take precedence). The landing JWT lasts ~90 days, so you rarely reconnect.
 
 Two URLs, don't mix them up:
 
@@ -276,12 +322,14 @@ Other flags: `--org-id`, `--port`, `--no-open`. Saved-file dir: `WEBCAKE_CONFIG_
 
 ```
 GET /mcp-connect?redirect_uri=<loopback>&state=<s>
-   → read the `jwt` cookie (the logged-in user's token)
-   → 302 to  <redirect_uri>?token=<jwt>&state=<s>
+   → read the `ljwt` cookie (the logged-in user's landing token)
+   → 302 to  <redirect_uri>?token=<ljwt>&state=<s>
    (if there's no cookie: 302 to the login page first, then back here)
 ```
 
 For safety, only honor `redirect_uri` values on `http://127.0.0.1:*` / `http://localhost:*`.
+(Reference implementation: `builderx_spa/src/views/McpConnect.vue` reads `cookies.get('ljwt')` — so this
+flow can also be done entirely in the SPA, no backend route needed.)
 
 > Multi-user remote (the claude.ai connector dialog) can't do this browser loopback — there each
 > user sends their own token via the `x-webcake-jwt` header (see the remote-connector section above).

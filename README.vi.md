@@ -55,15 +55,18 @@ element/trang hợp lệ, bộ kiểm tra trang, và các tool để tạo/sửa
 `{ page, popup, settings, options, cartConfigs }`; `create_page` lưu nó (chỉ-source — trang mở trong editor,
 lưu lại sẽ render).
 
-## Hai cách chạy
+## Các cách setup (chọn một)
 
-| Chế độ | Lệnh | Khi nào |
-|------|------|------|
-| **CDN / npx** (không clone) | `npx -y webcake-landing-mcp` | Khởi động nhanh nhất — npm tự tải & chạy, không cần clone hay build. Tự cập nhật bản mới nhất. |
-| **Local** (clone & build) | `node /abs/path/dist/index.js` | Khi đang sửa server, offline, hoặc cần ghim một bản build cụ thể. Chạy `npm run build` trước. |
+| # | Cách | Hợp cho | Auth | Xem |
+|---|------|---------|------|-----|
+| 1 | **Local stdio** — gắn vào IDE (Claude Desktop / Cursor / …) qua `npx` hoặc file build | Dùng hằng ngày trên máy | env `WEBCAKE_JWT`, hoặc `login`, hoặc không cần (tool tham chiếu) | [Cấu hình IDE](#cấu-hình-theo-ide--công-cụ-ai) |
+| 2 | **`login`** — tự lấy token qua browser (khỏi copy-paste) | Khỏi dán token tay (stdio / remote 1 người) | session browser → file `auth.json` | [Kết nối một lần](#kết-nối-một-lần--tự-lấy-token-login) |
+| 3 | **Remote HTTP (`serve`)** — chạy như HTTP server, test bằng MCP Inspector / `mcp-remote` / curl | Thử transport remote ở local | header `x-webcake-jwt` mỗi request, hoặc env | [Remote](#chạy-như-remote-connector-streamable-http) |
+| 4 | **VPS + claude.ai connector** — deploy HTTPS public, thêm làm custom connector | Chia sẻ 1 server hosted | single-account (token env); per-user cần OAuth (chưa có) | [Deploy lên VPS](#deploy-lên-vps) |
 
-Cả hai cùng expose y hệt các tool. Mọi cấu hình IDE bên dưới dùng dạng **local**; để dùng **CDN**, chỉ cần
-đổi `command`/`args` sang dạng npx (xem [Chạy không cần clone (npx)](#chạy-không-cần-clone-npx)).
+Hai **dạng chạy** áp dụng cho mọi cách: **`npx -y webcake-landing-mcp …`** (không clone, tự cập nhật) hoặc **`node /abs/path/dist/index.js …`** (bản đã clone & build — chạy `npm run build` trước). Cấu hình IDE bên dưới dùng dạng local; đổi `command`/`args` sang dạng npx để dùng CDN.
+
+Các **tool tham chiếu + generation** (`get_generation_guide`, `list_elements`, `validate_page`, …) chạy **zero config**; chỉ **tool lưu trữ** (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`) mới cần token. Token ưu tiên theo thứ tự: **header mỗi request → biến env → file `auth.json`** (`login`).
 
 ## Cài nhanh (Khuyến nghị)
 
@@ -184,6 +187,90 @@ Cấu hình MCP giống bản local, chỉ khác `command`/`args` trỏ tới `n
 > npx cache lại package sau lần chạy đầu, nên các lần sau khởi động nhanh. Dùng phiên bản ghim
 > (`webcake-landing-mcp@1.0.0`) nếu cần build tái lập được.
 
+## Chạy như remote connector (Streamable HTTP)
+
+Server còn nói được transport **remote MCP** (Streamable HTTP), nên có thể thêm qua dialog
+**"Add custom connector"** của Claude bằng một URL — không chỉ stdio local.
+
+Chạy chế độ HTTP (port mặc định `8787`, hoặc đặt `PORT` / `--port`):
+
+```bash
+npx -y webcake-landing-mcp serve --port 8787
+# → endpoint MCP tại http://localhost:8787/mcp   (GET / hoặc /health trả JSON trạng thái)
+```
+
+Đưa ra **HTTPS** ở URL public (reverse proxy, tunnel như `ngrok http 8787`, hoặc host bất kỳ), rồi vào
+Claude → **Add custom connector**:
+
+- **Name**: `webcake-landing`
+- **Remote MCP server URL**: `https://<host-của-bạn>/mcp`
+
+### Auth — mỗi request, đa người dùng (không token chung)
+
+Ở stdio JWT lấy từ env. Ở chế độ HTTP, mỗi request mang credential **riêng** của người gọi qua header,
+nên server hosted là đa người dùng và không nhúng secret chung:
+
+| Header | Tương ứng | Ghi chú |
+|--------|-----------|---------|
+| `x-webcake-jwt` (hoặc `Authorization: Bearer <jwt>`) | `WEBCAKE_JWT` | token tài khoản — gửi mỗi request |
+| `x-webcake-org-id` | `WEBCAKE_ORG_ID` | org mặc định |
+| `x-webcake-api-base` | `WEBCAKE_API_BASE` | thường set 1 lần qua env trên host |
+| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | base URL editor/preview |
+
+Header nào thiếu thì fallback về biến env tương ứng — nên cũng chạy **một người dùng** được bằng cách đặt
+`WEBCAKE_API_BASE` + `WEBCAKE_JWT` trong env của host và giữ URL riêng tư.
+
+> ⚠️ Tool tham chiếu + generation (`get_generation_guide`, `list_elements`, `validate_page`, …) không cần
+> secret; chỉ tool lưu trữ (`create_page`, `update_page`, …) dùng JWT. Request không có JWT thì các tool đó
+> trả `missing_env` chứ không gọi mạng.
+>
+> Lưu ý: dialog claude.ai **không có ô nhập header** (chỉ có OAuth, mà server này **chưa làm**). Nên qua dialog
+> đó bạn được auth **single-account** (token ở env server); muốn **per-user** dùng client hỗ trợ header
+> (`mcp-remote --header …`, bên dưới) hoặc thêm OAuth.
+
+### Test ở local (không cần URL public)
+
+`localhost` không dùng được trong dialog claude.ai (Anthropic gọi URL từ server của họ). Để thử server `serve`
+chạy trên máy:
+
+- **MCP Inspector** (GUI — dễ nhất): `npx @modelcontextprotocol/inspector` → Transport **Streamable HTTP** →
+  URL `http://localhost:8787/mcp` → mục Headers thêm `x-webcake-jwt` (+ `x-webcake-api-base`) → Connect → bấm gọi tool.
+- **`mcp-remote`** (dùng server remote từ client stdio như Claude Desktop, kèm header):
+  ```json
+  { "mcpServers": { "webcake-remote": { "command": "npx",
+    "args": ["-y", "mcp-remote", "http://localhost:8787/mcp",
+             "--header", "x-webcake-jwt:<ljwt>",
+             "--header", "x-webcake-api-base:https://api.webcake.io"] } } }
+  ```
+- **curl**: `initialize` (đọc header `mcp-session-id` trả về) → `tools/list` → `tools/call`, tất cả kèm
+  `Accept: application/json, text/event-stream`.
+
+### Deploy lên VPS
+
+1. **Build + chạy như service** — `/etc/systemd/system/webcake-mcp.service`:
+   ```ini
+   [Service]
+   WorkingDirectory=/opt/webcake-landing-mcp
+   ExecStart=/usr/bin/node dist/index.js serve --port 8787
+   Environment=WEBCAKE_API_BASE=https://api.webcake.io
+   Environment=WEBCAKE_JWT=<ljwt>          # chỉ cho single-account — xem ghi chú auth dưới
+   Restart=always
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   `sudo systemctl enable --now webcake-mcp` (build 1 lần: `npm install && npm run build`).
+2. **HTTPS + domain** (claude.ai bắt buộc https) — vd Caddy tự cấp TLS, `/etc/caddy/Caddyfile`:
+   ```
+   mcp.yourdomain.com { reverse_proxy localhost:8787 }
+   ```
+3. **Thêm vào claude.ai** → Remote MCP server URL = `https://mcp.yourdomain.com/mcp`.
+
+**Auth trên server chia sẻ:**
+- **Single-account** (dùng được với dialog ngay): đặt `WEBCAKE_JWT` ở env service → mọi người dùng connector
+  chung 1 tài khoản Webcake. Giữ URL riêng tư / có cổng chặn; token hết hạn (~90 ngày).
+- **Per-user** (mỗi người 1 account): cần **OAuth** (chưa làm). Trước mắt per-user chỉ chạy qua client hỗ trợ
+  header (`mcp-remote` với `--header x-webcake-jwt:…`), không qua dialog claude.ai.
+
 ## Cài thủ công (local)
 
 ```bash
@@ -197,6 +284,55 @@ npm run smoke      # self-test offline của factory + validator (in "ALL GOOD")
 Các tool tham chiếu/kiểm tra chạy với **zero config**. Biến môi trường chỉ cần cho các tool lưu trữ
 (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`).
 
+## Kết nối một lần — tự lấy token (`login`)
+
+Thay vì copy JWT bằng tay, chạy:
+
+```bash
+# Production — zero config (mặc định: connect qua webcake.io, API qua api.webcake.io):
+npx -y webcake-landing-mcp login
+
+# Local dev — trỏ vào SPA (5173) + API (5800) ở máy:
+node dist/index.js login \
+  --connect-url http://localhost:5173/mcp-connect \
+  --api-base http://localhost:5800
+```
+
+Nó mở browser → (đăng nhập Webcake nếu cần) → token được lưu vào
+`~/.webcake-landing-mcp/auth.json`, server tự đọc.
+
+Bạn đang đăng nhập Webcake sẵn trong browser, nên `login` chỉ mở trang "connect" của Webcake — trang này
+đọc cookie **`ljwt`** (landing) và trả token về một callback loopback nội bộ — khỏi copy-paste. Token đã lưu
+được dùng bởi **cả** server stdio lẫn deploy `serve` một-người-dùng (env vẫn ưu tiên). Landing JWT sống ~90
+ngày nên hiếm khi phải kết nối lại.
+
+Hai URL, đừng nhầm:
+
+- **Trang connect = SPA** (`--connect-url` / `WEBCAKE_CONNECT_URL`): `https://webcake.io/mcp-connect` ở prod,
+  `http://localhost:5173/mcp-connect` ở local. Nếu không, suy ra từ `WEBCAKE_APP_BASE` + `/mcp-connect`,
+  mặc định `https://webcake.io/mcp-connect`.
+- **API base = backend** (`--api-base` / `WEBCAKE_API_BASE`): `https://api.webcake.io` ở prod,
+  `http://localhost:5800` ở local. Mặc định `https://api.webcake.io`.
+
+Cờ khác: `--org-id`, `--port`, `--no-open`. Thư mục file lưu: `WEBCAKE_CONFIG_DIR` (mặc định
+`~/.webcake-landing-mcp`).
+
+**Endpoint cần thêm ở backend** (trong Webcake backend — nơi giữ cookie session):
+
+```
+GET /mcp-connect?redirect_uri=<loopback>&state=<s>
+   → đọc cookie `ljwt` (landing token của user đang đăng nhập)
+   → 302 tới  <redirect_uri>?token=<ljwt>&state=<s>
+   (nếu chưa có cookie: 302 sang trang login trước, xong quay lại đây)
+```
+
+Để an toàn, chỉ chấp nhận `redirect_uri` ở `http://127.0.0.1:*` / `http://localhost:*`.
+(Mẫu tham khảo: `builderx_spa/src/views/McpConnect.vue` đọc `cookies.get('ljwt')` — nên flow này làm hẳn ở
+SPA cũng được, khỏi cần route backend.)
+
+> Remote đa người dùng (dialog claude.ai) không làm được browser loopback này — ở đó mỗi user gửi token riêng
+> qua header `x-webcake-jwt` (xem mục remote-connector ở trên).
+
 ## Biến môi trường
 
 | Biến | Bắt buộc | Mô tả |
@@ -206,6 +342,8 @@ Các tool tham chiếu/kiểm tra chạy với **zero config**. Biến môi trư
 | `WEBCAKE_ORG_ID` | Không | Organization mặc định cho `create_page` (bị ghi đè bởi tham số `organization_id`). Bỏ trống → trang cá nhân. |
 | `WEBCAKE_HOST` | Không | Header `Host` tuỳ chọn (Phoenix route theo host, ví dụ `builder.localhost`). |
 | `WEBCAKE_APP_BASE` | Không | Base tuỳ chọn để dựng URL editor/preview trong kết quả. |
+| `WEBCAKE_CONNECT_URL` | Không | Trang "connect" (SPA) cho `login` (mặc định `https://webcake.io/mcp-connect`; nếu không thì `WEBCAKE_APP_BASE` + `/mcp-connect`). |
+| `WEBCAKE_CONFIG_DIR` | Không | Thư mục chứa `auth.json` do `login` ghi (mặc định `~/.webcake-landing-mcp`). |
 
 > \* `WEBCAKE_API_BASE` và `WEBCAKE_JWT` chỉ cần cho các tool lưu trữ. Các tool tham chiếu và kiểm tra
 > (`get_generation_guide`, `list_elements`, `get_element`, `validate_page`, …) chạy không cần chúng.
