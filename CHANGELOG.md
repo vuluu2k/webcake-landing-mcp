@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.12] - 2026-06-06
+
+### Added
+- New `help` subcommand (`webcake-landing-mcp help`) prints a top-level usage summary covering all subcommands (`install`, `uninstall`, `login`, `serve`), the `--env` global option, and a link to the GitHub repository.
+
+### Changed
+- `--help` and `-h` flags now print the new top-level help instead of delegating to the installer's own `--help` output; install-specific flags are still accessible via `webcake-landing-mcp install --help`.
+
 ## [1.0.11] - 2026-06-06
 
 ### Removed
