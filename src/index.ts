@@ -4,6 +4,8 @@
  *
  * Thin dispatcher:
  *   - `webcake-landing-mcp install|uninstall|--help` → bundled IDE installer
+ *   - `webcake-landing-mcp login` → grab the Webcake JWT via the browser and save it
+ *     (~/.webcake-landing-mcp/auth.json); see ./auth/login.ts
  *   - `webcake-landing-mcp serve [--port N]` (or PORT env) → remote Streamable-HTTP
  *     server (for Claude "custom connector" via a public URL); see ./http.ts
  *   - no subcommand → stdio MCP server (the default; for desktop/CLI configs)
@@ -30,6 +32,12 @@ async function main() {
           ? ["--help"]
           : process.argv.slice(3);
     await runInstaller(rest);
+    return;
+  }
+
+  if (sub === "login") {
+    const { runLogin } = await import("./auth/login.js");
+    await runLogin(process.argv.slice(3));
     return;
   }
 

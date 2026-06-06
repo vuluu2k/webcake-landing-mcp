@@ -239,6 +239,53 @@ npm run smoke      # offline self-test of factory + validator (prints "ALL GOOD"
 The reference/validation tools work with **zero config**. Env vars are only needed for the persistence
 tools (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`).
 
+## Connect once — grab your token automatically (`login`)
+
+Instead of copying a JWT by hand, run:
+
+```bash
+# Production — zero config (defaults: connect via webcake.io, API via api.webcake.io):
+npx -y webcake-landing-mcp login
+
+# Local dev — point at your local SPA (5173) + API (5800):
+node dist/index.js login \
+  --connect-url http://localhost:5173/mcp-connect \
+  --api-base http://localhost:5800
+```
+
+It opens your browser → (log into Webcake if needed) → the token is saved to
+`~/.webcake-landing-mcp/auth.json`, which the server then reads automatically.
+
+You're already logged in to Webcake in your browser, so `login` just opens a Webcake "connect"
+page that reads your `jwt` cookie server-side and hands the token back to a localhost callback —
+no copy-paste. The saved token is used by **both** the stdio server and a single-user `serve`
+deployment (env vars still take precedence). JWTs last 90–365 days, so you rarely reconnect.
+
+Two URLs, don't mix them up:
+
+- **Connect page = the SPA** (`--connect-url` / `WEBCAKE_CONNECT_URL`): `https://webcake.io/mcp-connect`
+  in prod, `http://localhost:5173/mcp-connect` locally. Otherwise derived from `WEBCAKE_APP_BASE` +
+  `/mcp-connect`, defaulting to `https://webcake.io/mcp-connect`.
+- **API base = the backend** (`--api-base` / `WEBCAKE_API_BASE`): `https://api.webcake.io` in prod,
+  `http://localhost:5800` locally. Defaults to `https://api.webcake.io`.
+
+Other flags: `--org-id`, `--port`, `--no-open`. Saved-file dir: `WEBCAKE_CONFIG_DIR` (default
+`~/.webcake-landing-mcp`).
+
+**Backend endpoint to add** (in your Webcake backend — it owns the session cookie):
+
+```
+GET /mcp-connect?redirect_uri=<loopback>&state=<s>
+   → read the `jwt` cookie (the logged-in user's token)
+   → 302 to  <redirect_uri>?token=<jwt>&state=<s>
+   (if there's no cookie: 302 to the login page first, then back here)
+```
+
+For safety, only honor `redirect_uri` values on `http://127.0.0.1:*` / `http://localhost:*`.
+
+> Multi-user remote (the claude.ai connector dialog) can't do this browser loopback — there each
+> user sends their own token via the `x-webcake-jwt` header (see the remote-connector section above).
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -248,6 +295,8 @@ tools (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizatio
 | `WEBCAKE_ORG_ID` | No | Default organization id for `create_page` (overridden by its `organization_id` arg). Omit → personal page. |
 | `WEBCAKE_HOST` | No | Optional `Host` header (Phoenix routes by host, e.g. `builder.localhost`). |
 | `WEBCAKE_APP_BASE` | No | Optional base used to build editor/preview URLs in the result. |
+| `WEBCAKE_CONNECT_URL` | No | The SPA "connect" page for `login` (default `https://webcake.io/mcp-connect`; else `WEBCAKE_APP_BASE` + `/mcp-connect`). |
+| `WEBCAKE_CONFIG_DIR` | No | Dir for the saved `auth.json` written by `login` (default `~/.webcake-landing-mcp`). |
 
 > \* `WEBCAKE_API_BASE` and `WEBCAKE_JWT` are only needed for the persistence tools. The reference and
 > validation tools (`get_generation_guide`, `list_elements`, `get_element`, `validate_page`, …) work without them.
