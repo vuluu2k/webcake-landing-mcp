@@ -4,12 +4,16 @@
  * default to dry_run=true and return a JWT-redacted request preview; they only
  * hit the network when dry_run===false. Validation uses the injected Domain;
  * the HTTP calls go through the Webcake client.
+ *
+ * Credentials resolve per request: in remote/Streamable-HTTP mode each call's
+ * headers (extra.requestInfo.headers) carry the client's own Webcake JWT, so a
+ * hosted server is multi-user; in stdio/single-user mode they come from env.
  */
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
 import { text } from "../mcp/response.js";
-import { readConfig } from "../persistence/config.js";
+import { readConfig, configFromHeaders } from "../persistence/config.js";
 import {
   buildRequestRedacted,
   buildUpdateRequestRedacted,
@@ -21,19 +25,22 @@ import {
 } from "../persistence/webcake-client.js";
 
 export function registerPersistenceTools(server: McpServer, domain: Domain) {
+  // Resolve config from THIS request's headers (remote per-user JWT) first, then env.
+  const cfgFor = (extra: any) => readConfig(configFromHeaders(extra?.requestInfo?.headers));
+
   // 8) List organizations -----------------------------------------------------
   server.tool(
     "list_organizations",
     "List the account's Webcake organizations (id, name, is_default). The default org (type===1, usually the personal workspace) is where pages normally go. Call this BEFORE create_page, show the options to the user and ask which org to use — defaulting to the is_default one. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {},
-    async () => {
-      const { config, missing } = readConfig();
+    async (_args, extra) => {
+      const { config, missing } = cfgFor(extra);
       if (!config) {
         return text({
           ok: false,
           reason: "missing_env",
           missing_env: missing,
-          hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT in the MCP server env.",
+          hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT in the MCP server env (stdio), or send the JWT via the x-webcake-jwt header (remote).",
         });
       }
       return text(await listOrganizations(config));
@@ -58,7 +65,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .optional()
         .describe("Default TRUE — preview the request without sending. Set false to actually create."),
     },
-    async ({ source, name, organization_id, dry_run }) => {
+    async ({ source, name, organization_id, dry_run }, extra) => {
       const pageName = name ?? "AI Page";
       const isDry = dry_run !== false; // default true (safe)
       const orgId = organization_id != null ? `${organization_id}` : undefined;
@@ -74,7 +81,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
       const parsed = domain.coerce(source);
-      const { config, missing } = readConfig();
+      const { config, missing } = cfgFor(extra);
 
       if (isDry) {
         return text({
@@ -87,7 +94,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             ? buildRequestRedacted(config, pageName, parsed, orgId)
             : {
                 note:
-                  "Set WEBCAKE_API_BASE + WEBCAKE_JWT to enable real creation. Would POST to {WEBCAKE_API_BASE}/api/v1/ai/create_page_from_source.",
+                  "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable real creation. Would POST to {WEBCAKE_API_BASE}/api/v1/ai/create_page_from_source.",
               },
           hint: "Re-run with dry_run=false to actually create the page.",
         });
@@ -98,7 +105,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           created: false,
           reason: "missing_env",
           missing_env: missing,
-          hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT in the MCP server env, then retry.",
+          hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT (env), or send the x-webcake-jwt header (remote), then retry.",
         });
       }
 
@@ -112,8 +119,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     "list_pages",
     "List the pages owned by the account (id, name, organization_id, updated_at), most-recent first. Use it to let the user pick a page to edit (then get_page → modify → update_page). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {},
-    async () => {
-      const { config, missing } = readConfig();
+    async (_args, extra) => {
+      const { config, missing } = cfgFor(extra);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
       return text(await listPages(config));
     }
@@ -124,8 +131,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     "get_page",
     "Fetch an existing page's decoded source tree { page, popup, settings, options, cartConfigs } so you can EDIT it. Returns name + organization_id too. Edit the returned `source`, then validate_page and update_page. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     { page_id: z.string().describe("The page id (from list_pages or a URL).") },
-    async ({ page_id }) => {
-      const { config, missing } = readConfig();
+    async ({ page_id }, extra) => {
+      const { config, missing } = cfgFor(extra);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
       return text(await getPageSource(config, page_id));
     }
@@ -142,7 +149,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .describe("The full edited page source { page, popup, settings, options, cartConfigs } (object or JSON string)."),
       dry_run: z.boolean().optional().describe("Default TRUE — preview without sending. Set false to actually save."),
     },
-    async ({ page_id, source, dry_run }) => {
+    async ({ page_id, source, dry_run }, extra) => {
       const isDry = dry_run !== false;
       const result = domain.validate(source);
       if (!result.valid) {
@@ -155,7 +162,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
       const parsed = domain.coerce(source);
-      const { config, missing } = readConfig();
+      const { config, missing } = cfgFor(extra);
 
       if (isDry) {
         return text({
@@ -166,7 +173,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           missing_env: missing,
           request: config
             ? buildUpdateRequestRedacted(config, page_id, parsed)
-            : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT to enable real updates." },
+            : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable real updates." },
           hint: "Re-run with dry_run=false to actually save the edit.",
         });
       }

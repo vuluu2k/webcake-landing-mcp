@@ -2,11 +2,14 @@
 /**
  * Webcake landing MCP server (stdio) — entry point.
  *
- * Thin dispatcher: `webcake-landing-mcp install|uninstall|--help` runs the
- * bundled IDE installer; otherwise it starts the stdio MCP server. The server
- * itself (McpServer + tool registration) is built in ./server.ts; the knowledge,
- * factory, validator, and HTTP client live under ./core, ./domains, ./tools, and
- * ./persistence.
+ * Thin dispatcher:
+ *   - `webcake-landing-mcp install|uninstall|--help` → bundled IDE installer
+ *   - `webcake-landing-mcp serve [--port N]` (or PORT env) → remote Streamable-HTTP
+ *     server (for Claude "custom connector" via a public URL); see ./http.ts
+ *   - no subcommand → stdio MCP server (the default; for desktop/CLI configs)
+ * The server itself (McpServer + tool registration) is built in ./server.ts; the
+ * knowledge, factory, validator, and HTTP client live under ./core, ./domains,
+ * ./tools, and ./persistence.
  *
  * stdout is the MCP channel — all logging goes to stderr (console.error) only.
  */
@@ -27,6 +30,15 @@ async function main() {
           ? ["--help"]
           : process.argv.slice(3);
     await runInstaller(rest);
+    return;
+  }
+
+  if (sub === "serve" || sub === "http" || sub === "serve-http") {
+    const { startHttpServer } = await import("./http.js");
+    const flagIdx = process.argv.indexOf("--port");
+    const raw = (flagIdx !== -1 ? process.argv[flagIdx + 1] : undefined) ?? process.env.PORT;
+    const port = Number(raw);
+    await startHttpServer(Number.isFinite(port) && port > 0 ? port : 8787);
     return;
   }
 

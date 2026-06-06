@@ -184,6 +184,48 @@ The MCP config is the same as the local one, but `command`/`args` point at `npx`
 > npx caches the package after the first run, so subsequent launches are fast. Use a pinned version
 > (`webcake-landing-mcp@1.0.0`) if you need a reproducible build.
 
+## Run as a remote connector (Streamable HTTP)
+
+The server also speaks the **remote MCP** (Streamable HTTP) transport, so it can be added through
+Claude's **"Add custom connector"** dialog via a URL — not just as a local stdio server.
+
+Start it in HTTP mode (default port `8787`, or set `PORT` / `--port`):
+
+```bash
+npx -y webcake-landing-mcp serve --port 8787
+# → MCP endpoint at http://localhost:8787/mcp   (GET / or /health returns a status JSON)
+```
+
+Expose it over **HTTPS** at a public URL (a reverse proxy, a tunnel like `ngrok http 8787`, or any
+host), then in Claude → **Add custom connector**:
+
+- **Name**: `webcake-landing`
+- **Remote MCP server URL**: `https://<your-host>/mcp`
+
+### Auth — per-request, multi-user (no shared token)
+
+In stdio mode the JWT comes from env. In HTTP mode each request carries the caller's **own** credentials
+via headers, so a hosted server is multi-user and never bakes in a shared secret:
+
+| Header | Maps to | Notes |
+|--------|---------|-------|
+| `x-webcake-jwt` (or `Authorization: Bearer <jwt>`) | `WEBCAKE_JWT` | the account token — sent per request |
+| `x-webcake-org-id` | `WEBCAKE_ORG_ID` | default org |
+| `x-webcake-api-base` | `WEBCAKE_API_BASE` | usually set once via env on the host instead |
+| `x-webcake-host` | `WEBCAKE_HOST` | Phoenix host-routing header |
+| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | editor/preview URL base |
+
+Any header that is absent falls back to the corresponding env var — so you can also run it **single-user**
+by setting `WEBCAKE_API_BASE` + `WEBCAKE_JWT` in the host's env and keeping the URL private.
+
+> ⚠️ The reference + generation tools (`get_generation_guide`, `list_elements`, `validate_page`, …) need
+> no secret; only the persistence tools (`create_page`, `update_page`, …) use the JWT. If a request has no
+> JWT, those tools return `missing_env` instead of touching the network.
+>
+> Note: the basic claude.ai connector dialog may not let you set custom headers (it offers OAuth, which this
+> server does not implement yet). For the header-based flow, use a client/proxy that can inject headers, or
+> run single-user with env vars behind a private URL.
+
 ## Manual Setup (local)
 
 ```bash

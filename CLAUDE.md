@@ -19,6 +19,7 @@ npm run build      # tsc -> dist/ AND copies src/**/*.json -> dist/ (scripts/cop
 npm run smoke      # offline self-test of factory + validator; MUST print "ALL GOOD". Run after every change.
 npm run dev        # tsc --watch
 npm start          # node dist/index.js (start the stdio server)
+node dist/index.js serve --port 8787   # remote Streamable-HTTP server (Claude custom connector); or PORT env
 npm run release    # interactive local publish (scripts/release.js): build+smoke gate, npm version, OTP publish, gh release
 npm run release:dry   # dry-run the release flow without publishing
 ```
@@ -63,10 +64,11 @@ To add or edit an element, change **one descriptor** in `src/domains/landing/ele
 
 Surrounding the domain:
 
-- [src/index.ts](src/index.ts) — thin entry: subcommand dispatch (`webcake-landing-mcp install|uninstall|--help` runs the bundled installer) then starts the stdio server.
-- [src/server.ts](src/server.ts) — `createServer()`: builds the `McpServer` with the domain's `instructions` and registers the tool groups.
-- [src/tools/](src/tools/) — the 12 tools as three group modules (`reference.ts`, `generation.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain`. The `text()` helper lives in [src/mcp/response.ts](src/mcp/response.ts).
-- [src/persistence/](src/persistence/) — the Webcake backend: `config.ts` (`readConfig` from env), `webcake-client.ts` (create/update/list pages, list orgs + JWT-redacted dry-run previews), `types.ts`.
+- [src/index.ts](src/index.ts) — thin entry: subcommand dispatch — `install|uninstall|--help` runs the bundled installer, `serve [--port N]` (or `PORT` env) starts the remote HTTP server, no subcommand starts the stdio server.
+- [src/server.ts](src/server.ts) — `createServer()`: builds the `McpServer` with the domain's `instructions` and registers the tool groups. Used by BOTH transports.
+- [src/http.ts](src/http.ts) — remote **Streamable HTTP** transport (stateful sessions) so the server can be a Claude "custom connector" via a URL. Each request's headers carry the caller's own Webcake JWT (multi-user).
+- [src/tools/](src/tools/) — the 12 tools as three group modules (`reference.ts`, `generation.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain`. The `text()` helper lives in [src/mcp/response.ts](src/mcp/response.ts). Persistence tools resolve credentials per request from `extra.requestInfo.headers` (HTTP), else env.
+- [src/persistence/](src/persistence/) — the Webcake backend: `config.ts` (`readConfig` from per-request overrides, then env; `configFromHeaders` for the HTTP `x-webcake-*` / `Authorization: Bearer` headers), `webcake-client.ts` (create/update/list pages, list orgs + JWT-redacted dry-run previews), `types.ts`.
 - [src/install.ts](src/install.ts) — bundled IDE installer; writes the MCP server block into claude-desktop / claude-code / cursor / windsurf / augment / codex config files.
 
 The 12 tools fall into three groups: **reference** (`get_generation_guide`, `list_elements`, `get_element`,
