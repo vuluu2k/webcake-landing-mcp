@@ -4,6 +4,34 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-06-06
+
+### Added
+- Two new event triggers: `error` (fires when form validation fails) and `delay` (timed trigger), expanding the vocabulary returned by `get_generation_guide` and valid in element events arrays.
+- Four new click actions: `open_sms`, `send_email`, `download_file`, and `close_webview`, now included in the action vocabulary returned by `get_generation_guide`.
+- `svariations` property accepted at the top level of the page schema as an open passthrough; agents should preserve it verbatim across `get_page` → edit → `update_page` on cart or commerce pages.
+
+### Changed
+- Element library (`get_element`, `list_elements`) comprehensively expanded for 29 elements that previously had sparse or empty specials hints: `form`, `input`, `select`, `checkbox-group`, `radio`, `group-select`, `group-select-item`, `survey`, `video`, `gallery`, `countdown`, `timegroup`, `auto-number`, `random-number`, `notify`, `spin-wheel`, `list-product`, `cart-quantity`, `table`, `verify-code`, `address`, `country-select`, `input-datetime`, `input-file`, `text-block`, `button`, `image-block`, `html-box`, and `editor-blog`.
+- `alertMessage` corrected from a page element to an internal utility function; `get_element` now warns that nodes of this type must not be placed on a page or popup.
+- `product-select` corrected to a legacy stub with no active renderer; `get_element` now warns against placing it and recommends `list-product` or `form` instead.
+- `back_home` click action removed; `back_to`, `play_audio`, `stop_audio`, `share`, `copy`, and `open_app` action descriptions corrected to match actual renderer behavior.
+- `change_image` hover action removed as it is not implemented in the current renderer.
+- `text-block` and `button` hints expanded with the full template variable set (`{{today}}`, `{{cart_total_price}}`, `{{formId__fieldName}}`, etc.), formula mode, URL-param injection, and date formatting specials.
+- `form` hints expanded with submit routing (success popup, URL redirect, app-redirect modes), pixel tracking (Facebook, TikTok, Google Ads), multi-form binding, and the `events[]` success/error action vocabulary.
+- `group` element hints expanded with cart product variation selector specials (`sprod`, `ctype`, `sprod_attr`, `sprod_val`, `squantity`, `svariant`).
+- `grid` and `carousel` hints expanded with dataset binding (`datasetId`), pagination, and autoplay config keys.
+- Section hints expanded with conditional page-load visibility specials (`pageLoadEvent`, `pageLoadEventDelay`, `afterPageLoadEvent`, and related fields).
+- `GENERATION_GUIDE` now documents cross-cutting per-breakpoint config keys (sticky positioning, animation, hide, lock) and references the full specials reference at `docs/element-specials-reference.md`.
+
+### Fixed
+- `validate_page` no longer emits false-positive dangling-reference warnings for `play_audio` and `stop_audio` events; their `target` is an audio file URL, not an element id, and they are now excluded from the id-existence check.
+- `gallery` is now correctly classified as a leaf element; `new_element` no longer generates an empty `children` array on gallery nodes (gallery content comes entirely from `specials.media`).
+- `new_element` for `cart-quantity` now seeds `specials.field_name` even though the type is not in `FIELD_TYPES`; the renderer requires this field.
+- `new_element` for `countdown` now seeds the full specials object including `repeat`, `customize`, `customMessage`, `dailyStart`, and `dailyEnd`.
+- `new_element` for `html-code` and `html-box` now seeds `specials.html` to an empty string.
+- `create_page` and `update_page` error responses now include the backend's `message` or `reason` field when the server returns one, rather than a bare HTTP status code.
+
 ## [1.0.2] - 2026-06-05
 
 ### Added
