@@ -55,79 +55,18 @@ element/trang hợp lệ, bộ kiểm tra trang, và các tool để tạo/sửa
 `{ page, popup, settings, options, cartConfigs }`; `create_page` lưu nó (chỉ-source — trang mở trong editor,
 lưu lại sẽ render).
 
-## Các cách setup (chọn một)
+## Hai cách chạy
 
-| # | Cách | Hợp cho | Auth | Xem |
-|---|------|---------|------|-----|
-| 1 | **Local stdio** — gắn vào IDE (Claude Desktop / Cursor / …) qua `npx` hoặc file build | Dùng hằng ngày trên máy | env `WEBCAKE_JWT`, hoặc `login`, hoặc không cần (tool tham chiếu) | [Cấu hình IDE](#cấu-hình-theo-ide--công-cụ-ai) |
-| 2 | **`login`** — tự lấy token qua browser (khỏi copy-paste) | Khỏi dán token tay (stdio / remote 1 người) | session browser → file `auth.json` | [Kết nối một lần](#kết-nối-một-lần--tự-lấy-token-login) |
-| 3 | **Remote HTTP (`serve`)** — chạy như HTTP server, test bằng MCP Inspector / `mcp-remote` / curl | Thử transport remote ở local | header `x-webcake-jwt` mỗi request, hoặc env | [Remote](#chạy-như-remote-connector-streamable-http) |
-| 4 | **VPS + claude.ai connector** — deploy HTTPS public, thêm làm custom connector | Chia sẻ 1 server hosted | single-account (token env); per-user cần OAuth (chưa có) | [Deploy lên VPS](#deploy-lên-vps) |
-
-Hai **dạng chạy** áp dụng cho mọi cách: **`npx -y webcake-landing-mcp …`** (không clone, tự cập nhật) hoặc **`node /abs/path/dist/index.js …`** (bản đã clone & build — chạy `npm run build` trước). Cấu hình IDE bên dưới dùng dạng local; đổi `command`/`args` sang dạng npx để dùng CDN.
+| Cách | Hợp cho | Auth |
+|------|---------|------|
+| **npx (local stdio)** — gắn vào IDE bằng một lệnh | Dùng hằng ngày trên máy | browser `login`, JWT, hoặc không cần (tool tham chiếu) |
+| **Remote HTTP (`serve`)** — chạy như connector sau một URL | Server hosted/chia sẻ (vd Coolify) | header `x-webcake-jwt` mỗi request / `?jwt=` |
 
 Các **tool tham chiếu + generation** (`get_generation_guide`, `list_elements`, `validate_page`, …) chạy **zero config**; chỉ **tool lưu trữ** (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`) mới cần token. Token ưu tiên theo thứ tự: **header mỗi request → biến env → file `auth.json`** (`login`).
 
-## Cài nhanh (Khuyến nghị)
+> 🛠️ Cần script cài (install.sh/.ps1), build từ clone, hay cấu hình IDE thủ công? Xem **[docs/manual-install.vi.md](docs/manual-install.vi.md)**.
 
-Chạy script tự cài — lo trọn gói: clone, cài dependencies, build, và cấu hình IDE của bạn.
-
-### macOS / Linux
-
-Nếu bạn đã clone repo:
-```bash
-./install.sh
-```
-
-Hoặc tải & chạy trực tiếp:
-```bash
-curl -fsSL https://raw.githubusercontent.com/vuluu2k/webcake-landing-mcp/main/install.sh -o install.sh && bash install.sh
-```
-
-Trình cài tương tác: hỏi nơi cài (mặc định `~/.webcake-landing-mcp`), hỏi các biến môi trường
-(`WEBCAKE_API_BASE`, `WEBCAKE_JWT`, `WEBCAKE_ORG_ID` — đều tuỳ chọn, Enter để bỏ qua), rồi cho bạn chọn
-IDE cần cấu hình: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment`, `codex`, hoặc tất cả.
-
-Gỡ cài (xoá entry MCP server khỏi mọi IDE đã cấu hình):
-```bash
-./install.sh --uninstall
-```
-
-### Windows (PowerShell)
-
-Nếu bạn đã clone repo:
-```powershell
-.\install.ps1
-```
-
-Hoặc tải & chạy trực tiếp:
-```powershell
-irm https://raw.githubusercontent.com/vuluu2k/webcake-landing-mcp/main/install.ps1 -OutFile install.ps1; .\install.ps1
-```
-
-Gỡ cài:
-```powershell
-.\install.ps1 --uninstall
-```
-
----
-
-## Cập nhật
-
-Cập nhật lên bản mới nhất:
-
-```bash
-cd ~/.webcake-landing-mcp   # hoặc nơi bạn đã cài
-git pull
-npm install
-npm run build
-```
-
-Rồi khởi động lại IDE.
-
----
-
-## Chạy không cần clone (npx)
+## Cài đặt (npx)
 
 Sau khi đã publish lên npm, server chạy thẳng từ registry — không clone, không build:
 
@@ -143,7 +82,7 @@ npx -y github:vuluu2k/webcake-landing-mcp
 
 ### Tự cấu hình IDE (lệnh con `install`)
 
-`npx` chỉ **chạy** server — khác với `install.sh`/`install.ps1`, nó không ghi cấu hình MCP vào IDE.
+`npx` chỉ **chạy** server — khác với [script cài đặt](docs/manual-install.vi.md), nó không ghi cấu hình MCP vào IDE.
 Lệnh con `install` đi kèm sẽ làm hộ bạn bước đó, không cần clone:
 
 ```bash
@@ -164,7 +103,7 @@ Nó ghi entry `webcake-landing` (dùng dạng khởi chạy `npx` bên dưới) 
 `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment` (VS Code), `codex`, hoặc `all`. Khi tương
 tác, nó hỏi **môi trường** (`local`/`staging`/`prod` — mặc định `prod`, dùng để đặt API + app URL) và cho
 chọn **đăng nhập qua trình duyệt hay dán JWT**. Cờ: `--ide`, `--env`, `--jwt`, `--org-id`,
-`--api-base`/`--app-base`/`--host` (ghi đè nâng cao), `--npx`/`--local`, `-y`. Chạy
+`--api-base`/`--app-base` (ghi đè nâng cao), `--npx`/`--local`, `-y`. Chạy
 `npx -y webcake-landing-mcp install --help` để xem đầy đủ.
 
 ### Cấu hình thủ công
@@ -221,9 +160,10 @@ nên server hosted là đa người dùng và không nhúng secret chung:
 | Header | Tương ứng | Ghi chú |
 |--------|-----------|---------|
 | `x-webcake-jwt` (hoặc `Authorization: Bearer <jwt>`) | `WEBCAKE_JWT` | token tài khoản — gửi mỗi request |
+| `x-webcake-env` | `WEBCAKE_ENV` | môi trường có tên (`local`/`staging`/`prod`) |
 | `x-webcake-org-id` | `WEBCAKE_ORG_ID` | org mặc định |
-| `x-webcake-api-base` | `WEBCAKE_API_BASE` | thường set 1 lần qua env trên host |
-| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | base URL editor/preview |
+| `x-webcake-api-base` | `WEBCAKE_API_BASE` | ghi đè API base của preset |
+| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | ghi đè app base của preset |
 
 Header nào thiếu thì fallback về biến env tương ứng — nên cũng chạy **một người dùng** được bằng cách đặt
 `WEBCAKE_API_BASE` + `WEBCAKE_JWT` trong env của host và giữ URL riêng tư.
@@ -280,19 +220,6 @@ chạy trên máy:
   nhưng token lộ trong log), hoặc dùng client hỗ trợ header (`mcp-remote --header …`), hoặc thêm **OAuth**
   (chưa làm) cho gọn nhất.
 
-## Cài thủ công (local)
-
-```bash
-git clone https://github.com/vuluu2k/webcake-landing-mcp.git
-cd webcake-landing-mcp
-npm install        # postinstall `prepare` tự build dist/
-npm run build      # (re)build: tsc -> dist/ + copy src/**/*.json (page-schema.json) vào dist/
-npm run smoke      # self-test offline của factory + validator (in "ALL GOOD")
-```
-
-Các tool tham chiếu/kiểm tra chạy với **zero config**. Biến môi trường chỉ cần cho các tool lưu trữ
-(`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`).
-
 ## Kết nối một lần — tự lấy token (`login`)
 
 Thay vì copy JWT bằng tay, chạy:
@@ -317,9 +244,8 @@ ngày nên hiếm khi phải kết nối lại.
 
 Hai URL, đừng nhầm:
 
-- **Trang connect = SPA** (`--connect-url` / `WEBCAKE_CONNECT_URL`): `https://webcake.io/mcp-connect` ở prod,
-  `http://localhost:5173/mcp-connect` ở local. Nếu không, suy ra từ `WEBCAKE_APP_BASE` + `/mcp-connect`,
-  mặc định `https://webcake.io/mcp-connect`.
+- **Trang connect = SPA** (`--connect-url`): suy ra từ app base của `--env` + `/mcp-connect`
+  (`https://webcake.io/mcp-connect` ở prod, `http://localhost:5173/mcp-connect` ở local). Ghi đè bằng `--connect-url`.
 - **API base = backend** (`--api-base` / `WEBCAKE_API_BASE`): `https://api.webcake.io` ở prod,
   `http://localhost:5800` ở local. Mặc định `https://api.webcake.io`.
 
@@ -350,9 +276,7 @@ SPA cũng được, khỏi cần route backend.)
 | `WEBCAKE_API_BASE` | Không* | Base URL backend, ví dụ `http://localhost:5800`. Cần để lưu trang (hoặc đặt `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | Không* | JWT tài khoản (auth dashboard). Cần để lưu trang — sẽ hết hạn, làm mới khi cần. |
 | `WEBCAKE_ORG_ID` | Không | Organization mặc định cho `create_page` (bị ghi đè bởi tham số `organization_id`). Bỏ trống → trang cá nhân. |
-| `WEBCAKE_HOST` | Không | Header `Host` tuỳ chọn (Phoenix route theo host, ví dụ `builder.localhost`). |
 | `WEBCAKE_APP_BASE` | Không | Base tuỳ chọn để dựng URL editor/preview trong kết quả. |
-| `WEBCAKE_CONNECT_URL` | Không | Trang "connect" (SPA) cho `login` (mặc định `https://webcake.io/mcp-connect`; nếu không thì `WEBCAKE_APP_BASE` + `/mcp-connect`). |
 | `WEBCAKE_CONFIG_DIR` | Không | Thư mục chứa `auth.json` do `login` ghi (mặc định `~/.webcake-landing-mcp`). |
 
 > \* `WEBCAKE_API_BASE` và `WEBCAKE_JWT` chỉ cần cho các tool lưu trữ. Các tool tham chiếu và kiểm tra
@@ -394,172 +318,9 @@ server phục vụ được nhiều môi trường.
 
 ---
 
-## Cấu hình theo IDE / công cụ AI
+## Cấu hình theo IDE
 
-> Thay `/absolute-path/webcake-landing-mcp/dist/index.js` bên dưới bằng đường dẫn thật nơi bạn đã
-> clone/build repo. Ví dụ: `/Users/username/webcake-landing-mcp/dist/index.js`.
-> Chạy `npm run build` trước để `dist/` tồn tại.
-
-### 1. Claude Desktop
-
-Mở Settings > Developer > Edit Config, hoặc sửa file trực tiếp:
-
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>",
-        "WEBCAKE_HOST": "builder.localhost",
-        "WEBCAKE_APP_BASE": "http://builder.localhost:5800"
-      }
-    }
-  }
-}
-```
-
-Khởi động lại Claude Desktop. Các tool MCP sẽ hiện trong ô chat (biểu tượng búa).
-
----
-
-### 2. Claude Code (CLI)
-
-Chạy trong terminal — bản **local**:
-
-```bash
-claude mcp add webcake-landing \
-  -e WEBCAKE_API_BASE=http://localhost:5800 \
-  -e WEBCAKE_JWT=<your-jwt> \
-  -e WEBCAKE_HOST=builder.localhost \
-  -- node /absolute-path/webcake-landing-mcp/dist/index.js
-```
-
-Hoặc **CDN / npx** (không clone):
-
-```bash
-claude mcp add webcake-landing \
-  -e WEBCAKE_API_BASE=http://localhost:5800 \
-  -e WEBCAKE_JWT=<your-jwt> \
-  -- npx -y webcake-landing-mcp
-```
-
-Hoặc tạo `.claude.json` ở thư mục gốc dự án (hoặc `~/.claude.json` toàn cục):
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Kiểm tra:
-```bash
-claude mcp list
-```
-
----
-
-### 3. Cursor
-
-Tạo `.cursor/mcp.json` ở gốc dự án (hoặc `~/.cursor/mcp.json` toàn cục):
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Khởi động lại Cursor và xem Settings > MCP Servers để thấy trạng thái **"Connected"**.
-
----
-
-### 4. Windsurf
-
-Tạo `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Khởi động lại Windsurf. Gõ `@` trong chat Cascade để thấy các tool `webcake-landing`.
-
----
-
-### 5. Augment (Extension VS Code)
-
-Mở Command Palette: `Cmd + Shift + P` > **"Augment: Edit MCP Settings"**, rồi thêm:
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Khởi động lại VS Code.
-
----
-
-### 6. Codex (OpenAI CLI)
-
-Thêm vào `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.webcake-landing]
-command = "node"
-args = ["/absolute-path/webcake-landing-mcp/dist/index.js"]
-env = { "WEBCAKE_API_BASE" = "http://localhost:5800", "WEBCAKE_JWT" = "<your-jwt>" }
-```
-
-Kiểm tra:
-```bash
-codex mcp list
-```
-
----
+Lệnh con `install` của npx (xem trên) tự ghi cấu hình đúng cho từng IDE. Nếu muốn tự viết tay cấu hình cho Claude Desktop, Claude Code, Cursor, Windsurf, Augment, hay Codex — và cả dạng dùng file build từ clone — xem **[docs/manual-install.vi.md](docs/manual-install.vi.md#cấu-hình-theo-ide--công-cụ-ai)**.
 
 ## Ví dụ sử dụng
 

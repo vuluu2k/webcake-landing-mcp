@@ -48,7 +48,7 @@ Reference/generation tools need nothing. Credentials resolve **per request** (se
 [`src/persistence/config.ts`](../../src/persistence/config.ts)), so each client supplies its own:
 
 - **Header (preferred):** `x-webcake-jwt: <token>` (or `Authorization: Bearer <token>`),
-  plus optional `x-webcake-env`, `x-webcake-api-base`, `x-webcake-org-id`, `x-webcake-host`, `x-webcake-app-base`.
+  plus optional `x-webcake-env`, `x-webcake-api-base`, `x-webcake-org-id`, `x-webcake-app-base`.
 - **URL query (for clients that can't set headers, e.g. the claude.ai dialog):**
   `https://mcp.example.com/mcp?jwt=<token>&env=staging`.
   ⚠️ Tokens in URLs can land in proxy/access logs — require HTTPS and disable
@@ -77,7 +77,6 @@ Set values in Coolify's **Environment Variables** UI (never commit secrets):
 | `WEBCAKE_ENV` | preset `prod` | `local` \| `staging` \| `prod` — fills in both base URLs |
 | `WEBCAKE_API_BASE` | optional | overrides the `WEBCAKE_ENV` API base |
 | `WEBCAKE_APP_BASE` | optional | overrides the `WEBCAKE_ENV` app base (editor/preview links) |
-| `WEBCAKE_HOST` | optional | Phoenix Host-header override |
 | `WEBCAKE_ORG_ID` | optional | default organization for `create_page` |
 | `WEBCAKE_JWT` | optional | **single-tenant only** — a shared server secret; omit for multi-user |
 

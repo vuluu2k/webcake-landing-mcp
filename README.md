@@ -54,80 +54,18 @@ valid element/page skeletons, a page validator, and tools to create or edit page
 The AI agent produces the full `{ page, popup, settings, options, cartConfigs }` JSON; `create_page`
 persists it (source-only — the page opens in the editor where re-saving renders it).
 
-## Setup methods (pick one)
+## Two ways to run
 
-| # | Method | Best for | Auth | Jump to |
-|---|--------|----------|------|---------|
-| 1 | **Local stdio** — add to an IDE (Claude Desktop / Cursor / …) via `npx` or a built file | Daily use on your machine | env `WEBCAKE_JWT`, or `login`, or none (reference tools) | [IDE config](#configuration-by-ide--ai-tool) |
-| 2 | **`login`** — grab the token through the browser (no copy-paste) | Avoiding a manual token paste (stdio / single-user remote) | browser session → saved `auth.json` | [Connect once](#connect-once--grab-your-token-automatically-login) |
-| 3 | **Remote HTTP (`serve`)** — run as an HTTP server, test with MCP Inspector / `mcp-remote` / curl | Trying the remote transport locally | per-request `x-webcake-jwt` header, or env | [Remote](#run-as-a-remote-connector-streamable-http) |
-| 4 | **VPS + claude.ai connector** — deploy public HTTPS, add as a custom connector | Sharing one hosted server | single-account (env token); per-user needs OAuth (not implemented) | [Deploy on a VPS](#deploy-on-a-vps) |
-
-Two **run forms** apply to any method: **`npx -y webcake-landing-mcp …`** (no clone, auto-updates) or **`node /abs/path/dist/index.js …`** (a cloned build — run `npm run build` first). The IDE configs below show the local form; swap `command`/`args` for the npx form to use CDN mode.
+| Method | Best for | Auth |
+|--------|----------|------|
+| **npx (local stdio)** — add to an IDE with one command | Daily use on your machine | browser `login`, a JWT, or none (reference tools) |
+| **Remote HTTP (`serve`)** — run as a connector behind a URL | A hosted/shared server (e.g. Coolify) | per-request `x-webcake-jwt` header / `?jwt=` |
 
 The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
 
-## Quick Install (Recommended)
+> 🛠️ Prefer a shell-script installer (`install.sh`/`install.ps1`), a cloned local build, or hand-written per-IDE config? See **[docs/manual-install.md](docs/manual-install.md)**.
 
-Run the auto-install script — it handles everything: clone, install dependencies, build, and configure your IDE.
-
-### macOS / Linux
-
-If you already cloned the repo:
-```bash
-./install.sh
-```
-
-Or download and run directly:
-```bash
-curl -fsSL https://raw.githubusercontent.com/vuluu2k/webcake-landing-mcp/main/install.sh -o install.sh && bash install.sh
-```
-
-The installer is interactive: it asks where to install (default `~/.webcake-landing-mcp`), prompts for
-the env vars (`WEBCAKE_API_BASE`, `WEBCAKE_JWT`, `WEBCAKE_ORG_ID` — all optional, Enter to skip), then
-lets you pick which IDE(s) to configure: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment`,
-`codex`, or all.
-
-Uninstall (removes the MCP server entry from every configured IDE):
-```bash
-./install.sh --uninstall
-```
-
-### Windows (PowerShell)
-
-If you already cloned the repo:
-```powershell
-.\install.ps1
-```
-
-Or download and run directly:
-```powershell
-irm https://raw.githubusercontent.com/vuluu2k/webcake-landing-mcp/main/install.ps1 -OutFile install.ps1; .\install.ps1
-```
-
-Uninstall:
-```powershell
-.\install.ps1 --uninstall
-```
-
----
-
-## Update
-
-Update to the latest version:
-
-```bash
-cd ~/.webcake-landing-mcp   # or wherever you installed it
-git pull
-npm install
-npm run build
-```
-
-Then restart your IDE.
-
----
-
-## Run without cloning (npx)
+## Install (npx)
 
 Once published to npm, the server runs straight from the registry — no clone, no build:
 
@@ -143,8 +81,8 @@ npx -y github:vuluu2k/webcake-landing-mcp
 
 ### Auto-configure your IDE (`install` subcommand)
 
-`npx` only **runs** the server — unlike `install.sh`/`install.ps1`, it does not write the MCP
-config into your IDE. The bundled `install` subcommand does that step for you, no clone needed:
+`npx` only **runs** the server — unlike the [shell installers](docs/manual-install.md), it does not
+write the MCP config into your IDE. The bundled `install` subcommand does that step for you, no clone needed:
 
 ```bash
 # Interactive — pick environment, log in via browser (or paste a JWT), pick IDE(s)
@@ -164,7 +102,7 @@ It writes a `webcake-landing` entry (using the `npx` launch form below) into the
 for each target: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment` (VS Code), `codex`,
 or `all`. Interactively it asks for the **environment** (`local`/`staging`/`prod`, which sets the API +
 app URLs) and whether to **log in via the browser or paste a JWT**. Flags: `--ide`, `--env`, `--jwt`,
-`--org-id`, `--api-base`/`--app-base`/`--host` (advanced overrides), `--npx`/`--local`, `-y`. Run
+`--org-id`, `--api-base`/`--app-base` (advanced overrides), `--npx`/`--local`, `-y`. Run
 `npx -y webcake-landing-mcp install --help` for the full list.
 
 ### Manual config
@@ -221,10 +159,10 @@ via headers, so a hosted server is multi-user and never bakes in a shared secret
 | Header | Maps to | Notes |
 |--------|---------|-------|
 | `x-webcake-jwt` (or `Authorization: Bearer <jwt>`) | `WEBCAKE_JWT` | the account token — sent per request |
+| `x-webcake-env` | `WEBCAKE_ENV` | named environment (`local`/`staging`/`prod`) |
 | `x-webcake-org-id` | `WEBCAKE_ORG_ID` | default org |
-| `x-webcake-api-base` | `WEBCAKE_API_BASE` | usually set once via env on the host instead |
-| `x-webcake-host` | `WEBCAKE_HOST` | Phoenix host-routing header |
-| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | editor/preview URL base |
+| `x-webcake-api-base` | `WEBCAKE_API_BASE` | overrides the env preset's API base |
+| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | overrides the env preset's app base |
 
 Any header that is absent falls back to the corresponding env var — so you can also run it **single-user**
 by setting `WEBCAKE_API_BASE` + `WEBCAKE_JWT` in the host's env and keeping the URL private.
@@ -282,19 +220,6 @@ running `serve` server on your machine:
   through the dialog, but the token appears in logs), or use a header-capable client (`mcp-remote --header …`),
   or add **OAuth** (not implemented) for the cleanest flow.
 
-## Manual Setup (local)
-
-```bash
-git clone https://github.com/vuluu2k/webcake-landing-mcp.git
-cd webcake-landing-mcp
-npm install        # postinstall `prepare` builds dist/ automatically
-npm run build      # (re)build: tsc -> dist/ + copies src/**/*.json (page-schema.json) into dist/
-npm run smoke      # offline self-test of factory + validator (prints "ALL GOOD")
-```
-
-The reference/validation tools work with **zero config**. Env vars are only needed for the persistence
-tools (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`).
-
 ## Connect once — grab your token automatically (`login`)
 
 Instead of copying a JWT by hand, run:
@@ -323,9 +248,8 @@ deployment (env vars still take precedence). The landing JWT lasts ~90 days, so 
 
 Two URLs, don't mix them up:
 
-- **Connect page = the SPA** (`--connect-url` / `WEBCAKE_CONNECT_URL`): `https://webcake.io/mcp-connect`
-  in prod, `http://localhost:5173/mcp-connect` locally. Otherwise derived from `WEBCAKE_APP_BASE` +
-  `/mcp-connect`, defaulting to `https://webcake.io/mcp-connect`.
+- **Connect page = the SPA** (`--connect-url`): derived from the `--env` app base + `/mcp-connect`
+  (`https://webcake.io/mcp-connect` for prod, `http://localhost:5173/mcp-connect` for local). Override with `--connect-url`.
 - **API base = the backend** (`--api-base` / `WEBCAKE_API_BASE`): `https://api.webcake.io` in prod,
   `http://localhost:5800` locally. Defaults to `https://api.webcake.io`.
 
@@ -356,9 +280,7 @@ flow can also be done entirely in the SPA, no backend route needed.)
 | `WEBCAKE_API_BASE` | No* | Backend base URL, e.g. `http://localhost:5800`. Required to persist (or set `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | No* | Account JWT (dashboard auth). Required to persist — expires, refresh when needed. |
 | `WEBCAKE_ORG_ID` | No | Default organization id for `create_page` (overridden by its `organization_id` arg). Omit → personal page. |
-| `WEBCAKE_HOST` | No | Optional `Host` header (Phoenix routes by host, e.g. `builder.localhost`). |
 | `WEBCAKE_APP_BASE` | No | Optional base used to build editor/preview URLs in the result. |
-| `WEBCAKE_CONNECT_URL` | No | The SPA "connect" page for `login` (default `https://webcake.io/mcp-connect`; else `WEBCAKE_APP_BASE` + `/mcp-connect`). |
 | `WEBCAKE_CONFIG_DIR` | No | Dir for the saved `auth.json` written by `login` (default `~/.webcake-landing-mcp`). |
 
 > \* `WEBCAKE_API_BASE` and `WEBCAKE_JWT` are only needed for the persistence tools. The reference and
@@ -400,172 +322,11 @@ environment per request with the **`x-webcake-env`** header or **`?env=`** query
 
 ---
 
-## Configuration by IDE / AI Tool
+## Per-IDE config
 
-> Replace `/absolute-path/webcake-landing-mcp/dist/index.js` below with the actual path where you
-> cloned/built the repo. Example: `/Users/username/webcake-landing-mcp/dist/index.js`.
-> Run `npm run build` first so `dist/` exists.
-
-### 1. Claude Desktop
-
-Open Settings > Developer > Edit Config, or edit the file directly:
-
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **Linux**: `~/.config/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>",
-        "WEBCAKE_HOST": "builder.localhost",
-        "WEBCAKE_APP_BASE": "http://builder.localhost:5800"
-      }
-    }
-  }
-}
-```
-
-Restart Claude Desktop. The MCP tools will appear in the chat input (hammer icon).
-
----
-
-### 2. Claude Code (CLI)
-
-Run in terminal — **local** build:
-
-```bash
-claude mcp add webcake-landing \
-  -e WEBCAKE_API_BASE=http://localhost:5800 \
-  -e WEBCAKE_JWT=<your-jwt> \
-  -e WEBCAKE_HOST=builder.localhost \
-  -- node /absolute-path/webcake-landing-mcp/dist/index.js
-```
-
-Or **CDN / npx** (no clone):
-
-```bash
-claude mcp add webcake-landing \
-  -e WEBCAKE_API_BASE=http://localhost:5800 \
-  -e WEBCAKE_JWT=<your-jwt> \
-  -- npx -y webcake-landing-mcp
-```
-
-Or create `.claude.json` at project root (or `~/.claude.json` globally):
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Verify:
-```bash
-claude mcp list
-```
-
----
-
-### 3. Cursor
-
-Create `.cursor/mcp.json` at project root (or `~/.cursor/mcp.json` globally):
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Restart Cursor and check Settings > MCP Servers for **"Connected"** status.
-
----
-
-### 4. Windsurf
-
-Create `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Restart Windsurf. Type `@` in Cascade chat to see `webcake-landing` tools.
-
----
-
-### 5. Augment (VS Code Extension)
-
-Open Command Palette: `Cmd + Shift + P` > **"Augment: Edit MCP Settings"**, then add:
-
-```json
-{
-  "mcpServers": {
-    "webcake-landing": {
-      "command": "node",
-      "args": ["/absolute-path/webcake-landing-mcp/dist/index.js"],
-      "env": {
-        "WEBCAKE_API_BASE": "http://localhost:5800",
-        "WEBCAKE_JWT": "<your-jwt>"
-      }
-    }
-  }
-}
-```
-
-Restart VS Code.
-
----
-
-### 6. Codex (OpenAI CLI)
-
-Add to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.webcake-landing]
-command = "node"
-args = ["/absolute-path/webcake-landing-mcp/dist/index.js"]
-env = { "WEBCAKE_API_BASE" = "http://localhost:5800", "WEBCAKE_JWT" = "<your-jwt>" }
-```
-
-Verify:
-```bash
-codex mcp list
-```
-
----
+The npx **`install`** subcommand (above) writes the right config for each IDE automatically. For
+hand-written config (Claude Desktop, Claude Code, Cursor, Windsurf, Augment, Codex) and the
+cloned-build variants, see **[docs/manual-install.md](docs/manual-install.md#configuration-by-ide--ai-tool)**.
 
 ## Usage Examples
 

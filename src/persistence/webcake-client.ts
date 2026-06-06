@@ -25,7 +25,6 @@ function authHeaders(config: WebcakeConfig, orgId?: string): Record<string, stri
     Authorization: `Bearer ${config.jwt}`,
     Cookie: `jwt=${config.jwt}`,
   };
-  if (config.host) headers["Host"] = config.host;
   const org = orgId ?? config.orgId;
   if (org != null && `${org}` !== "") headers["x-org-id"] = `${org}`;
   return headers;

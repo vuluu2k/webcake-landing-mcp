@@ -111,7 +111,7 @@ collect_env() {
   echo -e "  ${YELLOW}WEBCAKE_JWT${NC} (token tai khoan — Enter de bo qua):"
   read -rp "  WEBCAKE_JWT: " JWT < /dev/tty; JWT="${JWT:-${WEBCAKE_JWT:-}}"
   read -rp "  WEBCAKE_ORG_ID (Enter de bo qua): " ORG_ID < /dev/tty; ORG_ID="${ORG_ID:-${WEBCAKE_ORG_ID:-}}"
-  HOST="${WEBCAKE_HOST:-}"; APP_BASE="${WEBCAKE_APP_BASE:-}"   # hiem dung — lay tu env neu co
+  APP_BASE="${WEBCAKE_APP_BASE:-}"   # hiem dung — lay tu env neu co
   echo ""; success "Cau hinh:"
   echo "  API base : $API_BASE"
   if [ -n "$JWT" ]; then echo "  JWT      : ${JWT:0:8}…(${#JWT} ky tu)"; else echo -e "  JWT      : ${YELLOW}(chua set)${NC}"; fi
@@ -124,13 +124,12 @@ cli_env_args() {
   [ -n "$API_BASE" ] && s="$s -e WEBCAKE_API_BASE=\"$API_BASE\""
   [ -n "$JWT" ]      && s="$s -e WEBCAKE_JWT=\"$JWT\""
   [ -n "$ORG_ID" ]   && s="$s -e WEBCAKE_ORG_ID=\"$ORG_ID\""
-  [ -n "$HOST" ]     && s="$s -e WEBCAKE_HOST=\"$HOST\""
   [ -n "$APP_BASE" ] && s="$s -e WEBCAKE_APP_BASE=\"$APP_BASE\""
   echo "$s"
 }
 toml_env() {
   local parts="" pair k v
-  for pair in "WEBCAKE_API_BASE=$API_BASE" "WEBCAKE_JWT=$JWT" "WEBCAKE_ORG_ID=$ORG_ID" "WEBCAKE_HOST=$HOST" "WEBCAKE_APP_BASE=$APP_BASE"; do
+  for pair in "WEBCAKE_API_BASE=$API_BASE" "WEBCAKE_JWT=$JWT" "WEBCAKE_ORG_ID=$ORG_ID" "WEBCAKE_APP_BASE=$APP_BASE"; do
     k="${pair%%=*}"; v="${pair#*=}"; [ -n "$v" ] || continue
     [ -n "$parts" ] && parts="$parts, "; parts="$parts\"$k\" = \"$v\""
   done
@@ -141,13 +140,13 @@ toml_env() {
 merge_json() {
   local file="$1"; mkdir -p "$(dirname "$file")"
   MCP_NAME="$NAME" MCP_NODE="$NODE_BIN" MCP_INDEX="$MCP_INDEX" MCP_CFG="$file" \
-  E_API="$API_BASE" E_JWT="$JWT" E_ORG="$ORG_ID" E_HOST="$HOST" E_APP="$APP_BASE" \
+  E_API="$API_BASE" E_JWT="$JWT" E_ORG="$ORG_ID" E_APP="$APP_BASE" \
   node -e '
     const fs=require("fs"), f=process.env.MCP_CFG;
     let c={}; try{ if(fs.existsSync(f)&&fs.readFileSync(f,"utf8").trim()) c=JSON.parse(fs.readFileSync(f,"utf8")); }
     catch(e){ console.error("  ! parse fail "+f+": "+e.message); process.exit(0); }
     const env={};
-    for(const [k,e] of [["WEBCAKE_API_BASE","E_API"],["WEBCAKE_JWT","E_JWT"],["WEBCAKE_ORG_ID","E_ORG"],["WEBCAKE_HOST","E_HOST"],["WEBCAKE_APP_BASE","E_APP"]])
+    for(const [k,e] of [["WEBCAKE_API_BASE","E_API"],["WEBCAKE_JWT","E_JWT"],["WEBCAKE_ORG_ID","E_ORG"],["WEBCAKE_APP_BASE","E_APP"]])
       if(process.env[e]) env[k]=process.env[e];
     if(typeof c.mcpServers!=="object"||!c.mcpServers) c.mcpServers={};
     c.mcpServers[process.env.MCP_NAME]={command:process.env.MCP_NODE,args:[process.env.MCP_INDEX],...(Object.keys(env).length?{env}:{})};

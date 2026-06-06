@@ -36,7 +36,6 @@ services:
       # then uncomment the line(s) you need so they reach the container:
       # WEBCAKE_API_BASE: ${WEBCAKE_API_BASE}
       # WEBCAKE_APP_BASE: ${WEBCAKE_APP_BASE}
-      # WEBCAKE_HOST: ${WEBCAKE_HOST}
       # WEBCAKE_ORG_ID: ${WEBCAKE_ORG_ID}
       # WEBCAKE_JWT: ${WEBCAKE_JWT}   # SINGLE-TENANT only — a shared server secret
     # Coolify's reverse proxy routes your Domain to this internal container port.

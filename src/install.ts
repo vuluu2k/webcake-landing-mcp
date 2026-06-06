@@ -53,7 +53,6 @@ interface Opts {
   apiBase?: string;
   jwt?: string;
   orgId?: string;
-  host?: string;
   appBase?: string;
   yes: boolean;
   npx?: boolean;
@@ -77,7 +76,6 @@ function parseArgs(argv: string[]): Opts {
     else if (a.startsWith("--api-base")) o.apiBase = next();
     else if (a.startsWith("--jwt") || a.startsWith("--token")) o.jwt = next();
     else if (a.startsWith("--org-id") || a.startsWith("--org")) o.orgId = next();
-    else if (a.startsWith("--host")) o.host = next();
     else if (a.startsWith("--app-base")) o.appBase = next();
     else if (a === "--help" || a === "-h") o.ide = "__help__";
     void val;
@@ -314,7 +312,6 @@ ${c.bold}Flags${c.reset}
   --org-id <id>     WEBCAKE_ORG_ID (optional default organization)
   --api-base <url>  override the --env API base (advanced)
   --app-base <url>  override the --env app base (advanced)
-  --host <host>     WEBCAKE_HOST (advanced; Phoenix host-routing header)
   --npx | --local   force the launch command form (default: auto-detect)
   -y, --yes         accept defaults, skip confirmations
   --uninstall       remove the server from all IDE configs
@@ -390,7 +387,6 @@ export async function runInstaller(argv: string[]): Promise<void> {
   if (orgId) env.WEBCAKE_ORG_ID = orgId;
   if (o.apiBase) env.WEBCAKE_API_BASE = o.apiBase;
   if (o.appBase) env.WEBCAKE_APP_BASE = o.appBase;
-  if (o.host) env.WEBCAKE_HOST = o.host;
 
   // 4) which IDEs
   let ides: string[] = [];

@@ -95,7 +95,7 @@ function Install-MCP {
 # ── Thu thap cau hinh (tat ca tuy chon) ──
 function Collect-Env {
   $envFile = "$($script:INSTALL_DIR)\.env"
-  $def = @{ WEBCAKE_API_BASE = $env:WEBCAKE_API_BASE; WEBCAKE_JWT = $env:WEBCAKE_JWT; WEBCAKE_ORG_ID = $env:WEBCAKE_ORG_ID; WEBCAKE_HOST = $env:WEBCAKE_HOST; WEBCAKE_APP_BASE = $env:WEBCAKE_APP_BASE }
+  $def = @{ WEBCAKE_API_BASE = $env:WEBCAKE_API_BASE; WEBCAKE_JWT = $env:WEBCAKE_JWT; WEBCAKE_ORG_ID = $env:WEBCAKE_ORG_ID; WEBCAKE_APP_BASE = $env:WEBCAKE_APP_BASE }
   if (Test-Path $envFile) {
     foreach ($line in Get-Content $envFile) {
       if ($line -match "^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$" -and $line -notmatch "^\s*#") {
@@ -108,7 +108,7 @@ function Collect-Env {
   $a = Read-Host "  WEBCAKE_API_BASE [$dApi]"; $script:API_BASE = if ($a) { $a } else { $dApi }
   $j = Read-Host "  WEBCAKE_JWT (token tai khoan, Enter de bo qua)"; $script:JWT = if ($j) { $j } else { $def.WEBCAKE_JWT }
   $o = Read-Host "  WEBCAKE_ORG_ID (Enter de bo qua)"; $script:ORG_ID = if ($o) { $o } else { $def.WEBCAKE_ORG_ID }
-  $script:HOSTV = $def.WEBCAKE_HOST; $script:APP_BASE = $def.WEBCAKE_APP_BASE
+  $script:APP_BASE = $def.WEBCAKE_APP_BASE
   Write-Host ""; Write-Success "Cau hinh:"
   Write-Host "  API base : $script:API_BASE"
   if ($script:JWT) { Write-Host "  JWT      : $($script:JWT.Substring(0,[Math]::Min(8,$script:JWT.Length)))…" } else { Write-Host "  JWT      : (chua set)" -ForegroundColor Yellow }
@@ -120,7 +120,6 @@ function Build-Server {
   if ($script:API_BASE) { $envh["WEBCAKE_API_BASE"] = $script:API_BASE }
   if ($script:JWT)      { $envh["WEBCAKE_JWT"]      = $script:JWT }
   if ($script:ORG_ID)   { $envh["WEBCAKE_ORG_ID"]   = $script:ORG_ID }
-  if ($script:HOSTV)    { $envh["WEBCAKE_HOST"]     = $script:HOSTV }
   if ($script:APP_BASE) { $envh["WEBCAKE_APP_BASE"] = $script:APP_BASE }
   $s = @{ command = $script:NODE_BIN; args = @($script:MCP_INDEX) }
   if ($envh.Count -gt 0) { $s["env"] = $envh }
@@ -154,7 +153,6 @@ function Configure-ClaudeCode {
     if ($script:API_BASE) { $a += @("-e","WEBCAKE_API_BASE=$($script:API_BASE)") }
     if ($script:JWT)      { $a += @("-e","WEBCAKE_JWT=$($script:JWT)") }
     if ($script:ORG_ID)   { $a += @("-e","WEBCAKE_ORG_ID=$($script:ORG_ID)") }
-    if ($script:HOSTV)    { $a += @("-e","WEBCAKE_HOST=$($script:HOSTV)") }
     if ($script:APP_BASE) { $a += @("-e","WEBCAKE_APP_BASE=$($script:APP_BASE)") }
     $a += @("--",$script:NODE_BIN,$script:MCP_INDEX)
     claude mcp remove $script:NAME 2>$null | Out-Null
@@ -179,7 +177,6 @@ function Configure-Codex {
     ,@("WEBCAKE_API_BASE", $script:API_BASE)
     ,@("WEBCAKE_JWT",      $script:JWT)
     ,@("WEBCAKE_ORG_ID",   $script:ORG_ID)
-    ,@("WEBCAKE_HOST",     $script:HOSTV)
     ,@("WEBCAKE_APP_BASE", $script:APP_BASE)
   )
   foreach ($p in $pairs) {

@@ -235,7 +235,7 @@ check("clean form has no binding warnings", rbg.warnings.length === 0, rbg.warni
 console.log("== config: named environment presets (local/staging/prod) ==");
 {
   // Deterministic: isolate from any ambient WEBCAKE_* and the saved auth.json on the dev box.
-  for (const k of ["WEBCAKE_API_BASE", "WEBCAKE_APP_BASE", "WEBCAKE_ENV", "WEBCAKE_JWT", "WEBCAKE_ORG_ID", "WEBCAKE_HOST"]) delete process.env[k];
+  for (const k of ["WEBCAKE_API_BASE", "WEBCAKE_APP_BASE", "WEBCAKE_ENV", "WEBCAKE_JWT", "WEBCAKE_ORG_ID"]) delete process.env[k];
   process.env.WEBCAKE_CONFIG_DIR = "/nonexistent/webcake-smoke";
   check("env names are local/staging/prod", setEq(new Set<string>(ENV_NAMES), ["local", "staging", "prod"]), ENV_NAMES);
   check(

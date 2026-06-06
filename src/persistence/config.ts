@@ -18,7 +18,6 @@
  *   WEBCAKE_API_BASE  e.g. http://localhost:5800   (required to call the backend)
  *   WEBCAKE_JWT       the account JWT               (required to call the backend)
  *   WEBCAKE_ORG_ID    optional default organization id for create_page
- *   WEBCAKE_HOST      optional Host header override (Phoenix routes by host)
  *   WEBCAKE_APP_BASE  optional base for editor/preview URLs in the result
  *   WEBCAKE_CONFIG_DIR  optional dir for the saved auth.json (default ~/.webcake-landing-mcp)
  */
@@ -54,7 +53,7 @@ export function resolveEnv(name: string | undefined): { apiBase: string; appBase
 }
 
 /** Request-scoped overrides for the env config (used by the HTTP transport). */
-export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "host" | "appBase">> & {
+export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase">> & {
   /** Named environment (local|staging|prod) — fills in base/appBase when not given explicitly. */
   env?: string;
 };
@@ -74,7 +73,6 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
       base: base!.replace(/\/+$/, ""),
       jwt: jwt!,
       orgId: overrides.orgId ?? process.env.WEBCAKE_ORG_ID ?? saved.orgId,
-      host: overrides.host ?? process.env.WEBCAKE_HOST ?? saved.host,
       appBase: (overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase)?.replace(/\/+$/, ""),
     },
     missing: [],
@@ -96,7 +94,6 @@ function header(headers: HeaderBag, name: string): string | undefined {
  *   x-webcake-org-id     organization id
  *   x-webcake-env        named environment (local|staging|prod) for the base URLs
  *   x-webcake-api-base   backend base URL (overrides the env preset)
- *   x-webcake-host       Host header override
  *   x-webcake-app-base   editor/preview URL base (overrides the env preset)
  * Any header that is absent falls back to the corresponding env var in readConfig.
  */
@@ -107,7 +104,6 @@ export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
     base: header(headers, "x-webcake-api-base"),
     jwt: header(headers, "x-webcake-jwt") ?? bearer,
     orgId: header(headers, "x-webcake-org-id"),
-    host: header(headers, "x-webcake-host"),
     appBase: header(headers, "x-webcake-app-base"),
     env: header(headers, "x-webcake-env"),
   };
@@ -122,7 +118,6 @@ export type SavedConfig = {
   base?: string;
   jwt?: string;
   orgId?: string;
-  host?: string;
   appBase?: string;
   savedAt?: string;
 };

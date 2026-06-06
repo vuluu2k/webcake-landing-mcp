@@ -46,7 +46,6 @@ const QUERY_AUTH: Record<string, string> = {
   env: "x-webcake-env",
   api_base: "x-webcake-api-base",
   org_id: "x-webcake-org-id",
-  host: "x-webcake-host",
   app_base: "x-webcake-app-base",
 };
 

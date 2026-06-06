@@ -7,7 +7,6 @@ export type WebcakeConfig = {
   base: string;
   jwt: string;
   orgId?: string;
-  host?: string;
   appBase?: string;
 };
 

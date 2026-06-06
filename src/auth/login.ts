@@ -11,7 +11,7 @@
  *      which the stdio/http server then reads automatically.
  *
  * Backend contract (added to landing_page_backend — owned by the user):
- *   GET {WEBCAKE_CONNECT_URL}?redirect_uri=<loopback>&state=<s>
+ *   GET <connect-url>?redirect_uri=<loopback>&state=<s>   (connect-url = appBase + /mcp-connect)
  *     → read cookie `jwt` → 302 to <redirect_uri>?token=<jwt>&state=<s>
  *       (or 302 to the login page first, then back). Restrict redirect_uri to
  *       http://127.0.0.1:* / http://localhost:* for safety.
@@ -58,8 +58,7 @@ const SUCCESS_HTML = `<!doctype html><meta charset="utf-8"><title>Connected</tit
 <h2>✓ Connected to Webcake</h2><p>You can close this tab and return to your terminal.</p></body>`;
 
 function resolveConnectUrl(opts: LoginOpts, appBase: string): string {
-  if (opts.connectUrl) return opts.connectUrl;
-  if (process.env.WEBCAKE_CONNECT_URL) return process.env.WEBCAKE_CONNECT_URL;
+  if (opts.connectUrl) return opts.connectUrl; // explicit --connect-url override
   // The connect page is on the SPA (appBase, from the env preset), NOT the API base.
   return `${appBase.replace(/\/+$/, "")}/mcp-connect`;
 }

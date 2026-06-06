@@ -69,5 +69,5 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 ## Setup
 
 `npm install && npm run build`, then register the MCP with env `WEBCAKE_API_BASE`, `WEBCAKE_JWT`
-(+ optional `WEBCAKE_ORG_ID`, `WEBCAKE_HOST`, `WEBCAKE_APP_BASE`). The backend AI endpoints
+(+ optional `WEBCAKE_ENV`, `WEBCAKE_ORG_ID`, `WEBCAKE_APP_BASE`). The backend AI endpoints
 (`/api/v1/ai/*`) must be running (landing_page_backend, branch `feat/ai-page-element-mcp`).
