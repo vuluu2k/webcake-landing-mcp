@@ -46,6 +46,32 @@ function applyEnvFlag(argv: string[]): void {
   console.error(`[webcake] environment "${name}" — api ${p.apiBase}, app ${p.appBase}`);
 }
 
+/** Top-level CLI help — overview of every subcommand (stdout; not used in MCP mode). */
+function printHelp(): void {
+  console.log(
+    [
+      "webcake-landing-mcp — MCP server for building Webcake landing pages",
+      "",
+      "Usage: npx -y webcake-landing-mcp [command] [options]",
+      "",
+      "Commands:",
+      "  (none)             start the stdio MCP server (use this in IDE configs)",
+      "  install            configure the server in your IDE(s) — interactive (env + login/JWT)",
+      "  uninstall          remove the server from your IDE configs",
+      "  login              grab your Webcake token via the browser (saved to ~/.webcake-landing-mcp/auth.json)",
+      "  serve [--port N]   run the remote Streamable-HTTP server (default port 8787; or PORT env)",
+      "  help, --help, -h   show this help",
+      "",
+      "Global options:",
+      "  --env <local|staging|prod>   pick the API + app base URLs (default prod)",
+      "",
+      "More:",
+      "  npx -y webcake-landing-mcp install --help   # install-specific flags",
+      "  https://github.com/vuluu2k/webcake-landing-mcp",
+    ].join("\n")
+  );
+}
+
 async function main() {
   // Resolve the named environment (--env / WEBCAKE_ENV) before any config is read.
   applyEnvFlag(process.argv);
@@ -54,14 +80,13 @@ async function main() {
   // bundled IDE installer instead of starting the MCP server. Default (no
   // subcommand) starts the stdio server as usual.
   const sub = process.argv[2];
-  if (sub === "install" || sub === "uninstall" || sub === "--help" || sub === "-h") {
+  if (sub === "help" || sub === "--help" || sub === "-h") {
+    printHelp();
+    return;
+  }
+  if (sub === "install" || sub === "uninstall") {
     const { runInstaller } = await import("./install.js");
-    const rest =
-      sub === "uninstall"
-        ? ["--uninstall", ...process.argv.slice(3)]
-        : sub === "--help" || sub === "-h"
-          ? ["--help"]
-          : process.argv.slice(3);
+    const rest = sub === "uninstall" ? ["--uninstall", ...process.argv.slice(3)] : process.argv.slice(3);
     await runInstaller(rest);
     return;
   }
