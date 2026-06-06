@@ -3,8 +3,9 @@
 # In Coolify:  + New  ->  Docker Compose  ->  pick this repo, then set
 #   Base Directory:          /
 #   Docker Compose Location:  /deploy/coolify/docker-compose.yml
-# Deploy once, then add a Domain to the `webcake-mcp` service (port 8787) in the
-# Coolify UI — Coolify generates the Traefik routing + TLS for that domain.
+# Deploy once, then add a Domain to the `webcake-mcp` service in the Coolify UI.
+# Coolify substitutes that domain into SERVICE_FQDN_MCP below, and the Traefik
+# labels route + TLS-terminate it for you.
 #
 # Your MCP endpoint is then   https://<your-domain>/mcp
 # and a health probe lives at  https://<your-domain>/health
@@ -20,7 +21,13 @@ services:
     init: true
     restart: unless-stopped
     environment:
-      # Port the server listens on (read by `serve`); keep in sync with `expose`.
+      # Coolify auto-generates SERVICE_FQDN_MCP from the domain configured in the
+      # service UI. Set the domain there (e.g. mcp.example.com) and Coolify
+      # substitutes it into the Traefik labels below at deploy time. The trailing
+      # `/` is the path the domain maps to.
+      SERVICE_FQDN_MCP: /
+      # Port the server listens on (read by `serve`); keep in sync with `expose`
+      # and the traefik loadbalancer port label.
       PORT: 8787
       # Target environment — picks the API + app base URLs by name (one source of truth):
       #   local   → api http://localhost:5800           app http://localhost:5173
@@ -38,12 +45,15 @@ services:
       # WEBCAKE_APP_BASE: ${WEBCAKE_APP_BASE}
       # WEBCAKE_ORG_ID: ${WEBCAKE_ORG_ID}
       # WEBCAKE_JWT: ${WEBCAKE_JWT}   # SINGLE-TENANT only — a shared server secret
-    # Coolify's reverse proxy routes your Domain to this internal container port.
+    # Traefik (Coolify's reverse proxy) reaches this container over the shared
+    # `coolify` network; the port is published only internally.
     expose:
       - "8787"
     # For local `docker compose up` (or non-Coolify hosts) publish the port instead:
     # ports:
     #   - "8787:8787"
+    networks:
+      - coolify
     healthcheck:
       # Node has global fetch (no curl/wget needed in the alpine image).
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -51,3 +61,27 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
+      - "traefik.http.services.webcake-mcp.loadbalancer.server.port=8787"
+      # HTTPS router — Coolify substitutes SERVICE_FQDN_MCP at deploy time.
+      - "traefik.http.routers.webcake-mcp.rule=Host(`${SERVICE_FQDN_MCP}`)"
+      - "traefik.http.routers.webcake-mcp.entrypoints=https"
+      - "traefik.http.routers.webcake-mcp.tls=true"
+      - "traefik.http.routers.webcake-mcp.tls.certresolver=letsencrypt"
+      # HTTP → HTTPS redirect.
+      - "traefik.http.routers.webcake-mcp-http.rule=Host(`${SERVICE_FQDN_MCP}`)"
+      - "traefik.http.routers.webcake-mcp-http.entrypoints=http"
+      - "traefik.http.routers.webcake-mcp-http.middlewares=webcake-mcp-redirect"
+      - "traefik.http.middlewares.webcake-mcp-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.webcake-mcp-redirect.redirectscheme.permanent=true"
+
+networks:
+  coolify:
+    external: true

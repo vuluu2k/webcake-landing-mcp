@@ -35,8 +35,9 @@ no secret is baked into the image (see [Authentication](#authentication)).
 3. **Deploy.** Coolify builds the Dockerfile (the offline `smoke` test gates the
    build — it must print `ALL GOOD`) and starts the `webcake-mcp` service.
 4. Open the **`webcake-mcp` service → Domains**, add a domain (e.g.
-   `https://mcp.example.com`), and confirm the port is **8787**. Coolify provisions
-   the Traefik route + TLS automatically.
+   `https://mcp.example.com`). Coolify fills `SERVICE_FQDN_MCP` from it, and the
+   explicit Traefik labels in the compose file route + TLS-terminate (Let's Encrypt)
+   it on port **8787**, with an HTTP→HTTPS redirect.
 5. Verify: `curl https://mcp.example.com/health` → `{"ok":true,…}`.
 
 Your MCP URL is **`https://mcp.example.com/mcp`**.
@@ -101,12 +102,19 @@ Set values in Coolify's **Environment Variables** UI (never commit secrets):
 
 ## Test locally (without Coolify)
 
-From the repo root, uncomment the `ports:` block in `docker-compose.yml`, then:
+The compose file attaches to Coolify's external `coolify` network and uses Traefik
+labels, neither of which exist on a plain Docker host — so for a local smoke test,
+build and run the image directly instead:
 
 ```bash
-docker compose -f deploy/coolify/docker-compose.yml up --build
+docker build -f deploy/coolify/Dockerfile -t webcake-mcp .
+docker run --rm -p 8787:8787 webcake-mcp
 curl http://localhost:8787/health      # → {"ok":true,...}
 ```
+
+(Or create the network once — `docker network create coolify` — uncomment the
+`ports:` block, then `docker compose -f deploy/coolify/docker-compose.yml up --build`.
+The Traefik labels are simply ignored without a Traefik instance.)
 
 ## Updating
 
