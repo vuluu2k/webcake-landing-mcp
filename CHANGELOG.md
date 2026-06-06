@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.13] - 2026-06-06
+
+### Changed
+- The `login` subcommand now re-focuses the terminal automatically on macOS once the browser delivers the OAuth token, so the user does not need to manually switch back after connecting.
+- The browser success page shown after `login` completes has been redesigned with a modern animated card layout, an SVG check-mark badge, and full dark-mode support.
+
 ## [1.0.12] - 2026-06-06
 
 ### Added
