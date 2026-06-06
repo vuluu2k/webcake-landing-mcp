@@ -205,6 +205,12 @@ Claude → **Add custom connector**:
 - **Name**: `webcake-landing`
 - **Remote MCP server URL**: `https://<host-của-bạn>/mcp`
 
+Dialog không có ô header, nên muốn truyền token qua đó thì **để vào URL**:
+`https://<host-của-bạn>/mcp?jwt=<ljwt>` (nhận thêm `&api_base=…`, `&org_id=…`, `&host=…`, `&app_base=…`).
+Mỗi người một URL với `jwt` riêng → **per-user mà không cần OAuth**. Header `x-webcake-jwt` thật vẫn ưu tiên
+hơn query. ⚠️ Token nằm trong URL có thể lọt vào access/proxy log — **bắt buộc HTTPS** và tắt log query ở
+reverse proxy; dùng header (hoặc OAuth) an toàn hơn nếu client hỗ trợ.
+
 ### Auth — mỗi request, đa người dùng (không token chung)
 
 Ở stdio JWT lấy từ env. Ở chế độ HTTP, mỗi request mang credential **riêng** của người gọi qua header,
@@ -224,9 +230,9 @@ Header nào thiếu thì fallback về biến env tương ứng — nên cũng c
 > secret; chỉ tool lưu trữ (`create_page`, `update_page`, …) dùng JWT. Request không có JWT thì các tool đó
 > trả `missing_env` chứ không gọi mạng.
 >
-> Lưu ý: dialog claude.ai **không có ô nhập header** (chỉ có OAuth, mà server này **chưa làm**). Nên qua dialog
-> đó bạn được auth **single-account** (token ở env server); muốn **per-user** dùng client hỗ trợ header
-> (`mcp-remote --header …`, bên dưới) hoặc thêm OAuth.
+> Lưu ý: dialog claude.ai **không có ô header** (chỉ có OAuth, mà server này **chưa làm**). Hai cách lách:
+> để token vào URL dạng `?jwt=<ljwt>` (như trên — per-user, nhưng token lộ trong log), hoặc dùng client hỗ trợ
+> header (`mcp-remote --header …`, bên dưới). Đặt token ở env server thì thành **single-account** chung cho mọi người trên URL đó.
 
 ### Test ở local (không cần URL public)
 
@@ -268,8 +274,9 @@ chạy trên máy:
 **Auth trên server chia sẻ:**
 - **Single-account** (dùng được với dialog ngay): đặt `WEBCAKE_JWT` ở env service → mọi người dùng connector
   chung 1 tài khoản Webcake. Giữ URL riêng tư / có cổng chặn; token hết hạn (~90 ngày).
-- **Per-user** (mỗi người 1 account): cần **OAuth** (chưa làm). Trước mắt per-user chỉ chạy qua client hỗ trợ
-  header (`mcp-remote` với `--header x-webcake-jwt:…`), không qua dialog claude.ai.
+- **Per-user** (mỗi người 1 account): cho mỗi người một URL với `?jwt=<ljwt>` riêng (chạy được qua dialog,
+  nhưng token lộ trong log), hoặc dùng client hỗ trợ header (`mcp-remote --header …`), hoặc thêm **OAuth**
+  (chưa làm) cho gọn nhất.
 
 ## Cài thủ công (local)
 

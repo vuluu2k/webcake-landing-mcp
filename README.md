@@ -205,6 +205,12 @@ host), then in Claude → **Add custom connector**:
 - **Name**: `webcake-landing`
 - **Remote MCP server URL**: `https://<your-host>/mcp`
 
+The dialog has no header field, so to pass a token through it, **put it in the URL**:
+`https://<your-host>/mcp?jwt=<ljwt>` (also accepts `&api_base=…`, `&org_id=…`, `&host=…`, `&app_base=…`).
+Give each person a URL with their own `jwt` → **per-user without OAuth**. An explicit `x-webcake-jwt` header
+still wins over the query. ⚠️ A token in a URL can land in access/proxy logs — require **HTTPS** and disable
+query-string logging on your reverse proxy; a header (or OAuth) is safer when the client supports it.
+
 ### Auth — per-request, multi-user (no shared token)
 
 In stdio mode the JWT comes from env. In HTTP mode each request carries the caller's **own** credentials
@@ -225,9 +231,10 @@ by setting `WEBCAKE_API_BASE` + `WEBCAKE_JWT` in the host's env and keeping the 
 > no secret; only the persistence tools (`create_page`, `update_page`, …) use the JWT. If a request has no
 > JWT, those tools return `missing_env` instead of touching the network.
 >
-> Note: the basic claude.ai connector dialog has **no field for custom headers** (it only offers OAuth, which
-> this server does not implement yet). So through that dialog you get **single-account** auth (a token in the
-> server's env); for **per-user** auth use a header-capable client (`mcp-remote --header …`, below) or add OAuth.
+> Note: the claude.ai connector dialog has **no header field** (only OAuth, which this server does not
+> implement yet). Two ways around it: put the token in the URL as `?jwt=<ljwt>` (above — per-user, but the
+> token shows up in logs), or use a header-capable client (`mcp-remote --header …`, below). A token in the
+> server's env instead gives a shared **single-account** for everyone on that URL.
 
 ### Test it locally (no public URL needed)
 
@@ -269,8 +276,9 @@ running `serve` server on your machine:
 **Auth on a shared server:**
 - **Single-account** (works with the dialog today): `WEBCAKE_JWT` in the service env → everyone using the
   connector shares that one Webcake account. Keep the URL private / gated; the token expires (~90 days).
-- **Per-user** (each person their own account): needs **OAuth** (not implemented). Until then, per-user works
-  only via a header-capable client (`mcp-remote` with `--header x-webcake-jwt:…`), not the claude.ai dialog.
+- **Per-user** (each person their own account): give each person a URL with their own `?jwt=<ljwt>` (works
+  through the dialog, but the token appears in logs), or use a header-capable client (`mcp-remote --header …`),
+  or add **OAuth** (not implemented) for the cleanest flow.
 
 ## Manual Setup (local)
 
