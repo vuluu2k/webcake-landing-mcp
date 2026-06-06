@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-06-06
+
+### Changed
+- The HTTP server now accepts Webcake credentials (`jwt`, `api_base`, `org_id`, `host`, `app_base`) as URL query parameters (e.g. `.../mcp?jwt=<token>`) in addition to the existing `x-webcake-*` / `Authorization: Bearer` headers, enabling clients such as the claude.ai custom connector dialog that cannot set custom headers to authenticate without environment variables.
+
 ## [1.0.8] - 2026-06-06
 
 ### Added
