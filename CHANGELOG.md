@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-06-06
+
+### Changed
+- `get_generation_guide` and server instructions now document the sticky/fixed header overlay behavior: a section with `config.sticky` overlays the page and does not push content below it down, so agents are instructed to offset the first section's topmost elements by the header height (~60–72 px) on both breakpoints and to avoid duplicating the shop name in both the header and the hero.
+- Intake instructions in `get_generation_guide` and server instructions are strengthened to require gathering answers before generating even for "quick" or "test" pages; agents must restate a short outline (sections + CTA + colors) and wait for explicit user confirmation before calling `new_page_skeleton` or `create_page`.
+- The rule against inventing data is expanded into a dedicated instruction covering phone/hotline/Zalo, price (and original price), address, shop/brand name, links/URLs, email, opening hours, and social-proof numbers; agents are directed to ask for any missing value and may use a clearly-labelled placeholder only when the user explicitly declines to provide it.
+- Intake question list in `get_generation_guide` adds a required "Product + price" question for sales and ads pages, and rephrases the sections question to invite proposing a sensible default layout for the user to confirm.
+
 ## [1.0.6] - 2026-06-06
 
 ### Internal
