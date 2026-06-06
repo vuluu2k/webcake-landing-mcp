@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-06-06
+
+### Internal
+
+- `CONTAINER_TYPES` is now derived from the `container` flag on each `LIBRARY` entry in `library.ts` rather than a separate hardcoded list in `factory.ts`, eliminating a silent-drift risk when new element types are added; `factory.ts` re-exports both `CONTAINER_TYPES` and `FIELD_TYPES` for backward compatibility.
+- `FIELD_TYPES` moved to `library.ts`, co-located with `LIBRARY` as the single source of truth for element structural flags.
+- Smoke gate now asserts the `page-schema.json` `elementType` enum exactly matches `LIBRARY` keys, so adding a type to one file without the other fails `npm run smoke` immediately rather than silently diverging.
+
 ## [1.0.4] - 2026-06-06
 
 ### Added
