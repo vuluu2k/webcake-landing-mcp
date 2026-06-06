@@ -24,7 +24,7 @@ Backend (need `WEBCAKE_API_BASE` + `WEBCAKE_JWT` env):
 `create_page` / `update_page` default to `dry_run=true`.
 
 Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-element-schema.md),
-[src/page-schema.json](../../../src/page-schema.json).
+[src/domains/landing/page-schema.json](../../../src/domains/landing/page-schema.json).
 
 ## Page-source model (cheat-sheet)
 

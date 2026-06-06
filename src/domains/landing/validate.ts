@@ -8,12 +8,15 @@
  */
 import { readFileSync } from "node:fs";
 import Ajv2020Module from "ajv/dist/2020.js";
-import { CONTAINER_TYPES, FIELD_TYPES } from "./factory.js";
+import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
+import type { ValidationResult } from "../../core/domain.js";
+
+export type { ValidationResult };
 
 // ajv ships as CJS; under Node16 ESM the constructor is on `.default`.
 const Ajv2020: any = (Ajv2020Module as any).default ?? Ajv2020Module;
 
-// Loaded at runtime (the build copies src/page-schema.json -> dist/page-schema.json)
+// Loaded at runtime (the build copies this JSON beside the compiled validator)
 // to avoid JSON-import-attribute differences across Node versions.
 export const pageSchema: object = JSON.parse(
   readFileSync(new URL("./page-schema.json", import.meta.url), "utf8")
@@ -22,7 +25,6 @@ export const pageSchema: object = JSON.parse(
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateSchema = ajv.compile(pageSchema);
 
-// Actions whose `target` is expected to be an element id (vs a URL / text).
 // Actions whose `target` is an existing element id (so a missing target is a
 // dangling-reference warning). NOTE: play_audio/stop_audio are intentionally NOT
 // here — their target is an audio file URL, not an element id (render_v4 event
@@ -35,7 +37,7 @@ const ELEMENT_TARGET_ACTIONS = new Set([
 
 const TOP_LEVEL_TYPES = new Set(["section", "dynamic_page", "popup"]);
 
-// Fixed canvas reference (matches library CANVAS) used for the layout/bounds check.
+// Fixed canvas reference (matches vocab CANVAS) used for the layout/bounds check.
 const CANVAS_DESKTOP = 960;
 const CANVAS_MOBILE = 420;
 const DEFAULT_SECTION_HEIGHT = 800;
@@ -51,13 +53,6 @@ function num(v: unknown): number | undefined {
   }
   return undefined;
 }
-
-export type ValidationResult = {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-  stats: { sections: number; popups: number; elements: number; ids: number };
-};
 
 /** Accept an object or a JSON string. Returns the parsed page or throws. */
 export function coercePage(input: unknown): any {

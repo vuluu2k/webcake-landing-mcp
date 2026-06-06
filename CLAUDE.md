@@ -15,7 +15,7 @@ Published to npm as `webcake-landing-mcp`; runs via `node dist/index.js` or `npx
 ## Commands
 
 ```bash
-npm run build      # tsc -> dist/ AND copies src/page-schema.json -> dist/ (both steps matter, see below)
+npm run build      # tsc -> dist/ AND copies src/**/*.json -> dist/ (scripts/copy-assets.mjs; both steps matter)
 npm run smoke      # offline self-test of factory + validator; MUST print "ALL GOOD". Run after every change.
 npm run dev        # tsc --watch
 npm start          # node dist/index.js (start the stdio server)
@@ -29,9 +29,9 @@ runs `build && smoke`, so a broken smoke test blocks publishing.
 
 ## Build rules (must follow when editing `src/`)
 
-1. **The model is in four files — change them together.** A page-source/element change touches `src/page-schema.json`, `src/factory.ts`, `src/library.ts`, and `src/validate.ts`. Editing one without the others passes `tsc` but breaks `smoke`.
-2. **Gate every change:** `npm run build && npm run smoke` — must end with `ALL GOOD`. Editing the schema requires a rebuild (`dist/page-schema.json` is runtime data copied by the build).
-3. **New tools** go in `src/index.ts` via `server.tool(...)`, return through the `text()` helper, and register the name in `INSTRUCTIONS` + `README.md` + the `webcake-landing` skill. **New HTTP** goes in `src/webcake.ts`.
+1. **Each element is ONE descriptor.** An element's docs + `container`/`field` flags + `defaultName` + factory `seed` + `example` all live in a single object in `src/domains/landing/elements/<category>.ts`. `CONTAINER_TYPES`/`FIELD_TYPES`/the catalog/`createElement` all DERIVE from these — adding or editing a type is a one-file change. Only `src/domains/landing/page-schema.json`'s `elementType` enum must be updated alongside; `smoke` re-checks it against the descriptor keys, so schema drift fails the gate.
+2. **Gate every change:** `npm run build && npm run smoke` — must end with `ALL GOOD`. Editing the schema requires a rebuild (`dist/domains/landing/page-schema.json` is runtime data copied by the build).
+3. **New tools** go in a `src/tools/*.ts` group via `server.tool(...)`, return through the `text()` helper (`src/mcp/response.ts`), and register the name in `src/domains/landing/instructions.ts` + `README.md` + the `webcake-landing` skill. **New HTTP** goes in `src/persistence/webcake-client.ts`.
 4. **Mutating tools default to `dry_run=true`** and return a JWT-redacted request preview; only the network when `dry_run===false`.
 5. **stdout is the MCP channel** — log with `console.error` only. **ESM/Node16** — relative imports end in `.js`. **Secrets** come from `WEBCAKE_JWT` env only; the repo is public.
 
@@ -41,22 +41,32 @@ Delegate matching work to them.
 
 ## Architecture
 
-The page-source model is the heart of the project. It is encoded in **four files that must stay in sync** —
-changing the model in one without the others will pass `tsc` but fail `smoke` or mislead the agent:
+The code is layered so the landing knowledge can grow into other output types later without rewiring the core. `src/core/` is domain-agnostic, `src/domains/landing/` is everything landing-specific, and the tool/server layers depend only on the `Domain` seam.
+
+- **`src/core/`** — domain-agnostic primitives:
+  - `element.ts` — the `ElementNode` shape, `base()`, the `setStyle/setBox/seedPosition` helpers, `randomId`, `imgPlaceholder`, `defaultAnimation`.
+  - `descriptor.ts` — the `ElementDescriptor` model + `createElementFrom`/`buildCatalog`/`deriveContainerTypes`/`deriveFieldTypes`.
+  - `domain.ts` — the `Domain` interface (the seam the tools depend on) + `ValidationResult`.
+
+The landing element model is the heart of the project. It lives under `src/domains/landing/`:
 
 | File | Role |
 |------|------|
-| [src/page-schema.json](src/page-schema.json) | Canonical JSON Schema (Draft 2020-12). Loaded at **runtime** via `readFileSync` (not `import`), so the build must copy it into `dist/`. |
-| [src/factory.ts](src/factory.ts) | `createElement(type)` produces a structurally-valid default node per type; `createPageSource()`/`defaultSettings()` build the top-level shell. Re-exports `CONTAINER_TYPES`/`FIELD_TYPES` from library.ts for back-compat. |
-| [src/library.ts](src/library.ts) | The element catalog (`LIBRARY`): per-type AI hints, key `specials`, examples — and the **single source of truth** for `CONTAINER_TYPES` (derived from each entry's `container` flag) and `FIELD_TYPES`. Plus `GENERATION_GUIDE`, `CANVAS` (desktop 960 / mobile 420), and the event vocab (`CLICK_ACTIONS`, `HOVER_ACTIONS`, `SUCCESS_ACTIONS`, `ERROR_ACTIONS`, `DELAY_ACTIONS`, `EVENT_TRIGGERS`). |
-| [src/validate.ts](src/validate.ts) | `validatePage()` — ajv structural check + semantic checks the schema can't express (unique ids, dangling event/option/connect targets, duplicate `field_name` per form, children-only-on-containers, missing `field_name`, off-canvas layout bounds). |
+| [src/domains/landing/elements/](src/domains/landing/elements/) | The element catalog as **ONE descriptor per type**, split by category (`layout/content/form/commerce/marketing.ts`). Each descriptor carries the element's docs (`summary`, `useWhen`, `keySpecials`, `example`), its `container`/`field` flags, its `defaultName`, and a `seed(el)` that stamps the editor's visual defaults. `index.ts` concatenates them and DERIVES `LIBRARY` (the catalog), `CONTAINER_TYPES`, `FIELD_TYPES`, `ELEMENT_TYPES`, and `createElement`. |
+| [src/domains/landing/page-schema.json](src/domains/landing/page-schema.json) | Canonical JSON Schema (Draft 2020-12). Loaded at **runtime** via `readFileSync` (not `import`), so the build must copy it into `dist/`. |
+| [src/domains/landing/validate.ts](src/domains/landing/validate.ts) | `validatePage()` — ajv structural check + semantic checks the schema can't express (unique ids, dangling event/option/connect targets, duplicate `field_name` per form, children-only-on-containers, missing `field_name`, off-canvas layout bounds). Consumes `CONTAINER_TYPES`/`FIELD_TYPES` from `elements/`. |
+| [src/domains/landing/page.ts](src/domains/landing/page.ts) | `createPageSource()`/`defaultSettings()` — the top-level `{ page, popup, settings, options, cartConfigs }` shell. |
+| [guide.ts](src/domains/landing/guide.ts) · [vocab.ts](src/domains/landing/vocab.ts) · [instructions.ts](src/domains/landing/instructions.ts) | `GENERATION_GUIDE`; `CANVAS` (desktop 960 / mobile 420) + the event vocab (`CLICK/HOVER/SUCCESS/ERROR/DELAY_ACTIONS`, `EVENT_TRIGGERS`); the server `instructions` string. |
+| [src/domains/landing/index.ts](src/domains/landing/index.ts) | `landingDomain` — assembles all of the above into the `Domain` object the server consumes. |
 
-To add or edit an element, the data lives in **`LIBRARY` (library.ts)** — its `container` flag drives `CONTAINER_TYPES`, and `FIELD_TYPES` sits beside it; add a `createElement` case in factory.ts only for the visual defaults (sizes/specials). `smoke` asserts the `page-schema.json` `elementType` enum stays in sync with `LIBRARY` keys, so schema drift fails the gate rather than passing silently.
+To add or edit an element, change **one descriptor** in `src/domains/landing/elements/<category>.ts` (`container: true` auto-joins `CONTAINER_TYPES`; `field: true` auto-joins `FIELD_TYPES`; add a `seed` for visual defaults; any `example` is smoke-tested and must validate), then extend the `elementType` enum in `page-schema.json`. `smoke` asserts the enum stays in sync with the descriptor keys, so schema drift fails the gate rather than passing silently.
 
-Surrounding these:
+Surrounding the domain:
 
-- [src/index.ts](src/index.ts) — MCP server: defines all 12 tools, the server `instructions` string (the rules shipped to every client), and a subcommand dispatch so `webcake-landing-mcp install|uninstall` runs the bundled installer instead of starting the server.
-- [src/webcake.ts](src/webcake.ts) — thin HTTP client to the Webcake backend (create/update/list pages, list orgs). Builds dry-run request previews with the JWT redacted; reads all config from env via `readConfig()`.
+- [src/index.ts](src/index.ts) — thin entry: subcommand dispatch (`webcake-landing-mcp install|uninstall|--help` runs the bundled installer) then starts the stdio server.
+- [src/server.ts](src/server.ts) — `createServer()`: builds the `McpServer` with the domain's `instructions` and registers the tool groups.
+- [src/tools/](src/tools/) — the 12 tools as three group modules (`reference.ts`, `generation.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain`. The `text()` helper lives in [src/mcp/response.ts](src/mcp/response.ts).
+- [src/persistence/](src/persistence/) — the Webcake backend: `config.ts` (`readConfig` from env), `webcake-client.ts` (create/update/list pages, list orgs + JWT-redacted dry-run previews), `types.ts`.
 - [src/install.ts](src/install.ts) — bundled IDE installer; writes the MCP server block into claude-desktop / claude-code / cursor / windsurf / augment / codex config files.
 
 The 12 tools fall into three groups: **reference** (`get_generation_guide`, `list_elements`, `get_element`,
@@ -74,8 +84,8 @@ When touching the model, preserve these (they live in the schema, the guide, and
 
 ## Conventions that bite
 
-- **ESM + Node16 module resolution.** Relative imports use a `.js` extension even though the source is `.ts` (e.g. `import { validatePage } from "./validate.js"`). The `bin` shebang and `"type": "module"` matter.
-- **`page-schema.json` is runtime data, not a TS import.** `npm run build` is `tsc` *plus* a `copyFileSync` step — if you only run `tsc`, `dist/page-schema.json` is missing and `validate.ts` throws at startup. Editing the schema requires a rebuild before smoke/run.
+- **ESM + Node16 module resolution.** Relative imports use a `.js` extension even though the source is `.ts` (e.g. `import { validatePage } from "./validate.js"`, `import { base } from "../../core/element.js"`). The `bin` shebang and `"type": "module"` matter.
+- **`page-schema.json` is runtime data, not a TS import.** `npm run build` is `tsc` *plus* `scripts/copy-assets.mjs` (mirrors every `src/**/*.json` into `dist/`) — if you only run `tsc`, `dist/domains/landing/page-schema.json` is missing and `validate.ts` throws at startup. Editing the schema requires a rebuild before smoke/run.
 - **ajv is CJS under ESM:** `validate.ts` reaches the constructor via `(Ajv2020Module as any).default ?? Ajv2020Module`.
 - **stdout is the MCP channel** — all logging goes to `console.error` (stderr) only. Never `console.log` from server code.
 - **`create_page`/`update_page` default to `dry_run=true`** (validate + return the redacted request they *would* send). Real writes need `dry_run=false`.
@@ -99,7 +109,7 @@ Two paths, both gated by build+smoke:
 
 Two project skills (in `.claude/skills/`) — pick by what you're doing:
 
-- [webcake-mcp-dev](.claude/skills/webcake-mcp-dev/SKILL.md) — **working ON this server**: recipes for adding a tool, adding an element type, the 4-file sync rule, and the build+smoke gate. Use this when editing `src/`.
+- [webcake-mcp-dev](.claude/skills/webcake-mcp-dev/SKILL.md) — **working ON this server**: recipes for adding a tool, adding an element type (one descriptor), the layered `core`/`domain`/`tools` layout, and the build+smoke gate. Use this when editing `src/`.
 - [webcake-landing](.claude/skills/webcake-landing/SKILL.md) — **using the MCP** to build/edit landing pages end-to-end.
 
 [AGENTS.md](AGENTS.md) has the agent-facing runtime rules and a condensed repo-rules list.

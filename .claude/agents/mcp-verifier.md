@@ -12,14 +12,14 @@ commands and quote the output; never claim "passes" without having run it.
 ## Checks (run all, report each)
 
 1. **Build + smoke gate** — `npm run build && npm run smoke`. PASS only if the output ends with `ALL GOOD`. Paste the final lines as evidence.
-2. **Schema shipped to dist** — confirm `dist/page-schema.json` exists after the build (`ls dist/`). The server `readFileSync`s it at runtime; if it's missing, startup throws. This catches anyone who ran bare `tsc` instead of `npm run build`.
+2. **Schema shipped to dist** — confirm `dist/domains/landing/page-schema.json` exists after the build (`ls dist/domains/landing/`). The server `readFileSync`s it at runtime; if it's missing, startup throws. This catches anyone who ran bare `tsc` instead of `npm run build` (which also runs `scripts/copy-assets.mjs`).
 3. **Server starts** — `node dist/index.js` should print `[webcake-elements] MCP server ready on stdio.` to **stderr** then wait on stdin. Start it, confirm the line, kill it. (It reads MCP over stdio, so it will hang — that's expected; time-box it.)
 4. **Convention spot-checks** (grep, report violations only):
    - No `console.log(` in `src/` (stdout is the MCP channel — must be `console.error`).
    - Relative imports in `src/` end in `.js` (ESM/Node16), not `.ts`.
    - No hard-coded secrets/JWT/tokens or real page data committed (repo is public; JWT must come from `WEBCAKE_JWT`).
    - Mutating tools still default to `dry_run=true` (look for `dry_run !== false`).
-5. **Tool registration drift** — if a tool was added/renamed, confirm its name appears in `INSTRUCTIONS` (src/index.ts) and the `README.md` tool list.
+5. **Tool registration drift** — if a tool was added/renamed, confirm its name appears in `INSTRUCTIONS` (`src/domains/landing/instructions.ts`) and the `README.md` tool list.
 
 ## Output
 

@@ -2,7 +2,7 @@
 
 This document is the authoritative, comprehensive catalog of every Webcake element type: the exact `specials`, `config`, and notable `style` keys each element reads at runtime.
 
-**Derivation:** All key names and allowed values are drawn directly from the `render_v4` renderer source files (`.js` / `.vue`). File:line citations are preserved throughout. The MCP's concise live version lives in `src/library.ts` (the `LIBRARY` constant); `get_element` exposes it at tool-call time. This document is richer — it covers every key the renderer actually reads, including those absent from the current LIBRARY.
+**Derivation:** All key names and allowed values are drawn directly from the `render_v4` renderer source files (`.js` / `.vue`). File:line citations are preserved throughout. The MCP's concise live version lives in the element descriptors under `src/domains/landing/elements/` (the per-type `keySpecials`, derived into the `LIBRARY` catalog); `get_element` exposes it at tool-call time. This document is richer — it covers every key the renderer actually reads, including those absent from the descriptors.
 
 **How to use:** When creating or editing a page element, consult the element's section below for the full list of valid specials. Cross-cutting keys (sticky, animation, hide/lock, notification, custom tracking) apply to every element and are documented once in §1.
 
@@ -1666,7 +1666,7 @@ Source: TB:55–69.
 
 ### 6.6 `product-select` — STUB
 
-**This type has no renderer anywhere in the codebase.** Zero hits across all `.js`/`.vue`/`.ts` files under the backend `assets/` directory. The type string appears only in `webcake-landing-mcp/src/page-schema.json:80` and `library.ts:351`. It is not in `editor/factory.js`, `render_v4/src/index.js`, or any Vue component.
+**This type has no renderer anywhere in the codebase.** Zero hits across all `.js`/`.vue`/`.ts` files under the backend `assets/` directory. The type string appears only in `webcake-landing-mcp/src/domains/landing/page-schema.json` (the `elementType` enum) and its descriptor in `src/domains/landing/elements/commerce.ts`. It is not in `editor/factory.js`, `render_v4/src/index.js`, or any Vue component.
 
 An AI or user generating this type will produce a page element that **does nothing at runtime**.
 

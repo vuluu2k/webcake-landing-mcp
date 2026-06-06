@@ -4,8 +4,8 @@ Rules for AI agents **using** this MCP and **working on** this repo.
 
 ## Runtime rules (when an LLM uses the webcake-landing tools)
 
-These are also served to the client via the server `instructions` (see `src/index.ts`)
-and the `get_generation_guide` tool. In short:
+These are also served to the client via the server `instructions` (see
+`src/domains/landing/instructions.ts`) and the `get_generation_guide` tool. In short:
 
 1. **Intake first.** Before generating a new page, ask the user 3–6 concrete questions
    (goal/page type, brand + tone + language, sections in order, primary CTA + destination,
@@ -32,13 +32,15 @@ See `.claude/skills/webcake-landing/SKILL.md` for the full workflow and
 ## Repo / dev rules (when editing this codebase)
 
 - TypeScript, ESM, Node 18+. Source in `src/`, build to `dist/` via `npm run build`
-  (`tsc` + copies `src/page-schema.json` → `dist/`).
+  (`tsc` + `scripts/copy-assets.mjs`, which mirrors every `src/**/*.json` into `dist/`).
 - After any change: `npm run build` then `npm run smoke` (must print `ALL GOOD`) before committing.
-- `src/page-schema.json` is the bundled canonical JSON Schema. If the page-source model
-  changes, update it AND `src/factory.ts` / `src/library.ts` / `src/validate.ts` together,
-  then rebuild and re-run smoke.
-- New tools go in `src/index.ts`; backend HTTP calls in `src/webcake.ts`; element knowledge
-  in `src/library.ts`; default node shapes in `src/factory.ts`; validation in `src/validate.ts`.
+- Each element is ONE descriptor in `src/domains/landing/elements/<category>.ts` (docs + `container`/
+  `field` flags + `defaultName` + factory `seed` + `example`); `CONTAINER_TYPES`/`FIELD_TYPES`/the catalog/
+  `createElement` derive from it. When the model changes, update the descriptor AND the `elementType` enum
+  in `src/domains/landing/page-schema.json` (+ `validate.ts` only for a new semantic rule), then rebuild + smoke.
+- New tools go in a `src/tools/*.ts` group; backend HTTP calls in `src/persistence/webcake-client.ts`;
+  element knowledge + default node shapes in `src/domains/landing/elements/`; validation in
+  `src/domains/landing/validate.ts`; domain-agnostic primitives in `src/core/`.
 - **Never commit secrets.** The JWT is read from the `WEBCAKE_JWT` env var only — never
   hard-code a token, account, or page data in the repo. Scan before pushing (the repo is public).
 - The backend endpoints this MCP calls live in `landing_page_backend`
@@ -46,4 +48,4 @@ See `.claude/skills/webcake-landing/SKILL.md` for the full workflow and
 
 When editing `src/`, follow the `webcake-mcp-dev` skill
 (`.claude/skills/webcake-mcp-dev/SKILL.md`) — it has the add-a-tool / add-an-element
-recipes and the four-files-stay-in-sync rule. Architecture overview is in `CLAUDE.md`.
+recipes and the one-descriptor element model. Architecture overview is in `CLAUDE.md`.

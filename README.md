@@ -190,7 +190,7 @@ The MCP config is the same as the local one, but `command`/`args` point at `npx`
 git clone https://github.com/vuluu2k/webcake-landing-mcp.git
 cd webcake-landing-mcp
 npm install        # postinstall `prepare` builds dist/ automatically
-npm run build      # (re)build: tsc -> dist/ + copies page-schema.json
+npm run build      # (re)build: tsc -> dist/ + copies src/**/*.json (page-schema.json) into dist/
 npm run smoke      # offline self-test of factory + validator (prints "ALL GOOD")
 ```
 
@@ -603,5 +603,5 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 - Colors are `rgba()`; `top/left/width/height/fontSize` are numbers (px); form inputs need a unique `specials.field_name`.
 
 Reference: [docs/page-element-schema.md](docs/page-element-schema.md) and
-[src/page-schema.json](src/page-schema.json) (the bundled JSON Schema, Draft 2020-12). The schema mirrors
+[src/domains/landing/page-schema.json](src/domains/landing/page-schema.json) (the bundled JSON Schema, Draft 2020-12). The schema mirrors
 the real editor `page_source` shape.

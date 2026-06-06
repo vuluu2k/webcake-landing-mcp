@@ -190,7 +190,7 @@ Cấu hình MCP giống bản local, chỉ khác `command`/`args` trỏ tới `n
 git clone https://github.com/vuluu2k/webcake-landing-mcp.git
 cd webcake-landing-mcp
 npm install        # postinstall `prepare` tự build dist/
-npm run build      # (re)build: tsc -> dist/ + copy page-schema.json
+npm run build      # (re)build: tsc -> dist/ + copy src/**/*.json (page-schema.json) vào dist/
 npm run smoke      # self-test offline của factory + validator (in "ALL GOOD")
 ```
 
@@ -604,5 +604,5 @@ gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả t
 
 Tham khảo: [docs/page-element-schema.md](docs/page-element-schema.md),
 [docs/element-specials-reference.md](docs/element-specials-reference.md) (tham chiếu đầy đủ mọi specials/event),
-và [src/page-schema.json](src/page-schema.json) (JSON Schema, Draft 2020-12). Schema phản ánh đúng
+và [src/domains/landing/page-schema.json](src/domains/landing/page-schema.json) (JSON Schema, Draft 2020-12). Schema phản ánh đúng
 hình dạng `page_source` thật của editor.

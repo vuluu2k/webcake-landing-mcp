@@ -2,9 +2,15 @@
  * Offline smoke test (no MCP transport): exercises the pure logic so we can
  * verify the server's building blocks without a client. Run: npm run smoke
  */
-import { createElement, CONTAINER_TYPES } from "./factory.js";
-import { LIBRARY } from "./library.js";
-import { validatePage, pageSchema } from "./validate.js";
+import {
+  createElement,
+  CONTAINER_TYPES,
+  FIELD_TYPES,
+  LIBRARY,
+  ELEMENT_TYPES,
+  ELEMENTS,
+} from "./domains/landing/elements/index.js";
+import { validatePage, pageSchema } from "./domains/landing/validate.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -15,6 +21,42 @@ const check = (name: string, cond: boolean, extra?: unknown) => {
     console.log(`FAIL  ${name}`, extra ?? "");
   }
 };
+
+const setEq = (a: Set<string>, b: string[]) =>
+  a.size === b.length && b.every((t) => a.has(t));
+
+console.log("== descriptors: the single source of truth is well-formed ==");
+{
+  const seen = new Map<string, number>();
+  for (const d of ELEMENTS) seen.set(d.type, (seen.get(d.type) || 0) + 1);
+  const dups = [...seen].filter(([, n]) => n > 1).map(([t]) => t);
+  check("no duplicate descriptor types", dups.length === 0, dups);
+  check(
+    "every descriptor has defaultName/summary/useWhen",
+    ELEMENTS.every((d) => !!d.defaultName && !!d.summary && !!d.useWhen),
+    ELEMENTS.filter((d) => !d.defaultName || !d.summary || !d.useWhen).map((d) => d.type)
+  );
+  check("LIBRARY keys match ELEMENT_TYPES", setEq(new Set(ELEMENT_TYPES), Object.keys(LIBRARY)), {
+    libraryKeys: Object.keys(LIBRARY).length,
+    elementTypes: ELEMENT_TYPES.length,
+  });
+  check("FIELD_TYPES ⊆ ELEMENT_TYPES", [...FIELD_TYPES].every((t) => ELEMENT_TYPES.includes(t)), [...FIELD_TYPES].filter((t) => !ELEMENT_TYPES.includes(t)));
+}
+
+console.log("== derived sets equal the known-good container/field lists (parity) ==");
+{
+  const EXPECTED_CONTAINERS = [
+    "section", "dynamic_page", "group", "grid", "grid-item", "carousel", "slide", "popup",
+    "form", "checkbox-group", "radio", "group-select",
+  ];
+  const EXPECTED_FIELDS = [
+    "input", "textarea", "select", "checkbox", "checkbox-group", "radio",
+    "address", "country-select", "quantity_input", "input-datetime",
+    "input-file", "signature", "verify-code", "group-select-item",
+  ];
+  check("CONTAINER_TYPES matches expected", setEq(CONTAINER_TYPES, EXPECTED_CONTAINERS), [...CONTAINER_TYPES]);
+  check("FIELD_TYPES matches expected", setEq(FIELD_TYPES, EXPECTED_FIELDS), [...FIELD_TYPES]);
+}
 
 console.log("== factory: every library type produces a valid skeleton ==");
 for (const type of Object.keys(LIBRARY)) {

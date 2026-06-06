@@ -1,52 +1,22 @@
 /**
- * Thin HTTP client to talk to a Webcake backend:
+ * Thin HTTP client to the Webcake backend:
  *  - list the account's organizations (GET /api/v1/org/organizations)
- *  - persist a generated page source (POST /api/v1/ai/create_page_from_source,
- *    added in lib/landing_page_web/controllers/v1/ai/ai_controller.ex)
+ *  - list / read / create / update the account's page sources (/api/v1/ai/*)
  *
- * The page lands in an organization when an `x-org-id` header is sent (resolved
- * by the backend `:org_check` plug). Without it the page is personal (org=null).
+ * A page lands in an organization when an `x-org-id` header is sent (resolved by
+ * the backend `:org_check` plug). Without it the page is personal (org=null).
+ * The build*Redacted helpers produce dry-run previews with the JWT masked.
  *
- * Config via environment (set in the MCP server config):
- *   WEBCAKE_API_BASE  e.g. http://localhost:5800   (required to call the backend)
- *   WEBCAKE_JWT       the account JWT               (required to call the backend)
- *   WEBCAKE_ORG_ID    optional default organization id for create_page
- *   WEBCAKE_HOST      optional Host header override (Phoenix routes by host)
- *   WEBCAKE_APP_BASE  optional base for editor/preview URLs in the result
+ * Endpoints live in the separate landing_page_backend repo
+ * (LandingPageWeb.V1.AiController, scope /api/v1/ai). Requires global fetch (Node 18+).
  */
-
-export type WebcakeConfig = {
-  base: string;
-  jwt: string;
-  orgId?: string;
-  host?: string;
-  appBase?: string;
-};
+import type { WebcakeConfig, Organization, CreateOutcome, PageSummary } from "./types.js";
 
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
 const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
 const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
-
-export function readConfig(): { config: WebcakeConfig | null; missing: string[] } {
-  const base = process.env.WEBCAKE_API_BASE;
-  const jwt = process.env.WEBCAKE_JWT;
-  const missing: string[] = [];
-  if (!base) missing.push("WEBCAKE_API_BASE");
-  if (!jwt) missing.push("WEBCAKE_JWT");
-  if (missing.length) return { config: null, missing };
-  return {
-    config: {
-      base: base!.replace(/\/+$/, ""),
-      jwt: jwt!,
-      orgId: process.env.WEBCAKE_ORG_ID,
-      host: process.env.WEBCAKE_HOST,
-      appBase: process.env.WEBCAKE_APP_BASE?.replace(/\/+$/, ""),
-    },
-    missing: [],
-  };
-}
 
 function authHeaders(config: WebcakeConfig, orgId?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -83,8 +53,6 @@ export function buildRequestRedacted(config: WebcakeConfig, name: string, source
   };
 }
 
-export type Organization = { id: number | string; name: string; type: number | null; is_default: boolean };
-
 /** List the account's organizations. type===1 is the default ("personal") org. */
 export async function listOrganizations(
   config: WebcakeConfig
@@ -116,17 +84,6 @@ export async function listOrganizations(
   const def = organizations.find((o) => o.is_default);
   return { ok: true, status: res.status, organizations, default_org_id: def?.id };
 }
-
-export type CreateOutcome = {
-  ok: boolean;
-  status: number;
-  page_id?: string;
-  editor_url?: string;
-  preview_url?: string;
-  organization_id?: number | string | null;
-  raw?: unknown;
-  error?: string;
-};
 
 /** Actually POST the source. Requires global fetch (Node 18+). */
 export async function createPage(
@@ -182,14 +139,6 @@ export async function createPage(
 // ---------------------------------------------------------------------------
 // Read / list / edit existing pages
 // ---------------------------------------------------------------------------
-
-export type PageSummary = {
-  id: string;
-  name: string;
-  organization_id: number | string | null;
-  engine?: number;
-  updated_at?: string;
-};
 
 async function getJson(url: string, config: WebcakeConfig) {
   let res: Response;
