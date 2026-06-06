@@ -4,6 +4,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.14] - 2026-06-06
+
+### Added
+- The HTTP server now serves the Webcake green bolt SVG at `/favicon.svg`, `/favicon.ico`, and `/icon.svg` so MCP clients that fetch a favicon from the server origin display a branded icon instead of a generic globe.
+- The MCP `initialize` handshake now includes a `serverInfo.icons` entry carrying a self-contained data URI of the Webcake icon, so clients that render server icons (e.g. the claude.ai custom-connector UI) show the branded icon without requiring a public URL.
+- `GET /` on the HTTP server now returns a minimal HTML page with a favicon link when the request includes `Accept: text/html`; programmatic health-check clients continue to receive the JSON `{ ok: true }` response.
+
 ## [1.0.13] - 2026-06-06
 
 ### Changed
