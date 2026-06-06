@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-06-06
+
+### Added
+- `get_generation_guide` now returns three dedicated per-trigger action dictionaries alongside the existing `click_actions` and `hover_actions`: `success_actions` (12 actions available on a form's `success` events after a successful submit, including `phone_call`, `download_file`, and `change_tab`), `error_actions` (3 actions available on a form's `error` events when validation fails), and `delay_actions` (`show_element` and `hide_element`, fired when an element scrolls into view).
+
+### Changed
+- Click and hover action entries in `get_generation_guide` now include an `Extra:` field listing each action's renderer-specific event-object keys (e.g. `open_link→targetURL/delayTime`, `scroll_to→scrollMore`, `change_tab→moveTo/tabIndex`, `show_hide_element→onlyMode/animation/animationOut`, `open_app→appTarget`+provider fields, `set_field_value→set_value`, `custom_js→custom_js`).
+- `GENERATION_GUIDE` events-item rule expanded: now names all five trigger types (`click`, `hover`, `success`, `error`, `delay`) with their applicable scopes and cross-references the per-trigger action maps returned by `get_generation_guide`.
+
+### Fixed
+- `validate_page` now warns when the same `field_name` appears in more than one input within a single form, preventing silent data collision on submit.
+- `validate_page` now warns when a `specials.options[].events_option` entry of type `showhide` or `collapse` carries a `promoId` that does not match any element id.
+- `validate_page` now warns when `specials.connectedSurvey` or `specials.connectedForm` references an element id that does not exist in the page.
+- `validate_page` now warns when a `set_field_value` event uses a `w-`-prefixed target that does not match any element id.
+- `validate_page` now warns on dangling `collapse` action targets; `collapse` was missing from the element-id target check.
+
 ## [1.0.3] - 2026-06-06
 
 ### Added
