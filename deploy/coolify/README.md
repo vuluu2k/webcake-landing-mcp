@@ -113,7 +113,9 @@ curl http://localhost:8787/health      # → {"ok":true,...}
 ```
 
 (Or create the network once — `docker network create coolify` — uncomment the
-`ports:` block, then `docker compose -f deploy/coolify/docker-compose.yml up --build`.
+`ports:` block, then run from the repo root with the project directory pinned there
+so the build `context: .` resolves correctly:
+`docker compose --project-directory . -f deploy/coolify/docker-compose.yml up --build`.
 The Traefik labels are simply ignored without a Traefik instance.)
 
 ## Updating

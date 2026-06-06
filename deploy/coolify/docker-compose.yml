@@ -15,7 +15,12 @@ services:
   webcake-mcp:
     build:
       # Build context = repo root, so the Dockerfile can see src/, package.json, …
-      context: ../..
+      # NOTE: compose resolves a relative `context` against the PROJECT DIRECTORY,
+      # not this file's location. Coolify runs with `--project-directory <repo root>`
+      # (Base Directory `/`), so the context is `.` and the Dockerfile path is
+      # repo-root-relative. (`../..` would overshoot to `/` and fail with
+      # "lstat /deploy: no such file or directory".)
+      context: .
       dockerfile: deploy/coolify/Dockerfile
     # tini as PID 1: proper signal forwarding + zombie reaping for `node`.
     init: true
