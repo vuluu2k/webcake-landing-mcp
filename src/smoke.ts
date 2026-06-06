@@ -4,7 +4,7 @@
  */
 import { createElement, CONTAINER_TYPES } from "./factory.js";
 import { LIBRARY } from "./library.js";
-import { validatePage } from "./validate.js";
+import { validatePage, pageSchema } from "./validate.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -123,6 +123,12 @@ for (const [type, doc] of Object.entries(LIBRARY)) {
   const rr = validatePage(wrapped);
   check(`example ${type} valid`, rr.valid, rr.errors);
 }
+
+console.log("== schema enum stays in sync with LIBRARY (single source of truth) ==");
+const enumTypes: string[] = (pageSchema as any).$defs?.elementType?.enum ?? [];
+const libTypes = Object.keys(LIBRARY);
+check("every LIBRARY type is in the schema enum", libTypes.every((t) => enumTypes.includes(t)), libTypes.filter((t) => !enumTypes.includes(t)));
+check("every schema enum type is in LIBRARY", enumTypes.every((t) => libTypes.includes(t)), enumTypes.filter((t) => !libTypes.includes(t)));
 
 console.log("== validate: form-data binding checks ==");
 const mkBox = () => ({ desktop: { config: {}, styles: {} }, mobile: { config: {}, styles: {} } });

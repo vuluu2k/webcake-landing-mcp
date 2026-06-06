@@ -724,6 +724,25 @@ export const LIBRARY: Record<string, ElementDoc> = {
   },
 };
 
+/**
+ * Structural flags — single source of truth, co-located with LIBRARY so adding or
+ * editing an element happens HERE (one entry) instead of being mirrored across
+ * files. factory.ts re-exports both; validate.ts consumes them.
+ *  - CONTAINER_TYPES is DERIVED from each entry's `container` flag (no second list
+ *    to keep in sync).
+ *  - FIELD_TYPES lists the form inputs that submit a value and therefore need a
+ *    unique specials.field_name.
+ */
+export const CONTAINER_TYPES = new Set(
+  Object.keys(LIBRARY).filter((t) => LIBRARY[t].container)
+);
+
+export const FIELD_TYPES = new Set([
+  "input", "textarea", "select", "checkbox", "checkbox-group", "radio",
+  "address", "country-select", "quantity_input", "input-datetime",
+  "input-file", "signature", "verify-code", "group-select-item",
+]);
+
 export const GENERATION_GUIDE = `You are generating the JSON source of a Webcake landing page that the editor renders directly.
 
 OUTPUT (top-level page source — matches the real editor shape)

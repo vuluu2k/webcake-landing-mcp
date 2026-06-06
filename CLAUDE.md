@@ -47,9 +47,11 @@ changing the model in one without the others will pass `tsc` but fail `smoke` or
 | File | Role |
 |------|------|
 | [src/page-schema.json](src/page-schema.json) | Canonical JSON Schema (Draft 2020-12). Loaded at **runtime** via `readFileSync` (not `import`), so the build must copy it into `dist/`. |
-| [src/factory.ts](src/factory.ts) | `createElement(type)` produces a structurally-valid default node per type; `createPageSource()`/`defaultSettings()` build the top-level shell. Owns `CONTAINER_TYPES` and `FIELD_TYPES` (the source of truth for "can hold children" / "needs field_name"). |
-| [src/library.ts](src/library.ts) | The element catalog (`LIBRARY`): per-type AI hints, key `specials`, examples. Plus `GENERATION_GUIDE`, `CANVAS` (desktop 960 / mobile 420), and the event vocab (`CLICK_ACTIONS`, `HOVER_ACTIONS`, `EVENT_TRIGGERS`). |
-| [src/validate.ts](src/validate.ts) | `validatePage()` — ajv structural check + semantic checks the schema can't express (unique ids, dangling event targets, children-only-on-containers, missing `field_name`, off-canvas layout bounds). |
+| [src/factory.ts](src/factory.ts) | `createElement(type)` produces a structurally-valid default node per type; `createPageSource()`/`defaultSettings()` build the top-level shell. Re-exports `CONTAINER_TYPES`/`FIELD_TYPES` from library.ts for back-compat. |
+| [src/library.ts](src/library.ts) | The element catalog (`LIBRARY`): per-type AI hints, key `specials`, examples — and the **single source of truth** for `CONTAINER_TYPES` (derived from each entry's `container` flag) and `FIELD_TYPES`. Plus `GENERATION_GUIDE`, `CANVAS` (desktop 960 / mobile 420), and the event vocab (`CLICK_ACTIONS`, `HOVER_ACTIONS`, `SUCCESS_ACTIONS`, `ERROR_ACTIONS`, `DELAY_ACTIONS`, `EVENT_TRIGGERS`). |
+| [src/validate.ts](src/validate.ts) | `validatePage()` — ajv structural check + semantic checks the schema can't express (unique ids, dangling event/option/connect targets, duplicate `field_name` per form, children-only-on-containers, missing `field_name`, off-canvas layout bounds). |
+
+To add or edit an element, the data lives in **`LIBRARY` (library.ts)** — its `container` flag drives `CONTAINER_TYPES`, and `FIELD_TYPES` sits beside it; add a `createElement` case in factory.ts only for the visual defaults (sizes/specials). `smoke` asserts the `page-schema.json` `elementType` enum stays in sync with `LIBRARY` keys, so schema drift fails the gate rather than passing silently.
 
 Surrounding these:
 

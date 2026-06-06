@@ -25,11 +25,11 @@ The page-source model is encoded in four places. Change one for a model change a
 | File | Holds |
 |------|-------|
 | `src/page-schema.json` | The JSON Schema (structural truth). Loaded at **runtime** via `readFileSync` → must be copied to `dist/` by the build. |
-| `src/factory.ts` | `createElement(type)` default node; `CONTAINER_TYPES` & `FIELD_TYPES` sets (source of truth for "has children" / "needs field_name"). |
-| `src/library.ts` | `LIBRARY[type]` (hints, key specials, example); `GENERATION_GUIDE`; `CANVAS`; event vocab. |
-| `src/validate.ts` | Semantic checks (unique ids, dangling event targets, children-only-on-containers, field_name, layout bounds). Imports the two sets from `factory.ts`. |
+| `src/factory.ts` | `createElement(type)` default node (per-type visual defaults: sizes/specials) + `defaultName`. Re-exports `CONTAINER_TYPES`/`FIELD_TYPES` from library.ts for back-compat. |
+| `src/library.ts` | `LIBRARY[type]` (hints, key specials, example) — and the **single source of truth** for `CONTAINER_TYPES` (DERIVED from each entry's `container` flag) and `FIELD_TYPES` (the list right below `LIBRARY`). Plus `GENERATION_GUIDE`; `CANVAS`; event vocab. |
+| `src/validate.ts` | Semantic checks (unique ids, dangling event/option/connect targets, duplicate field_name per form, children-only-on-containers, field_name, layout bounds). Imports `CONTAINER_TYPES`/`FIELD_TYPES` (defined in library.ts, re-exported by factory.ts). |
 
-After ANY model change: `npm run build && npm run smoke` — smoke must print **`ALL GOOD`**.
+After ANY model change: `npm run build && npm run smoke` — smoke must print **`ALL GOOD`**. `smoke` also asserts the `page-schema.json` `elementType` enum stays in sync with `LIBRARY` keys, so adding a type to one but not the other fails the gate.
 
 ## Recipe: add a new MCP tool
 
@@ -50,8 +50,8 @@ server.tool(
 
 ## Recipe: add a new element type
 
-1. **factory.ts** — add a `case "<type>"` in `createElement` seeding sane default `responsive` styles/specials. If it holds children add it to `CONTAINER_TYPES`; if it's a form input that submits a value add it to `FIELD_TYPES` (and seed `specials.field_name`). Add a label to `defaultName`.
-2. **library.ts** — add a `LIBRARY["<type>"]` entry: `category`, `container`, `summary`, `useWhen`, `keySpecials`, optionally an `example` (examples are smoke-tested — they must validate).
+1. **library.ts** — add a `LIBRARY["<type>"]` entry: `category`, `container` (true → it auto-joins `CONTAINER_TYPES`), `summary`, `useWhen`, `keySpecials`, optionally an `example` (examples are smoke-tested — they must validate). If it's a form input that submits a value, add its type to the `FIELD_TYPES` set right below `LIBRARY`.
+2. **factory.ts** — add a `case "<type>"` in `createElement` seeding sane default `responsive` styles/specials (and `specials.field_name` for field types); add a label to `defaultName`.
 3. **page-schema.json** — extend the element `type` enum / any per-type constraints so the new node passes the structural check.
 4. **validate.ts** — only if the type needs a new semantic rule (e.g. a new element-target event action → add to `ELEMENT_TARGET_ACTIONS`).
 5. `npm run build && npm run smoke`. Smoke auto-covers every `LIBRARY` type (skeleton validity) and every `example`.

@@ -4,6 +4,11 @@
  * the sizes / specials the real editor seeds. Used by the `new_element` tool so
  * Claude always starts from a structurally-correct node.
  */
+import { CONTAINER_TYPES, FIELD_TYPES } from "./library.js";
+
+// Re-exported for back-compat: these are defined alongside LIBRARY in library.ts
+// (the single source of truth) but historically imported from factory.
+export { CONTAINER_TYPES, FIELD_TYPES };
 
 export type Breakpoint = { config: Record<string, any>; styles: Record<string, any> };
 export type ElementNode = {
@@ -34,41 +39,6 @@ export function imgPlaceholder(w = 600, h = 400, label = "Image"): string {
   return `https://placehold.co/${Math.round(w)}x${Math.round(h)}?text=${encodeURIComponent(label)}`;
 }
 
-/** Types that carry a `children` array. */
-export const CONTAINER_TYPES = new Set([
-  "section",
-  "dynamic_page",
-  "group",
-  "grid",
-  "grid-item",
-  "carousel",
-  "slide",
-  "popup",
-  "form",
-  // NOTE: "gallery" is intentionally NOT here — gallery.js reads specials.media only,
-  // it never reads vm.children. gallery is a leaf element.
-  "checkbox-group",
-  "radio",
-  "group-select",
-]);
-
-/** Form input types that require a unique specials.field_name. */
-export const FIELD_TYPES = new Set([
-  "input",
-  "textarea",
-  "select",
-  "checkbox",
-  "checkbox-group",
-  "radio",
-  "address",
-  "country-select",
-  "quantity_input",
-  "input-datetime",
-  "input-file",
-  "signature",
-  "verify-code",
-  "group-select-item",
-]);
 
 /** Default per-breakpoint animation block (matches real page_source). */
 export function defaultAnimation() {

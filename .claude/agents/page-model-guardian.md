@@ -15,14 +15,14 @@ misleads the agent that uses the server. Read `CLAUDE.md` and
 | File | Holds |
 |------|-------|
 | `src/page-schema.json` | JSON Schema (structural truth). Loaded at RUNTIME via `readFileSync` → the build copies it to `dist/`. |
-| `src/factory.ts` | `createElement(type)` default node; `CONTAINER_TYPES` & `FIELD_TYPES` sets; `defaultName`. |
-| `src/library.ts` | `LIBRARY[type]` (category, container, summary, useWhen, keySpecials, example); `GENERATION_GUIDE`; `CANVAS`; event vocab. |
-| `src/validate.ts` | Semantic checks (unique ids, dangling event targets, children-only-on-containers, field_name, layout bounds); imports the two sets from `factory.ts`. |
+| `src/factory.ts` | `createElement(type)` default node (visual defaults) + `defaultName`. Re-exports `CONTAINER_TYPES`/`FIELD_TYPES` from library.ts. |
+| `src/library.ts` | `LIBRARY[type]` (category, container, summary, useWhen, keySpecials, example) — and the SINGLE SOURCE OF TRUTH for `CONTAINER_TYPES` (derived from `container` flag) and `FIELD_TYPES`. Plus `GENERATION_GUIDE`; `CANVAS`; event vocab. |
+| `src/validate.ts` | Semantic checks (unique ids, dangling event/option/connect targets, duplicate field_name per form, children-only-on-containers, field_name, layout bounds); imports the two sets (defined in library.ts, re-exported by factory.ts). |
 
 ## Recipe: add an element type
 
-1. `factory.ts` — add a `case "<type>"` in `createElement` with sane default `responsive` styles/specials. If it holds children → add to `CONTAINER_TYPES`. If it's a submitting form input → add to `FIELD_TYPES` and seed `specials.field_name`. Add a `defaultName` label.
-2. `library.ts` — add a `LIBRARY["<type>"]` entry. Any `example` you add is smoke-tested and must validate.
+1. `library.ts` — add a `LIBRARY["<type>"]` entry (set `container: true` → it auto-joins `CONTAINER_TYPES`). If it's a submitting form input → add its type to the `FIELD_TYPES` set right below `LIBRARY`. Any `example` you add is smoke-tested and must validate.
+2. `factory.ts` — add a `case "<type>"` in `createElement` with sane default `responsive` styles/specials (and seed `specials.field_name` for field types). Add a `defaultName` label.
 3. `page-schema.json` — extend the element `type` enum and any per-type constraints so the node passes structurally.
 4. `validate.ts` — only if a new semantic rule is needed (e.g. a new element-target event action → add to `ELEMENT_TARGET_ACTIONS`).
 
