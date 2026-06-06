@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-06-06
+
+### Internal
+
+- The monolithic `src/index.ts`, `src/library.ts`, and `src/factory.ts` are replaced by a layered module structure: `src/core/` (domain-agnostic primitives — `element.ts`, `descriptor.ts`, `domain.ts`), `src/domains/landing/` (all landing-specific logic), `src/tools/` (the 12 MCP tools split into `reference.ts`, `generation.ts`, and `persistence.ts`), `src/mcp/response.ts` (the `text()` helper), and `src/persistence/` (`config.ts`, `types.ts`, `webcake-client.ts`).
+- The element catalog is split from a single `library.ts` into five per-category descriptor files (`layout.ts`, `content.ts`, `form.ts`, `commerce.ts`, `marketing.ts`) under `src/domains/landing/elements/`, with `index.ts` deriving `LIBRARY`, `CONTAINER_TYPES`, `FIELD_TYPES`, `ELEMENT_TYPES`, and `createElement` from them.
+- `src/server.ts` extracts `McpServer` construction from the entry point, leaving `src/index.ts` as a thin subcommand dispatcher.
+- `page-schema.json` moves from `src/` to `src/domains/landing/` alongside `validate.ts`.
+- `src/webcake.ts` is renamed to `src/persistence/webcake-client.ts` with Webcake HTTP config and API types extracted into `config.ts` and `types.ts`.
+- No tool names, parameters, output shapes, or runtime behavior changed.
+
 ## [1.0.5] - 2026-06-06
 
 ### Internal
