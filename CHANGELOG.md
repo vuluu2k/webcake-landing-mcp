@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.10] - 2026-06-06
+
+### Added
+- New `WEBCAKE_ENV=local|staging|prod` environment variable selects a named deployment preset that automatically fills in both `WEBCAKE_API_BASE` and `WEBCAKE_APP_BASE`, so persistence tools (`create_page`, `update_page`, `list_pages`, etc.) connect to the right backend without setting the two URL variables separately.
+- New global `--env <name>` CLI flag (also `--env=<name>`) applies a named environment before any config is read; an unrecognized value passed via the flag exits immediately with a list of valid names, while an unrecognized `WEBCAKE_ENV` value is silently ignored so explicit base-URL overrides still resolve.
+- The HTTP server now accepts `x-webcake-env` as a per-request header and `?env=<name>` as a URL query parameter, letting individual callers select a named environment without changing the server's own environment.
+
+### Changed
+- The interactive `install` wizard now presents an environment selector (local / staging / prod) in place of the raw `WEBCAKE_API_BASE` URL prompt, and offers browser-based login (via `login`) as the default first authentication step; `WEBCAKE_ENV` is written into the IDE config env block instead of `WEBCAKE_API_BASE`.
+- The `login` subcommand now derives both its connect URL and API base from the active environment preset and saves `appBase` (SPA URL) to `auth.json` alongside `base` (API URL), so no separate `WEBCAKE_APP_BASE` is needed after a browser login.
+
 ## [1.0.9] - 2026-06-06
 
 ### Changed
