@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2026-06-06
+
+### Removed
+- The `WEBCAKE_HOST` environment variable, `--host` installer flag, `x-webcake-host` request header, and `?host=` HTTP query parameter have been removed; Phoenix host-routing via a custom `Host` header is no longer supported.
+- The `WEBCAKE_CONNECT_URL` environment variable is no longer accepted by the `login` subcommand; the connect URL is now always derived from the active environment preset as `<appBase>/mcp-connect`, with only an explicit `--connect-url` CLI option still accepted as an override.
+
 ## [1.0.10] - 2026-06-06
 
 ### Added
