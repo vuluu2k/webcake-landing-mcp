@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.16] - 2026-06-06
+
+### Changed
+- The server icon (served at `/favicon.svg` and embedded in `serverInfo.icons`) has been refined to the official Webcake brand mark: a green-gradient (#3FBB57 → #108B67) rounded tile with the correct white "W" lettermark path and a peach (#FFD591) accent dot.
+- The browser-facing `GET /` page served by the HTTP server is now a rich, self-contained guide that explains what the MCP does, lists two connection methods (npx local install and remote URL), and shows a live endpoint URL; the displayed URL adapts to the actual public hostname via `x-forwarded-host` and `x-forwarded-proto` headers so it is correct behind a reverse proxy (Coolify, Traefik, Cloudflare).
+
 ## [1.0.15] - 2026-06-06
 
 ### Changed
