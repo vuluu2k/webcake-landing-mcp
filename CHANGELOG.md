@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.22] - 2026-06-07
+
+### Added
+- New `WEBCAKE_BUILDER_BASE` environment variable, `x-webcake-builder-base` HTTP header, and `?builder_base=` query parameter set the page-builder host used for the editor and preview links returned by `create_page` and `update_page`; each named environment preset (`local`, `staging`, `prod`) now carries a default builder base, and when none is given the host is derived automatically from the API base (`api.<domain>` → `builder.<domain>`).
+- The `GET /` guide page served by the HTTP server now includes an animated bilingual flow diagram (vi/en) illustrating the idea-to-page pipeline: You → AI assistant → MCP → WebCake.
+
+### Fixed
+- `create_page` and `update_page` now return editor and preview links correctly rooted on the page-builder host instead of the SPA base (`WEBCAKE_APP_BASE`), so the links open in the page editor rather than the SPA.
+
 ## [1.0.21] - 2026-06-07
 
 ### Added
