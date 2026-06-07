@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.24] - 2026-06-07
+
+### Changed
+- The numbered installation steps on the `GET /` guide page now display a faint vertical connector line between step numbers, giving the list a clear stepper appearance.
+- Buttons inside installation steps on the `GET /` guide page now render on their own left-aligned line instead of sitting inline beside the step text.
+- The installation note and "configure every IDE at once" command on the `GET /` guide page are now grouped together inside a styled tip box, making the relationship between the note and the command visually clear.
+
 ## [1.0.23] - 2026-06-07
 
 ### Added
