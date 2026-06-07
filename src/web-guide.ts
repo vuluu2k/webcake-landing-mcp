@@ -600,18 +600,24 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   .method{margin-bottom:16px;padding:24px}
   .method>.tag{margin-bottom:4px}
   .msub{color:var(--mut);font-size:.92rem;margin:.5rem 0 1.2rem}
-  .steps{list-style:none;margin:0;padding:0;display:grid;gap:16px}
-  .steps li{display:flex;gap:14px}
+  .steps{list-style:none;margin:0;padding:0;display:grid;gap:18px;position:relative}
+  .steps li{display:flex;gap:14px;align-items:flex-start;position:relative}
+  /* Faint connector between step numbers → reads as an intentional stepper */
+  .steps li:not(:last-child)::after{content:"";position:absolute;left:13px;top:30px;bottom:-18px;width:2px;background:var(--line)}
   .steps .n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--ic-fg);
     background:rgba(29,185,84,.12);border:1px solid var(--line);
     font:800 .85rem/1 system-ui;display:flex;align-items:center;justify-content:center}
   .steps .body{flex:1;min-width:0;font-size:.95rem}
   .steps .body pre{margin-top:9px}
-  .steps .body .btn{margin-top:10px}
+  /* A button inside a step drops to its own left-aligned line (inline-flex would
+     sit beside the text and be shoved off-baseline by the top margin). */
+  .steps .body .btn{display:flex;width:fit-content;margin-top:10px}
   code.inl{background:rgba(29,185,84,.13);color:var(--g7);padding:1px 6px;border-radius:6px;font-size:.85em;font-weight:600;
     overflow-wrap:anywhere;word-break:break-word}
   .note{font-size:.86rem;color:var(--mut);margin-top:10px}
   .note + pre,.note + .codewrap{margin-top:9px}
+  .tip{margin-top:16px;background:rgba(29,185,84,.06);border:1px solid var(--line);border-radius:12px;padding:13px 15px}
+  .tip .note{margin:0}
   details{padding:2px 18px;margin-bottom:11px}
   details summary{cursor:pointer;font-weight:600;padding:15px 0;list-style:none;display:flex;align-items:center;gap:10px}
   details summary::-webkit-details-marker{display:none}
@@ -660,6 +666,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     .lead{font-size:1.05rem}
     .method{padding:18px 15px}
     .card{padding:18px}
+    .tip{padding:11px 12px}
     .cl-wrap{padding:18px 16px 10px}
     .langsw{padding:6px 10px}
     .uses li,.feat li{padding:14px}
@@ -747,8 +754,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     <ol class="steps">
       ${steps(t.m1Steps.map(fill))}
     </ol>
-    <p class="note">${t.m1Note}</p>
-    <pre>${INSTALL_ALL_CMD}</pre>
+    <div class="tip"><p class="note">${t.m1Note}</p><pre>${INSTALL_ALL_CMD}</pre></div>
   </div>
 
   <div class="glass card method reveal">
