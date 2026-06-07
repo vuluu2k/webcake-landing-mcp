@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.25] - 2026-06-07
+
+### Changed
+- `currency` has moved from `options.currency` to `settings.currency` in the page source model; `new_page_skeleton` now emits it in the correct location, `get_generation_guide` documents the corrected placement, and `validate_page` enforces the updated schema.
+- `new_page_skeleton` now emits `dynamic_pages: []` and `svariations: []` at the top level so that edit round-trips preserve commerce data; `cartConfigs` is now initialized to `{isActive: false}` instead of `{}`.
+- `new_page_skeleton` `settings` skeleton now includes `robots`, `canonical`, `bhet` (custom code injected at the end of `<head>`), and `bbet` (custom code injected before `</body>`).
+- `get_generation_guide` now documents `settings.robots`, `settings.canonical`, `settings.bhet`, and `settings.bbet`, and describes the corrected full top-level page source shape including `dynamic_pages` and `svariations`.
+- `get_element` for `group-select-item` now documents the `field_placeholder` and `options` specials keys, and clarifies that the quantity item uses a static `options` array while attribute items populate their options from the product catalog at runtime.
+- `get_element` for `otp-phone` now documents the `message_otp_wrong` specials key for customizing the error message shown when the user submits a wrong OTP.
+
 ## [1.0.24] - 2026-06-07
 
 ### Changed
