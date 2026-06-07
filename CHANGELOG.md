@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.18] - 2026-06-07
+
+### Changed
+- `new_element` for `list-product` now seeds a default `styles.colorBtn` (`rgba(246,4,87,1)`) so generated product-list button labels have a visible accent color without manual style edits.
+- `new_element` for `survey` now seeds default border styles (`borderColor`, `borderStyle`, `borderWidth`, `margin`, `padding`) and pre-fills `specials.selectedBackground` and `specials.selectedBorder` so option cards render with visible spacing and selection state out of the box.
+
 ## [1.0.17] - 2026-06-07
 
 ### Fixed
