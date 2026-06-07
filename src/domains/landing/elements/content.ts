@@ -57,7 +57,7 @@ export const CONTENT: ElementDescriptor[] = [
   {
     type: "image-block", category: "content", container: false, defaultName: "Image Block",
     summary: "Image. The editor renders the image from specials.src. config.overlay tints it.",
-    useWhen: "Add images where a landing page would have them: hero/product shot, feature icons, about photo, logos. There is NO image API yet — set specials.src to a PLACEHOLDER URL sized to the box: https://placehold.co/<width>x<height> (or https://picsum.photos/<w>/<h> for a photo). NEVER leave src empty (it renders blank). The user replaces placeholders later.",
+    useWhen: "Add images where a landing page would have them: hero/product shot, feature icons, about photo, logos. There is NO image API yet — set specials.src to a PLACEHOLDER URL sized to the box: https://placehold.co/<width>x<height>. NEVER leave src empty (it renders blank). The user replaces placeholders later.",
     keySpecials: {
       src: "image URL — REQUIRED. Use https://placehold.co/WxH (matching width×height) if you don't have a real image.",
       resize: "number — image crop behavior on resize; a value other than 300 triggers keep_solution (no-crop) mode.",

@@ -53,7 +53,7 @@ STICKY / FIXED HEADER (and any overlay element) — reserve space so nothing hid
 RULES
 - Visible content goes in "specials" (text-block.specials.text, image-block.specials.src…), NEVER in "styles".
 - Colors as rgba(r,g,b,a). fontSize/borderWidth/top/left/width/height are NUMBERS (px).
-- IMAGES: a real landing page has images (hero/product shot, feature icons, about photo). There is NO image API yet, so set image-block specials.src to a PLACEHOLDER URL sized to the box: "https://placehold.co/<width>x<height>" (or "https://picsum.photos/<w>/<h>" for a photo). NEVER leave src empty — it renders blank and the page looks broken. gallery.media = array of such URLs; video.specials.img = a poster placeholder. The user replaces these later.
+- IMAGES: a real landing page has images (hero/product shot, feature icons, about photo). There is NO image API yet, so set image-block specials.src to a PLACEHOLDER URL sized to the box: "https://placehold.co/<width>x<height>". NEVER leave src empty — it renders blank and the page looks broken. gallery.media = array of such URLs; video.specials.img = a poster placeholder. The user replaces these later.
 - CONTRAST: text must contrast with the section background (dark text on light sections, light text on dark sections). Don't put light-gray text on white or faint text on a dark background.
 - movable:false for section/slide/grid-item/popup; otherwise true. runtime is always {}.
 - Every form input MUST have a unique specials.field_name.
