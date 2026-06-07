@@ -7,7 +7,10 @@ export type WebcakeConfig = {
   base: string;
   jwt: string;
   orgId?: string;
+  /** SPA base — used for the login connect page (`<appBase>/mcp-connect`). */
   appBase?: string;
+  /** Page-builder host that serves the editor/preview URL (`/editor/v2`) returned after create/update. */
+  builderBase?: string;
 };
 
 export type Organization = { id: number | string; name: string; type: number | null; is_default: boolean };

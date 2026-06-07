@@ -221,7 +221,8 @@ Header nào thiếu sẽ fallback về biến env tương ứng:
 | `x-webcake-env` | `WEBCAKE_ENV` | môi trường có tên (`local`/`staging`/`prod`) |
 | `x-webcake-org-id` | `WEBCAKE_ORG_ID` | org mặc định |
 | `x-webcake-api-base` | `WEBCAKE_API_BASE` | ghi đè API base của preset |
-| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | ghi đè app base của preset |
+| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | ghi đè SPA base của preset (trang connect khi `login`) |
+| `x-webcake-builder-base` | `WEBCAKE_BUILDER_BASE` | ghi đè host builder dùng cho link editor/preview |
 
 > Tool tham chiếu + generation (`get_generation_guide`, `list_elements`, `validate_page`, …) **không cần
 > token** — chỉ tool lưu trữ (`create_page`, `update_page`, …) mới dùng. Không có JWT thì các tool đó trả
@@ -285,7 +286,8 @@ SPA cũng được, khỏi cần route backend.)
 | `WEBCAKE_API_BASE` | Không* | Base URL backend, ví dụ `http://localhost:5800`. Cần để lưu trang (hoặc đặt `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | Không* | JWT tài khoản (auth dashboard). Cần để lưu trang — sẽ hết hạn, làm mới khi cần. |
 | `WEBCAKE_ORG_ID` | Không | Organization mặc định cho `create_page` (bị ghi đè bởi tham số `organization_id`). Bỏ trống → trang cá nhân. |
-| `WEBCAKE_APP_BASE` | Không | Base tuỳ chọn để dựng URL editor/preview trong kết quả. |
+| `WEBCAKE_APP_BASE` | Không | SPA base tuỳ chọn — dùng cho trang connect khi `login` qua trình duyệt. |
+| `WEBCAKE_BUILDER_BASE` | Không | Host builder tuỳ chọn cho link editor/preview trong kết quả. Mặc định lấy theo preset môi trường, nếu không thì suy ra từ host API (`api.x`→`builder.x`). |
 | `WEBCAKE_CONFIG_DIR` | Không | Thư mục chứa `auth.json` do `login` ghi (mặc định `~/.webcake-landing-mcp`). |
 
 > \* `WEBCAKE_API_BASE` và `WEBCAKE_JWT` chỉ cần cho các tool lưu trữ. Các tool tham chiếu và kiểm tra
@@ -299,11 +301,13 @@ SPA cũng được, khỏi cần route backend.)
 Thay vì đặt thủ công cả hai base URL, hãy chọn một môi trường có tên — một nguồn sự thật duy nhất
 cho API + app base (mặc định là `prod`):
 
-| `--env` / `WEBCAKE_ENV` | API base (`WEBCAKE_API_BASE`) | App base (`WEBCAKE_APP_BASE`) |
-|-------------------------|-------------------------------|-------------------------------|
-| `local` | `http://localhost:5800` | `http://localhost:5173` |
-| `staging` | `https://api.staging.webcake.io` | `https://staging.webcake.io` |
-| `prod` *(mặc định)* | `https://api.webcake.io` | `https://webcake.io` |
+| `--env` / `WEBCAKE_ENV` | API base (`WEBCAKE_API_BASE`) | App base (`WEBCAKE_APP_BASE`) | Builder base (`WEBCAKE_BUILDER_BASE`) |
+|-------------------------|-------------------------------|-------------------------------|----------------------------------------|
+| `local` | `http://localhost:5800` | `http://localhost:5173` | `http://builder.localhost:5800` |
+| `staging` | `https://api.staging.webcake.io` | `https://staging.webcake.io` | `https://builder.staging.webcake.io` |
+| `prod` *(mặc định)* | `https://api.webcake.io` | `https://webcake.io` | `https://builder.webcake.io` |
+
+> **Link editor/preview** trả về sau `create_page`/`update_page` mở trên **host builder** (bảng trên), không phải API hay SPA base.
 
 ```bash
 npx -y webcake-landing-mcp login --env local       # đăng nhập vào SPA + API local

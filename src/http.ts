@@ -49,6 +49,7 @@ const QUERY_AUTH: Record<string, string> = {
   api_base: "x-webcake-api-base",
   org_id: "x-webcake-org-id",
   app_base: "x-webcake-app-base",
+  builder_base: "x-webcake-builder-base",
 };
 
 function applyQueryAuth(req: IncomingMessage) {

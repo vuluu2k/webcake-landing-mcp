@@ -221,7 +221,8 @@ lands in logs). Any header that's missing falls back to the matching env var:
 | `x-webcake-env` | `WEBCAKE_ENV` | named environment (`local`/`staging`/`prod`) |
 | `x-webcake-org-id` | `WEBCAKE_ORG_ID` | default org |
 | `x-webcake-api-base` | `WEBCAKE_API_BASE` | overrides the env preset's API base |
-| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | overrides the env preset's app base |
+| `x-webcake-app-base` | `WEBCAKE_APP_BASE` | overrides the env preset's SPA base (login connect page) |
+| `x-webcake-builder-base` | `WEBCAKE_BUILDER_BASE` | overrides the builder host used for editor/preview links |
 
 > The reference + generation tools (`get_generation_guide`, `list_elements`, `validate_page`, …) need **no
 > token** — only the persistence tools (`create_page`, `update_page`, …) use it. Without a JWT, those return
@@ -290,7 +291,8 @@ flow can also be done entirely in the SPA, no backend route needed.)
 | `WEBCAKE_API_BASE` | No* | Backend base URL, e.g. `http://localhost:5800`. Required to persist (or set `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | No* | Account JWT (dashboard auth). Required to persist — expires, refresh when needed. |
 | `WEBCAKE_ORG_ID` | No | Default organization id for `create_page` (overridden by its `organization_id` arg). Omit → personal page. |
-| `WEBCAKE_APP_BASE` | No | Optional base used to build editor/preview URLs in the result. |
+| `WEBCAKE_APP_BASE` | No | Optional SPA base — used for the browser `login` connect page. |
+| `WEBCAKE_BUILDER_BASE` | No | Optional builder host for the editor/preview links in the result. Defaults to the env preset, else derived from the API host (`api.x`→`builder.x`). |
 | `WEBCAKE_CONFIG_DIR` | No | Dir for the saved `auth.json` written by `login` (default `~/.webcake-landing-mcp`). |
 
 > \* `WEBCAKE_API_BASE` and `WEBCAKE_JWT` are only needed for the persistence tools. The reference and
@@ -304,11 +306,13 @@ flow can also be done entirely in the SPA, no backend route needed.)
 Instead of setting both base URLs by hand, pick a named environment — one source of
 truth for the API + app bases:
 
-| `--env` / `WEBCAKE_ENV` | API base (`WEBCAKE_API_BASE`) | App base (`WEBCAKE_APP_BASE`) |
-|-------------------------|-------------------------------|-------------------------------|
-| `local` | `http://localhost:5800` | `http://localhost:5173` |
-| `staging` | `https://api.staging.webcake.io` | `https://staging.webcake.io` |
-| `prod` | `https://api.webcake.io` | `https://webcake.io` |
+| `--env` / `WEBCAKE_ENV` | API base (`WEBCAKE_API_BASE`) | App base (`WEBCAKE_APP_BASE`) | Builder base (`WEBCAKE_BUILDER_BASE`) |
+|-------------------------|-------------------------------|-------------------------------|----------------------------------------|
+| `local` | `http://localhost:5800` | `http://localhost:5173` | `http://builder.localhost:5800` |
+| `staging` | `https://api.staging.webcake.io` | `https://staging.webcake.io` | `https://builder.staging.webcake.io` |
+| `prod` | `https://api.webcake.io` | `https://webcake.io` | `https://builder.webcake.io` |
+
+> The **editor/preview link** returned after `create_page`/`update_page` opens on the **builder host** (above), not the API or SPA base.
 
 ```bash
 npx -y webcake-landing-mcp login --env local       # connect against your local SPA + API

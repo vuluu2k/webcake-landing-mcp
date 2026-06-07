@@ -12,6 +12,7 @@ import {
 } from "./domains/landing/elements/index.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { readConfig, resolveEnv, ENV_NAMES } from "./persistence/config.js";
+import { toEditorUrl } from "./persistence/webcake-client.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -235,7 +236,7 @@ check("clean form has no binding warnings", rbg.warnings.length === 0, rbg.warni
 console.log("== config: named environment presets (local/staging/prod) ==");
 {
   // Deterministic: isolate from any ambient WEBCAKE_* and the saved auth.json on the dev box.
-  for (const k of ["WEBCAKE_API_BASE", "WEBCAKE_APP_BASE", "WEBCAKE_ENV", "WEBCAKE_JWT", "WEBCAKE_ORG_ID"]) delete process.env[k];
+  for (const k of ["WEBCAKE_API_BASE", "WEBCAKE_APP_BASE", "WEBCAKE_BUILDER_BASE", "WEBCAKE_ENV", "WEBCAKE_JWT", "WEBCAKE_ORG_ID"]) delete process.env[k];
   process.env.WEBCAKE_CONFIG_DIR = "/nonexistent/webcake-smoke";
   check("env names are local/staging/prod", setEq(new Set<string>(ENV_NAMES), ["local", "staging", "prod"]), ENV_NAMES);
   check(
@@ -249,6 +250,22 @@ console.log("== config: named environment presets (local/staging/prod) ==");
   check("readConfig(env=local) fills api+app base", local?.base === "http://localhost:5800" && local?.appBase === "http://localhost:5173", local);
   check("explicit base overrides the preset", readConfig({ env: "prod", base: "http://x:1", jwt: "t" }).config?.base === "http://x:1");
   check("unknown env leaves base missing", readConfig({ env: "bogus", jwt: "t" }).missing.includes("WEBCAKE_API_BASE"));
+
+  // builder host for editor/preview URLs (distinct from the api + app bases)
+  check("env presets carry builder bases", resolveEnv("prod")?.builderBase === "https://builder.webcake.io" && resolveEnv("local")?.builderBase === "http://builder.localhost:5800");
+  check("readConfig(env=prod) sets builderBase", prod?.builderBase === "https://builder.webcake.io", prod);
+  check("readConfig(env=local) sets builderBase", local?.builderBase === "http://builder.localhost:5800", local);
+  check("readConfig(env=staging) sets builderBase", readConfig({ env: "staging", jwt: "t" }).config?.builderBase === "https://builder.staging.webcake.io");
+  check("builderBase derives from a custom api base (api. → builder.)", readConfig({ base: "https://api.example.com", jwt: "t" }).config?.builderBase === "https://builder.example.com");
+  check("builderBase derives from a localhost api base", readConfig({ base: "http://localhost:5800", jwt: "t" }).config?.builderBase === "http://builder.localhost:5800");
+  check("explicit builderBase overrides the preset", readConfig({ env: "prod", builderBase: "https://b.test", jwt: "t" }).config?.builderBase === "https://b.test");
+
+  // editor/preview link is re-rooted on the builder host, whether the backend
+  // returns a path or an absolute URL on its own host.
+  const localCfg = readConfig({ env: "local", jwt: "t" }).config!;
+  check("editor url from a path → builder host", toEditorUrl(localCfg, "/editor/v2/abc") === "http://builder.localhost:5800/editor/v2/abc");
+  check("editor url from an absolute api url → builder host", toEditorUrl(localCfg, "http://localhost:5800/editor/v2/abc?x=1") === "http://builder.localhost:5800/editor/v2/abc?x=1");
+  check("editor url passthrough when empty", toEditorUrl(localCfg, undefined) === undefined);
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

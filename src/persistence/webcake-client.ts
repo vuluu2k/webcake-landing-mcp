@@ -30,6 +30,30 @@ function authHeaders(config: WebcakeConfig, orgId?: string): Record<string, stri
   return headers;
 }
 
+/**
+ * Resolve the editor/preview link the backend returns onto the page-builder host
+ * (config.builderBase, e.g. builder.localhost:5800), NOT the API base. The backend
+ * may return either a path (`/editor/v2/<id>`) or an absolute URL on its own host
+ * (`http://localhost:5800/editor/v2/<id>`) — in both cases we keep only the
+ * path+query and re-root it on the builder host.
+ */
+export function toEditorUrl(config: WebcakeConfig, raw: string | undefined): string | undefined {
+  if (!raw) return raw;
+  const builder = config.builderBase ?? config.appBase;
+  if (!builder) return raw;
+  let pathQuery = raw;
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      pathQuery = u.pathname + u.search + u.hash;
+    } catch {
+      /* not a parseable URL — use as-is */
+    }
+  }
+  if (!pathQuery.startsWith("/")) pathQuery = `/${pathQuery}`;
+  return `${builder.replace(/\/+$/, "")}${pathQuery}`;
+}
+
 /** Build (but do not send) the create request — used for dry-run previews. */
 export function buildRequest(config: WebcakeConfig, name: string, source: unknown, orgId?: string) {
   return {
@@ -110,7 +134,6 @@ export async function createPage(
   const pageId = data?.page_id;
   const editorPath = data?.editor_url;
   const previewPath = data?.preview_url;
-  const app = config.appBase;
 
   if (!res.ok || !pageId) {
     // The backend's failure envelope is { success:false, message } on 422; auth
@@ -128,8 +151,8 @@ export async function createPage(
     ok: true,
     status: res.status,
     page_id: pageId,
-    editor_url: app && editorPath ? `${app}${editorPath}` : editorPath,
-    preview_url: app && previewPath ? `${app}${previewPath}` : previewPath,
+    editor_url: toEditorUrl(config, editorPath),
+    preview_url: toEditorUrl(config, previewPath),
     organization_id: (orgId ?? config.orgId) ?? null,
     raw: data,
   };
@@ -222,7 +245,6 @@ export async function updatePageSource(
   }
   const data = json?.data ?? json;
   const pageIdOut = data?.page_id;
-  const app = config.appBase;
   if (!res.ok || !pageIdOut) {
     const backendMsg = json?.message ?? json?.reason ?? (json ? undefined : text.slice(0, 200));
     return {
@@ -236,8 +258,8 @@ export async function updatePageSource(
     ok: true,
     status: res.status,
     page_id: pageIdOut,
-    editor_url: app && data?.editor_url ? `${app}${data.editor_url}` : data?.editor_url,
-    preview_url: app && data?.preview_url ? `${app}${data.preview_url}` : data?.preview_url,
+    editor_url: toEditorUrl(config, data?.editor_url),
+    preview_url: toEditorUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
     raw: data,
   };

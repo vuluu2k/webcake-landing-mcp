@@ -18,7 +18,9 @@
  *   WEBCAKE_API_BASE  e.g. http://localhost:5800   (required to call the backend)
  *   WEBCAKE_JWT       the account JWT               (required to call the backend)
  *   WEBCAKE_ORG_ID    optional default organization id for create_page
- *   WEBCAKE_APP_BASE  optional base for editor/preview URLs in the result
+ *   WEBCAKE_APP_BASE  optional SPA base (used for the login connect page)
+ *   WEBCAKE_BUILDER_BASE  optional builder host for editor/preview URLs in the result
+ *                     (defaults to the env preset, else derived from the API host)
  *   WEBCAKE_CONFIG_DIR  optional dir for the saved auth.json (default ~/.webcake-landing-mcp)
  */
 import { homedir } from "node:os";
@@ -31,12 +33,14 @@ import type { WebcakeConfig } from "./types.js";
  * base URLs. Selecting one (via the `--env` flag, WEBCAKE_ENV, the `x-webcake-env`
  * header, or `?env=` in the URL) fills in both bases so callers don't repeat them.
  * Explicit WEBCAKE_API_BASE / WEBCAKE_APP_BASE (or per-request overrides) win over
- * the preset. `apiBase` is the backend; `appBase` is the SPA (editor/preview/connect).
+ * the preset. `apiBase` is the backend; `appBase` is the SPA (login connect page);
+ * `builderBase` is the page builder host that serves the `/editor/v2` URL returned
+ * after create/update (a distinct host — NOT the API and NOT the SPA).
  */
 export const ENVIRONMENTS = {
-  local: { apiBase: "http://localhost:5800", appBase: "http://localhost:5173" },
-  staging: { apiBase: "https://api.staging.webcake.io", appBase: "https://staging.webcake.io" },
-  prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io" },
+  local: { apiBase: "http://localhost:5800", appBase: "http://localhost:5173", builderBase: "http://builder.localhost:5800" },
+  staging: { apiBase: "https://api.staging.webcake.io", appBase: "https://staging.webcake.io", builderBase: "https://builder.staging.webcake.io" },
+  prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io", builderBase: "https://builder.webcake.io" },
 } as const;
 
 export type EnvName = keyof typeof ENVIRONMENTS;
@@ -48,13 +52,29 @@ export function isEnvName(v: unknown): v is EnvName {
 }
 
 /** The base URLs for a named environment, or undefined when the name is absent/unknown. */
-export function resolveEnv(name: string | undefined): { apiBase: string; appBase: string } | undefined {
+export function resolveEnv(name: string | undefined): { apiBase: string; appBase: string; builderBase: string } | undefined {
   return isEnvName(name) ? ENVIRONMENTS[name] : undefined;
 }
 
+/**
+ * Derive the page-builder host from the API base when no preset / explicit value is
+ * given: `api.<domain>` → `builder.<domain>`, otherwise `builder.<host>` (so
+ * `http://localhost:5800` → `http://builder.localhost:5800`, matching the presets).
+ */
+export function deriveBuilderBase(apiBase: string | undefined): string | undefined {
+  if (!apiBase) return undefined;
+  try {
+    const u = new URL(apiBase);
+    u.hostname = u.hostname.startsWith("api.") ? `builder.${u.hostname.slice(4)}` : `builder.${u.hostname}`;
+    return u.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Request-scoped overrides for the env config (used by the HTTP transport). */
-export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase">> & {
-  /** Named environment (local|staging|prod) — fills in base/appBase when not given explicitly. */
+export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase" | "builderBase">> & {
+  /** Named environment (local|staging|prod) — fills in base/appBase/builderBase when not given explicitly. */
   env?: string;
 };
 
@@ -68,12 +88,24 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
   if (!base) missing.push("WEBCAKE_API_BASE");
   if (!jwt) missing.push("WEBCAKE_JWT");
   if (missing.length) return { config: null, missing };
+  const cleanBase = base!.replace(/\/+$/, "");
+  // The editor/preview URL lives on the builder host (e.g. builder.localhost:5800),
+  // not the API base (5800) nor the SPA (5173). Resolve it explicitly so the link
+  // returned to the user opens in the page builder.
+  const builderBase = (
+    overrides.builderBase ??
+    process.env.WEBCAKE_BUILDER_BASE ??
+    preset?.builderBase ??
+    saved.builderBase ??
+    deriveBuilderBase(cleanBase)
+  )?.replace(/\/+$/, "");
   return {
     config: {
-      base: base!.replace(/\/+$/, ""),
+      base: cleanBase,
       jwt: jwt!,
       orgId: overrides.orgId ?? process.env.WEBCAKE_ORG_ID ?? saved.orgId,
       appBase: (overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase)?.replace(/\/+$/, ""),
+      builderBase,
     },
     missing: [],
   };
@@ -94,7 +126,8 @@ function header(headers: HeaderBag, name: string): string | undefined {
  *   x-webcake-org-id     organization id
  *   x-webcake-env        named environment (local|staging|prod) for the base URLs
  *   x-webcake-api-base   backend base URL (overrides the env preset)
- *   x-webcake-app-base   editor/preview URL base (overrides the env preset)
+ *   x-webcake-app-base   SPA base used for the login connect page (overrides the preset)
+ *   x-webcake-builder-base  builder host for editor/preview URLs (overrides the preset)
  * Any header that is absent falls back to the corresponding env var in readConfig.
  */
 export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
@@ -105,6 +138,7 @@ export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
     jwt: header(headers, "x-webcake-jwt") ?? bearer,
     orgId: header(headers, "x-webcake-org-id"),
     appBase: header(headers, "x-webcake-app-base"),
+    builderBase: header(headers, "x-webcake-builder-base"),
     env: header(headers, "x-webcake-env"),
   };
 }
@@ -119,6 +153,7 @@ export type SavedConfig = {
   jwt?: string;
   orgId?: string;
   appBase?: string;
+  builderBase?: string;
   savedAt?: string;
 };
 
