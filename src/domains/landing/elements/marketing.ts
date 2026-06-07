@@ -160,6 +160,11 @@ export const MARKETING: ElementDescriptor[] = [
     seed: (el) => {
       seedPosition(el);
       setBox(el, 300, undefined);
+      setStyle(el, "margin", 10);
+      setStyle(el, "padding", 10);
+      setStyle(el, "borderColor", "rgb(217, 217, 217)");
+      setStyle(el, "borderStyle", "solid");
+      setStyle(el, "borderWidth", 1);
       setStyle(el, "textAlign", "center");
       el.specials = {
         imageHeight: 100,
@@ -167,6 +172,8 @@ export const MARKETING: ElementDescriptor[] = [
         multiOption: false,
         alignment: "center",
         hoveredBorder: "rgba(28,0,194,1)",
+        selectedBackground: "rgba(124,255,58,1)",
+        selectedBorder: "rgba(124,255,58,1)",
         options: [
           { id: randomId(), image: "", title: "Option 1", value: "value1", field_name: `sv_${el.id}_1` },
           { id: randomId(), image: "", title: "Option 2", value: "value2", field_name: `sv_${el.id}_2` },

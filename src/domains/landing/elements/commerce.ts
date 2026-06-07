@@ -30,6 +30,7 @@ export const COMMERCE: ElementDescriptor[] = [
     seed: (el) => {
       seedPosition(el);
       setBox(el, 400, 162);
+      setStyle(el, "colorBtn", "rgba(246, 4, 87, 1)");
       el.specials.format_title = "sku";
       el.specials.numerical_order = true;
     },
