@@ -12,6 +12,7 @@
  * All logging stays on stderr (console.error), same as stdio mode.
  */
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -20,6 +21,20 @@ import { ICON_SVG, ICON_MIME } from "./branding.js";
 import { guideHtml, ogImageSvg, normalizeLang } from "./web-guide.js";
 
 const MCP_PATH = "/mcp";
+
+// The raster social card (1200x630), pre-rendered and committed at src/og.png,
+// mirrored to dist/og.png by copy-assets. Served at GET /og.png as the og:image —
+// SVG OG images don't unfurl on Facebook/X/LinkedIn/Zalo. Read once, lazily.
+let OG_PNG: Buffer | null = null;
+function ogImagePng(): Buffer | null {
+  if (OG_PNG) return OG_PNG;
+  try {
+    OG_PNG = readFileSync(new URL("./og.png", import.meta.url));
+    return OG_PNG;
+  } catch {
+    return null;
+  }
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json" });
@@ -83,6 +98,18 @@ export async function startHttpServer(port: number): Promise<void> {
     }
 
     // Social-card image referenced by the landing page's og:image / twitter:image.
+    // PNG is the canonical og:image (unfurls everywhere); the SVG stays for clients
+    // that prefer it (Slack/Telegram/Discord) and as a fallback if og.png is absent.
+    if (req.method === "GET" && path === "/og.png") {
+      const png = ogImagePng();
+      if (png) {
+        res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=86400" });
+        return res.end(png);
+      }
+      // Fall back to the SVG card if the raster asset didn't ship.
+      res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
+      return res.end(ogImageSvg());
+    }
     if (req.method === "GET" && path === "/og.svg") {
       res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
       return res.end(ogImageSvg());

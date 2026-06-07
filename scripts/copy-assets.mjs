@@ -1,10 +1,11 @@
 /**
  * Copy runtime JSON assets from src/ into dist/, mirroring the directory tree.
  *
- * The build is `tsc` (which only emits .js) PLUS this step: any *.json under
- * src/ (e.g. domains/landing/page-schema.json, loaded at runtime via readFileSync)
- * is copied to the matching dist/ path. Globbing the tree means new domains'
- * schemas are picked up automatically — no per-file copy line to maintain.
+ * The build is `tsc` (which only emits .js) PLUS this step: any *.json or *.png
+ * under src/ (e.g. domains/landing/page-schema.json loaded via readFileSync, or
+ * og.png served at GET /og.png) is copied to the matching dist/ path. Globbing
+ * the tree means new domains' schemas/assets are picked up automatically — no
+ * per-file copy line to maintain.
  */
 import { readdirSync, statSync, mkdirSync, copyFileSync, chmodSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -18,7 +19,7 @@ function walk(dir) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) {
       walk(p);
-    } else if (name.endsWith(".json")) {
+    } else if (name.endsWith(".json") || name.endsWith(".png")) {
       const dest = join(DIST, p.slice(SRC.length + 1));
       mkdirSync(dirname(dest), { recursive: true });
       copyFileSync(p, dest);
