@@ -2,7 +2,14 @@
 
 **English** · [Tiếng Việt](./README.vi.md)
 
+[![npm version](https://img.shields.io/npm/v/webcake-landing-mcp?color=cb3837&logo=npm)](https://www.npmjs.com/package/webcake-landing-mcp)
+[![npm downloads](https://img.shields.io/npm/dm/webcake-landing-mcp?color=cb3837&logo=npm)](https://www.npmjs.com/package/webcake-landing-mcp)
+[![GitHub stars](https://img.shields.io/github/stars/vuluu2k/webcake-landing-mcp?style=social)](https://github.com/vuluu2k/webcake-landing-mcp/stargazers)
+[![MCP](https://img.shields.io/badge/Model_Context_Protocol-server-6E56CF)](https://modelcontextprotocol.io)
+
 > **Describe a landing page in plain words — your AI builds it, checks it, and ships it straight to WebCake.**
+
+> ⭐ **If this saves you an afternoon of dragging boxes, [give it a star](https://github.com/vuluu2k/webcake-landing-mcp) — it's a one-dev project and every star keeps it alive.**
 
 > *"Build a landing page for my coffee shop — a hero with a sign-up button, a 3-feature section, and a lead form. Save it to my workspace."*
 
@@ -41,6 +48,27 @@ page looks like — it asks this MCP, which knows the entire element model, vali
 | ✏️ **Edits surgically** | Ask for one change ("make the CTA green") and it edits *only* that element — every other id, coordinate, and block stays exactly as it was. |
 
 > 💡 **Lead-gen, events, invitations, app promos** — or **selling COD/online**? It speaks WebCake's commerce model too (product lists, variations, cart).
+
+---
+
+## ✨ What you can build
+
+One sentence to your AI → a finished, **editable** WebCake page. A taste of what people ship with it:
+
+| | Just say… |
+|---|---|
+| 🧲 **Lead-gen landing** | *"A SaaS waitlist page — hero, 3 benefits, an email-capture form."* |
+| 🛒 **COD / online store** | *"A one-product page for my skincare serum — gallery, price, variations, an order form with cart."* |
+| 🎟️ **Event / webinar** | *"A registration page for Saturday's webinar — countdown, agenda, sign-up form."* |
+| 💌 **Invitation** | *"A wedding invite — names, date, a map, an RSVP form."* |
+| 📱 **App promo** | *"A page for my fitness app — phone mockups, feature list, App Store + Google Play buttons."* |
+| ⚡ **Flash sale** | *"A flash-sale page — big countdown, discounted product grid, a sticky Buy button."* |
+| 🔗 **Link-in-bio** | *"A link-in-bio for my creator profile — avatar, short bio, 5 link buttons, socials."* |
+| 🎉 **Product launch** | *"A launch page for v2 — hero, what's-new list, an early-access form."* |
+
+…then **"make the CTA green"** or **"add a 4th feature"** and it edits *only* that block — every other id and coordinate stays exactly where it was.
+
+> 🤖 Works in **Claude Desktop, Claude Code, Cursor, Windsurf, Augment, Codex**, or any MCP-capable client — and the **reference + generation tools need zero setup**, so you can try it before ever pasting a token.
 
 ---
 
@@ -438,3 +466,17 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 Reference: [docs/page-element-schema.md](docs/page-element-schema.md) and
 [src/domains/landing/page-schema.json](src/domains/landing/page-schema.json) (the bundled JSON Schema, Draft 2020-12). The schema mirrors
 the real editor `page_source` shape.
+
+---
+
+## ⭐ Like the idea? Drop a star
+
+This is a solo, open-source project — every ⭐ genuinely keeps it moving and helps other builders discover it.
+
+- ⭐ **[Star the repo](https://github.com/vuluu2k/webcake-landing-mcp)** — 2 seconds, huge motivation.
+- 🐛 **[Open an issue](https://github.com/vuluu2k/webcake-landing-mcp/issues)** — a bug, a missing element type, or just an idea.
+- 🔁 **Share it** with anyone still building landing pages box by box.
+
+[![Star History Chart](https://api.star-history.com/svg?repos=vuluu2k/webcake-landing-mcp&type=Date)](https://star-history.com/#vuluu2k/webcake-landing-mcp&Date)
+
+> Built with ❤️ for the WebCake community. Thanks for being here.
