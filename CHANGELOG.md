@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.19] - 2026-06-07
+
+### Changed
+- `get_generation_guide` now includes a Section Playbook block that lists a common section menu for lead-gen and COD sales pages (header, hero, features/benefits, product/offer, social proof, lead form, footer), explains when to include or drop each band, and gives per-section composition guidance (hero treatments, feature-row centering, form field naming, footer content rules) while emphasising that coordinates must still be derived from the centering math and adapted to each product and brand.
+
 ## [1.0.18] - 2026-06-07
 
 ### Changed
