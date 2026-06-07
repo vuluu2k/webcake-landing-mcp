@@ -17,7 +17,7 @@
     "url": "git+https://github.com/vuluu2k/webcake-landing-mcp.git"
   },
   "scripts": {
-    "build": "tsc && node scripts/copy-assets.mjs",
+    "build": "node scripts/gen-changelog.mjs && tsc && node scripts/copy-assets.mjs",
     "start": "node dist/index.js",
     "dev": "tsc --watch",
     "smoke": "node dist/smoke.js",

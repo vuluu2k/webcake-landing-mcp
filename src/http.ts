@@ -17,7 +17,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
 import { ICON_SVG, ICON_MIME } from "./branding.js";
-import { guideHtml } from "./web-guide.js";
+import { guideHtml, ogImageSvg, normalizeLang } from "./web-guide.js";
 
 const MCP_PATH = "/mcp";
 
@@ -81,6 +81,12 @@ export async function startHttpServer(port: number): Promise<void> {
       return res.end(ICON_SVG);
     }
 
+    // Social-card image referenced by the landing page's og:image / twitter:image.
+    if (req.method === "GET" && path === "/og.svg") {
+      res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
+      return res.end(ogImageSvg());
+    }
+
     // Lightweight health check for hosting platforms.
     if (req.method === "GET" && (path === "/" || path === "/health")) {
       // A browser/connector probing the root with `Accept: text/html` gets a tiny
@@ -93,8 +99,10 @@ export async function startHttpServer(port: number): Promise<void> {
         const host = (Array.isArray(fwdHost) ? fwdHost[0] : fwdHost) || req.headers.host || "localhost";
         const fwdProto = req.headers["x-forwarded-proto"];
         const proto = (Array.isArray(fwdProto) ? fwdProto[0] : fwdProto)?.split(",")[0] || "https";
+        // `?lang=en` switches the page language; anything else falls back to vi.
+        const lang = normalizeLang(new URL(req.url ?? "/", "http://x").searchParams.get("lang"));
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-        return res.end(guideHtml(`${proto}://${host}`));
+        return res.end(guideHtml(`${proto}://${host}`, lang));
       }
       return sendJson(res, 200, { ok: true, server: "webcake-landing", transport: "streamable-http", endpoint: MCP_PATH });
     }

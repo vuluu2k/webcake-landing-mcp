@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.log
 .omc
+# Generated from CHANGELOG.md by scripts/gen-changelog.mjs
+src/changelog.json

@@ -192,10 +192,10 @@ jobs:
           Investigate the changes yourself using the tools available:
           - Run "git log ${RANGE} --stat -- src/" to see commits touching src/.
           - Run "git diff ${RANGE} -- src/" or "git diff ${RANGE} --stat -- src/" when you need more detail.
-          - Read CHANGELOG.md to match the existing tone and section ordering.
+          - Read CHANGELOG.md and CHANGELOG.vi.md to match the existing tone and section ordering in each language.
           - Read src/index.js / src/index.ts if you need to map changes to public MCP tool names.
 
-          Output strictly Keep a Changelog format:
+          Produce the entry in BOTH English and Vietnamese, in strict Keep a Changelog format:
 
           ## [${NEW_VERSION}] - ${REL_DATE}
 
@@ -214,7 +214,8 @@ jobs:
           - Skip purely internal commits (CI, formatting, scripts) UNLESS nothing user-visible changed — then use a single "### Internal" section.
           - Refer to MCP tools by their public name (e.g. get_element, validate_page, create_page) and to fields by their JSON key (e.g. specials, settings.options).
           - Each bullet: one sentence, present tense, ends with a period. No commit hashes, no emoji, no links.
-          - Write the final entry to .release_notes.md and print it. Do NOT modify CHANGELOG.md yourself.
+          - Keep the section headers in English (### Added / Changed / Fixed / Removed / Internal) in BOTH languages so they parse identically; translate only the bullet text, and keep code identifiers / tool names verbatim.
+          - Write the English entry to .release_notes.md and the Vietnamese entry to .release_notes.vi.md, then print both. Do NOT modify CHANGELOG.md or CHANGELOG.vi.md yourself.
           EOF
           )
 
@@ -232,41 +233,56 @@ jobs:
             cat .claude_output.log >&2
             exit 1
           fi
-          echo "--- Release notes ---"
+          # Fall back to the English entry if the Vietnamese one is missing, so
+          # CHANGELOG.vi.md still gets this version rather than silently drifting.
+          if [ ! -s .release_notes.vi.md ]; then
+            echo "No .release_notes.vi.md — falling back to the English entry for CHANGELOG.vi.md." >&2
+            cp .release_notes.md .release_notes.vi.md
+          fi
+          echo "--- Release notes (en) ---"
           cat .release_notes.md
+          echo "--- Release notes (vi) ---"
+          cat .release_notes.vi.md
 
-      - name: Prepend entry to CHANGELOG.md
+      - name: Prepend entry to CHANGELOG.md + CHANGELOG.vi.md
         if: steps.mode.outputs.resume != 'true'
         run: |
-          if [ -f CHANGELOG.md ]; then
-            awk -v notes_file=".release_notes.md" '
-              BEGIN { inserted=0 }
-              /^## \[/ && !inserted {
-                while ((getline line < notes_file) > 0) print line
-                close(notes_file)
-                print ""
-                inserted=1
-              }
-              { print }
-              END {
-                if (!inserted) {
+          # Insert the matching release-notes file above the first existing
+          # "## [" entry of each changelog (or create the file if it is missing).
+          prepend() {
+            file="$1"; notes="$2"
+            if [ -f "$file" ]; then
+              awk -v notes_file="$notes" '
+                BEGIN { inserted=0 }
+                /^## \[/ && !inserted {
                   while ((getline line < notes_file) > 0) print line
+                  close(notes_file)
+                  print ""
+                  inserted=1
                 }
-              }
-            ' CHANGELOG.md > CHANGELOG.md.new
-            mv CHANGELOG.md.new CHANGELOG.md
-          else
-            {
-              echo "# Changelog"
-              echo ""
-              cat .release_notes.md
-            } > CHANGELOG.md
-          fi
+                { print }
+                END {
+                  if (!inserted) {
+                    while ((getline line < notes_file) > 0) print line
+                  }
+                }
+              ' "$file" > "$file.new"
+              mv "$file.new" "$file"
+            else
+              {
+                echo "# Changelog"
+                echo ""
+                cat "$notes"
+              } > "$file"
+            fi
+          }
+          prepend CHANGELOG.md .release_notes.md
+          prepend CHANGELOG.vi.md .release_notes.vi.md
 
       - name: Commit, tag and push
         if: steps.mode.outputs.resume != 'true'
         run: |
-          git add package.json CHANGELOG.md
+          git add package.json CHANGELOG.md CHANGELOG.vi.md
           git diff --cached --quiet || git add -u
           git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
           git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
