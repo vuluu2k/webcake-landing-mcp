@@ -14,7 +14,7 @@ RULES (follow for every request):
 - Organizations: call list_organizations and ask which to use; default to the is_default org. Endpoints are owner-scoped (only the account's own pages).
 
 MODEL (essentials):
-- Top-level: { page:[sections], popup:[popups], settings:{}, options:{currency,mobileOnly,versionID}, cartConfigs:{} }. Popups are a SEPARATE top-level array, NOT inside page.
+- Top-level: { page:[sections], popup:[popups], dynamic_pages:[], settings:{}, options:{mobileOnly,versionID}, cartConfigs:{isActive:false}, svariations:[] }. Popups are a SEPARATE top-level array, NOT inside page; currency lives in settings.currency (not options). Leave dynamic_pages/svariations as [] for a static page, but keep them on edit round-trips.
 - Element: { id, type, properties, responsive:{desktop,mobile:{config,styles}}, specials, children, runtime, events }. Absolute canvas: children carry numeric top/left/width/height (px) per breakpoint (canvas width desktop=960, mobile=420); sections own a height.
 - CENTERING (the #1 layout defect — do the math, don't eyeball): to center a box compute left = round((canvas - width)/2) — 960 desktop, 420 mobile. textAlign:center only centers text inside the box, not the box itself. For a row of N items, center the whole row block (startLeft = round((canvas - (N*item + (N-1)*gap))/2)). Keep 0 ≤ left and left+width ≤ canvas on each breakpoint.
 - STICKY HEADER: a sticky/fixed header (config.sticky) OVERLAYS the page — it does NOT push sections below it down. Offset the first section's top content DOWN by the header height (~60–72px) so nothing hides behind it, and do NOT duplicate the shop name in both the header and the top of the hero. A non-sticky header stacks normally and needs no offset.

@@ -284,6 +284,7 @@ export const FORM: ElementDescriptor[] = [
       field_type: "'postal_code' | absent — 'postal_code' switches validation from phone OTP to a postal-code regex.",
       condition: "'limit_5' | 'limit_6' | 'custom' — postal-code regex selector (active when field_type='postal_code').",
       pattern: "string regex — custom postal-code pattern when condition='custom'.",
+      message_otp_wrong: "string — custom error message shown when the entered OTP is wrong (read by the form on submit-error). Optional.",
     },
     seed: (el) => {
       seedPosition(el);
@@ -304,12 +305,14 @@ export const FORM: ElementDescriptor[] = [
   },
   {
     type: "group-select-item", category: "form", container: false, field: true, defaultName: "Group Select Item",
-    summary: "One attribute (or the quantity) inside group-select. Options are NOT static — they are populated from the product catalog (window.sync.products) at runtime based on attrName + the parent's sprod.",
+    summary: "One attribute (or the quantity) inside group-select. Attribute items populate options from the product catalog (window.sync.products) at runtime based on attrName + the parent's sprod; the quantity item carries a STATIC options array.",
     useWhen: "Child of group-select only.",
     keySpecials: {
       field_name: "REQUIRED unique data key (becomes 'quantity' when field_quantity=true).",
+      field_placeholder: "string — the item's visible label/placeholder (the editor seeds 'AttrName' for attribute items, 'Quantity' for the quantity item).",
       field_quantity: "boolean — when true this item is the quantity selector (value goes to parent._setQuantity), not a product attribute. Only one item per group.",
       attrName: "string — the product attribute name this item maps to (e.g. 'Color','Size'); numeric strings ('1','2') index product_attributes for custom products; 'sprod-name'/'sprod-sku' show the product name/SKU.",
+      options: "array [{id,name,value}] — STATIC option list used by the quantity item (field_quantity=true), e.g. 1..4; attribute items leave this empty and populate from the catalog at runtime.",
       default_value: "string — pre-selected option value, or 'default-none'/empty for no default.",
       required: "boolean — require selection when the item and its parent group are visible.",
     },

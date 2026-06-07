@@ -24,10 +24,9 @@
     },
     "options": {
       "type": "object",
-      "description": "Editor options.",
+      "description": "Editor options: { mobileOnly, versionID }. NOTE: currency lives in settings.currency, not here.",
       "additionalProperties": true,
       "properties": {
-        "currency": { "type": "string", "examples": ["VND", "USD"] },
         "mobileOnly": { "type": "boolean", "description": "true = page only renders the mobile breakpoint." },
         "versionID": { "type": ["string", "null"] }
       }
@@ -51,6 +50,11 @@
           "properties": { "desktop": { "type": "number" }, "mobile": { "type": "number" } }
         },
         "country": { "type": "string", "description": "Dialing/locale code, e.g. \"84\"." },
+        "currency": { "type": "string", "description": "Page currency (the editor's canonical home for currency).", "examples": ["VND", "USD"] },
+        "robots": { "type": "string", "description": "SEO robots meta directive." },
+        "canonical": { "type": "string", "description": "SEO canonical URL." },
+        "bhet": { "type": "string", "description": "Custom code injected at the end of <head>." },
+        "bbet": { "type": "string", "description": "Custom code injected before </body>." },
         "fb_tracking_code": { "type": "string", "description": "Facebook pixel id." },
         "tiktok_script": { "type": "string" },
         "global_track_ids": { "type": "array" },

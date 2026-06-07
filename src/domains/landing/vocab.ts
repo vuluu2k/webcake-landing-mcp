@@ -2,7 +2,7 @@
  * Landing-page vocabulary: the fixed canvas, the event triggers, and the
  * per-trigger action maps. "Extra:" notes list the action-specific event-object
  * fields the render_v4 dispatcher reads beyond { id, type, action, target }.
- * Derived from assets/render_v4/src/event/index.js.
+ * Derived from assets/render_v4/event/index.js.
  */
 
 export const CANVAS = { desktopWidth: 960, mobileWidth: 420, defaultSectionHeight: 800 };

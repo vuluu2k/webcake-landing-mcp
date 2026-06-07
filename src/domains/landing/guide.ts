@@ -9,12 +9,13 @@ export const GENERATION_GUIDE = `You are generating the JSON source of a Webcake
 
 OUTPUT (top-level page source — matches the real editor shape)
 - Return ONE JSON object:
-  { "page": [<section>...], "popup": [<popup>...], "settings": {...},
-    "options": { "currency":"VND", "mobileOnly":false, "versionID":null }, "cartConfigs": {} }
+  { "page": [<section>...], "popup": [<popup>...], "dynamic_pages": [], "settings": {...},
+    "options": { "mobileOnly":false, "versionID":null }, "cartConfigs": { "isActive":false }, "svariations": [] }
+- "dynamic_pages" (dataset-bound sections) and "svariations" (product/variation data) stay [] for a static page — keep them when editing so commerce data isn't dropped. currency lives in settings.currency, NOT options.
 - "page" is an array of SECTIONS stacked vertically (index 0 = top). Each item MUST be type "section" (or "dynamic_page").
 - "popup" is a SEPARATE top-level array of popup elements — do NOT nest popups inside "page". A button opens one via a click event { action:"open_popup", target:"<popup id>" }.
 - All other elements (text, image, button, form…) live inside a section's "children".
-- "settings" carries SEO + page config: title, description, keywords, favicon, fontGeneral, width_section {desktop:960,mobile:420}, country, fb_tracking_code, tiktok_script, extra_css, extra_script (call new_page_skeleton for a ready default).
+- "settings" carries SEO + page config: title, description, keywords, robots, canonical, favicon, fontGeneral, width_section {desktop:960,mobile:420}, country, currency, fb_tracking_code, tiktok_script, extra_css, extra_script, bhet (head code), bbet (body-end code) (call new_page_skeleton for a ready default).
 
 ELEMENT NODE (every element)
 { "id": "<unique ~8-char [A-Za-z0-9_]>", "type": "<type>",
