@@ -76,6 +76,12 @@ const ICONS: Record<string, string> = {
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   globe:
     '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+  bulb:
+    '<path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>',
+  server:
+    '<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
+  window:
+    '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/><path d="M6 6.5h.01"/><path d="M9 6.5h.01"/>',
 };
 function icon(name: string): string {
   return `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ""}</svg>`;
@@ -160,6 +166,9 @@ type Strings = {
   leadPost: string;
   ctaStart: string;
   ctaStar: string;
+  flowH2: string;
+  flow: Array<{ icon: string; t: string; s: string }>;
+  flowCap: string;
   howH2: string;
   how: Array<{ icon: string; t: string; d: string }>;
   buildH2: string;
@@ -195,6 +204,14 @@ const T: Record<Lang, Strings> = {
     leadPost: " của bạn. Không kéo thả, không cài server — kết nối một lần là xong.",
     ctaStart: "Bắt đầu kết nối",
     ctaStar: "Star trên GitHub",
+    flowH2: "Mô hình hoạt động",
+    flow: [
+      { icon: "bulb", t: "Bạn", s: "ý tưởng" },
+      { icon: "brain", t: "Trợ lý AI", s: "Claude · Cursor" },
+      { icon: "server", t: "MCP", s: "webcake-landing" },
+      { icon: "window", t: "WebCake", s: "trang thật" },
+    ],
+    flowCap: "Bạn mô tả bằng lời → AI học mô hình thật từ MCP → MCP dựng JSON + kiểm tra → lưu thành trang thật trên WebCake. Bạn nhận link, mở editor, publish.",
     howH2: "Cách hoạt động",
     how: [
       {
@@ -265,6 +282,14 @@ const T: Record<Lang, Strings> = {
     leadPost: ". No drag-and-drop, no server to host — connect once and you're set.",
     ctaStart: "Get connected",
     ctaStar: "Star on GitHub",
+    flowH2: "How it flows",
+    flow: [
+      { icon: "bulb", t: "You", s: "your idea" },
+      { icon: "brain", t: "AI assistant", s: "Claude · Cursor" },
+      { icon: "server", t: "MCP", s: "webcake-landing" },
+      { icon: "window", t: "WebCake", s: "a real page" },
+    ],
+    flowCap: "You describe it in words → the AI learns the real model from the MCP → the MCP builds the JSON + validates → it's saved as a real WebCake page. You get a link, open the editor, publish.",
     howH2: "How it works",
     how: [
       {
@@ -509,6 +534,27 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   .feat li{display:flex;gap:13px;align-items:center;font-size:.97rem;padding:13px 16px}
   .feat li b{color:var(--ink)}
   .cta-row{display:flex;gap:12px;flex-wrap:wrap;margin:22px 0 6px}
+  /* Flow diagram: nodes connected by wires with a traveling "packet" */
+  .flow{display:flex;align-items:flex-start;gap:0;padding:24px 18px 18px;overflow-x:auto}
+  .flow .node{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;width:104px}
+  .flow .node .ic{width:54px;height:54px;border-radius:16px}
+  .flow .node .ic .i{width:27px;height:27px}
+  .flow .node b{font-size:.93rem}
+  .flow .node span{font-size:.75rem;color:var(--mut)}
+  .flow .wire{flex:1 1 auto;min-width:30px;position:relative;height:2px;margin-top:27px;
+    background:linear-gradient(90deg,var(--line),rgba(29,185,84,.45),var(--line))}
+  .flow .wire .pkt{position:absolute;top:50%;left:0;width:9px;height:9px;margin:-5px 0 0 -4px;border-radius:50%;
+    background:var(--g);box-shadow:0 0 9px 1px rgba(29,185,84,.7)}
+  .flow .wire::after{content:"";position:absolute;right:-1px;top:50%;width:7px;height:7px;margin-top:-4px;
+    border-top:2px solid var(--g7);border-right:2px solid var(--g7);transform:rotate(45deg)}
+  .flow-cap{color:var(--mut);font-size:.9rem;margin:2px 2px 0;max-width:68ch}
+  @media(prefers-reduced-motion:no-preference){
+    .flow .wire .pkt{animation:pkt 2.4s ease-in-out infinite}
+    @keyframes pkt{0%{left:0;opacity:0}12%{opacity:1}88%{opacity:1}100%{left:100%;opacity:0}}
+    .flow .node .ic{animation:nodepop 2.4s ease-in-out infinite}
+  }
+  @media(prefers-reduced-motion:reduce){.flow .wire .pkt{display:none}}
+  @keyframes nodepop{0%,100%{box-shadow:none}50%{box-shadow:0 0 0 4px rgba(29,185,84,.12)}}
   .btn{display:inline-flex;align-items:center;gap:9px;padding:11px 19px;border-radius:11px;cursor:pointer;
     background:var(--g);color:#fff;text-decoration:none;font-weight:700;font-size:.93rem;
     box-shadow:0 4px 12px -4px rgba(29,185,84,.5);transition:transform .15s ease,background .15s ease}
@@ -610,6 +656,20 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     <a class="btn" href="#connect">${icon("rocket")} ${t.ctaStart}</a>
     <a class="btn ghost" href="${GITHUB_URL}">${icon("star")} ${t.ctaStar}</a>
   </div>
+
+  <h2 class="reveal">${t.flowH2}</h2>
+  <div class="glass flow reveal">
+    ${t.flow
+      .map(
+        (n, i) =>
+          `<div class="node"><span class="ic" style="animation-delay:${(i * 0.8).toFixed(1)}s">${icon(n.icon)}</span><b>${n.t}</b><span>${n.s}</span></div>` +
+          (i < t.flow.length - 1
+            ? `<div class="wire"><i class="pkt" style="animation-delay:${(i * 0.8).toFixed(1)}s"></i></div>`
+            : ""),
+      )
+      .join("\n    ")}
+  </div>
+  <p class="flow-cap reveal">${t.flowCap}</p>
 
   <h2 class="reveal">${t.howH2}</h2>
   <div class="grid">
