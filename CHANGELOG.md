@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.21] - 2026-06-07
+
+### Added
+- The HTTP server's `GET /` guide page is now bilingual (vi/en): append `?lang=en` to the URL to switch to English (default is Vietnamese), a language toggle is rendered in the page header, and `<link rel="alternate" hreflang>` tags are emitted so search engines index both language variants.
+- The HTTP server now serves a social-card image at `GET /og.svg`, referenced by `og:image` and `twitter:image` meta tags on the guide page, so links shared on social networks and chat platforms unfurl with a branded preview image.
+- The `GET /` guide page now includes a complete SEO `<head>` (Open Graph, Twitter Card, and JSON-LD structured data for SoftwareApplication, WebSite, and FAQPage schemas) so the server URL is indexable and link previews render correctly when shared.
+
 ## [1.0.20] - 2026-06-07
 
 ### Changed
