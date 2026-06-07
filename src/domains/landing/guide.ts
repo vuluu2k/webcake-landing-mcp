@@ -50,6 +50,17 @@ STICKY / FIXED HEADER (and any overlay element) — reserve space so nothing hid
 - Do NOT duplicate the brand/shop name: if the header shows the shop name, remove or reposition any shop-name line that sat at the very top of the hero — otherwise the two overlap (a classic symptom: a half-hidden shop-name behind the header).
 - A NON-sticky header is simpler — it's just the first section in \`page\`, stacks normally, and pushes the hero down on its own (no offset needed). Only add the offset when the header is sticky/fixed.
 
+SECTION PLAYBOOK (a MENU + principles, NOT a fixed template — YOU design the coordinates from the centering math above. Adapt every page to its product, brand and content; never emit the same layout twice. The numbers below are not given on purpose: choose widths/heights/spacing that fit the actual content, then compute \`left\`/\`top\`.)
+- Pick the sections the page needs and order them top→bottom. Common menu for a lead-gen / COD sales page: header · hero · features/benefits · product or offer · social-proof/stats · gallery · FAQ · lead-form · footer. Drop any the user didn't ask for; add others when it makes sense. A simple page can be just hero + form.
+- Each section is one visual band: give it a height that comfortably holds its content (taller on mobile since things stack), and a background that contrasts with its text. Alternate light/dark or tinted bands so sections read as distinct.
+- HERO — the first impression. Choose a treatment that fits the brand, e.g.: (a) text on one side + product/hero image on the other; (b) a full-bleed background image with a color overlay and centered headline+CTA; (c) bold centered typography, no image. Always: a clear H1, a short supporting line, and the primary CTA visible without scrolling.
+- FEATURES / BENEFITS — a row of equal cards (icon + title + text), or a 2-column list. Use the ROW math to center the row; on mobile, shrink to one canvas width or stack vertically.
+- PRODUCT / OFFER — image beside the name + price + benefit list + CTA (swap sides per balance). Price and CTA must stand out.
+- SOCIAL PROOF — testimonial cards, a logo strip, or a row of stat counters (auto-number + label). Center the row.
+- LEAD FORM / CTA — center the form box on the canvas; stack its inputs vertically with comfortable spacing; each input needs a unique specials.field_name (canonical: full_name, phone_number, email, address, quantity). End with a prominent submit button.
+- FOOTER — shop name + real contact lines, usually centered on a dark band. Only real data the user provided.
+- Keep vertical rhythm consistent (similar padding at the top/bottom of each band) and a shared horizontal axis so the page reads as aligned, not ragged — but vary the per-section composition so the page feels designed, not templated.
+
 RULES
 - Visible content goes in "specials" (text-block.specials.text, image-block.specials.src…), NEVER in "styles".
 - Colors as rgba(r,g,b,a). fontSize/borderWidth/top/left/width/height are NUMBERS (px).
