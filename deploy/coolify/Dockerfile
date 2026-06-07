@@ -25,6 +25,10 @@ RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY scripts ./scripts
 COPY src ./src
+# Changelog files feed scripts/gen-changelog.mjs -> src/changelog.json (the page's
+# "What's new"). gen-changelog tolerates their absence, but copying them keeps the
+# deployed page's changelog populated.
+COPY CHANGELOG.md CHANGELOG.vi.md ./
 # Compile to dist/ (and mirror src/**/*.json into dist/), then run the offline
 # smoke gate — a broken factory/validator/example fails the image build, exactly
 # like `npm run smoke` locally (must print "ALL GOOD").

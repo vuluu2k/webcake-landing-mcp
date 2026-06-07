@@ -13,6 +13,8 @@ docs
 deploy
 *.log
 README*.md
-CHANGELOG.md
 install.sh
 install.ps1
+# NOTE: CHANGELOG.md + CHANGELOG.vi.md are intentionally NOT ignored — the build
+# runs scripts/gen-changelog.mjs, which reads them to generate the page's
+# "What's new" data (src/changelog.json). gen-changelog tolerates their absence.

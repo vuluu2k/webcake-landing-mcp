@@ -61,7 +61,14 @@ function parse(md) {
   return out.filter((e) => /^\d/.test(e.v) && e.t); // skip "Unreleased" / empty
 }
 
-const en = parse(readFileSync(join(ROOT, "CHANGELOG.md"), "utf8"));
+// Tolerate a missing CHANGELOG (e.g. a trimmed Docker build context that
+// .dockerignore's the markdown): emit an empty list and let the page hide the
+// "What's new" section rather than failing the build/image.
+const enPath = join(ROOT, "CHANGELOG.md");
+const en = existsSync(enPath) ? parse(readFileSync(enPath, "utf8")) : [];
+if (!en.length) {
+  console.error(`[gen-changelog] CHANGELOG.md missing or empty at ${enPath} — writing an empty changelog.json.`);
+}
 const viPath = join(ROOT, "CHANGELOG.vi.md");
 const viByVersion = new Map(
   (existsSync(viPath) ? parse(readFileSync(viPath, "utf8")) : []).map((e) => [e.v, e]),
