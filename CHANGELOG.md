@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.23] - 2026-06-07
+
+### Added
+- The `GET /` guide page now includes a dark/light theme toggle button in the header; the preference is saved in `localStorage` and applied before the page renders to prevent a flash of unstyled content.
+- Every `<pre>` code block on the `GET /` guide page now has a one-click copy-to-clipboard button.
+
+### Changed
+- The `GET /` guide page is now responsive on narrow screens (≤640 px): the pipeline flow diagram stacks vertically, the header wraps correctly, and inline `<code>` elements no longer overflow their containers.
+- The "configure every IDE at once" install command on the `GET /` guide page is now rendered as a separate `<pre>` block instead of an inline code snippet, making it easy to copy with the new copy button.
+
 ## [1.0.22] - 2026-06-07
 
 ### Added
