@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.26] - 2026-06-07
+
+### Added
+- The HTTP server now serves a pre-rendered 1200×630 PNG social card at `GET /og.png`; the guide page's `og:image` and `twitter:image` meta tags now point to the PNG so link previews unfurl correctly on Facebook, X, LinkedIn, and Zalo, which do not render SVG `og:image` assets.
+- The guide page `<head>` now includes `og:image:type`, `og:image:alt`, and `twitter:image:alt` meta tags for more complete Open Graph and Twitter Card coverage.
+
 ## [1.0.25] - 2026-06-07
 
 ### Changed
