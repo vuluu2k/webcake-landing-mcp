@@ -25,6 +25,9 @@ import { readFileSync } from "node:fs";
 import { ICON_SVG } from "./branding.js";
 
 const MCP_REMOTE_URL = "https://webcake.io/mcp-remote";
+// The "configure every IDE" one-liner — rendered as a code block (with a copy
+// button) rather than long inline code, which wrapped messily on mobile.
+const INSTALL_ALL_CMD = "npx -y webcake-landing-mcp install --ide all --env prod --jwt &lt;TOKEN&gt;";
 const GITHUB_URL = "https://github.com/vuluu2k/webcake-landing-mcp";
 const NPM_URL = "https://www.npmjs.com/package/webcake-landing-mcp";
 const DOCS_URL = `${GITHUB_URL}#readme`;
@@ -82,6 +85,9 @@ const ICONS: Record<string, string> = {
     '<rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/>',
   window:
     '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/><path d="M6 6.5h.01"/><path d="M9 6.5h.01"/>',
+  moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
+  sun:
+    '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
 };
 function icon(name: string): string {
   return `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ""}</svg>`;
@@ -248,7 +254,7 @@ const T: Record<Lang, Strings> = {
       '<b>Làm theo hỏi đáp:</b> chọn môi trường (<code class="inl">prod</code>) → đăng nhập Webcake qua trình duyệt (hoặc dán JWT) → chọn IDE (Claude Desktop / Cursor / Claude Code…).',
       '<b>Khởi động lại IDE</b> → thấy <code class="inl">webcake-landing</code> trong danh sách MCP là xong.',
     ],
-    m1Note: 'Muốn cấu hình mọi IDE một phát: <code class="inl">npx -y webcake-landing-mcp install --ide all --env prod --jwt &lt;TOKEN&gt;</code>',
+    m1Note: "Muốn cấu hình mọi IDE một phát:",
     m2Tag: "Cách ② · URL remote — không cần cài gì",
     m2Sub: "Hợp khi máy không có Node.js, dùng theo nhóm, hoặc dùng claude.ai trên web.",
     m2Steps: [
@@ -326,7 +332,7 @@ const T: Record<Lang, Strings> = {
       '<b>Follow the prompts:</b> pick an environment (<code class="inl">prod</code>) → sign in to Webcake in the browser (or paste a JWT) → pick your IDE (Claude Desktop / Cursor / Claude Code…).',
       '<b>Restart your IDE</b> → see <code class="inl">webcake-landing</code> in the MCP list and you\'re done.',
     ],
-    m1Note: 'Configure every IDE at once: <code class="inl">npx -y webcake-landing-mcp install --ide all --env prod --jwt &lt;TOKEN&gt;</code>',
+    m1Note: "Configure every IDE at once:",
     m2Tag: "Way ② · Remote URL — nothing to install",
     m2Sub: "Best when you have no Node.js, work in a team, or use claude.ai on the web.",
     m2Steps: [
@@ -448,6 +454,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
 <html lang="${L}"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>(function(){try{var t=localStorage.getItem('wc-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
 <title>${m.title}</title>
 <meta name="description" content="${m.desc}">
 <meta name="keywords" content="${m.keywords}">
@@ -475,10 +482,15 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
 <meta name="twitter:image" content="${ogImage}">
 <script type="application/ld+json">${jsonLdScript}</script>
 <style>
+  /* Light defaults. Dark applies via OS preference OR a forced [data-theme="dark"]
+     (the toggle); [data-theme="light"] forces light even on a dark OS. */
   :root{--g:#1DB954;--g7:#178f43;--ink:#11231b;--mut:#5e6d65;--bg:#f5f9f7;--card:#ffffff;
-    --line:rgba(16,40,30,.09);--glass-hi:transparent;--shadow:0 1px 2px rgba(16,40,30,.05),0 6px 20px -12px rgba(16,40,30,.18);--code:#0e1714}
-  @media(prefers-color-scheme:dark){:root{--ink:#e8f0ec;--mut:#9aaba2;--bg:#0b110e;--card:#141b17;
-    --line:rgba(255,255,255,.07);--glass-hi:transparent;--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a}}
+    --line:rgba(16,40,30,.09);--shadow:0 1px 2px rgba(16,40,30,.05),0 6px 20px -12px rgba(16,40,30,.18);--code:#0e1714;
+    --ic-fg:#178f43;--btn-hover:#178f43}
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#e8f0ec;--mut:#9aaba2;--bg:#0b110e;--card:#141b17;
+    --line:rgba(255,255,255,.07);--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a;--ic-fg:#6fe79a;--btn-hover:#21c264}}
+  :root[data-theme="dark"]{--ink:#e8f0ec;--mut:#9aaba2;--bg:#0b110e;--card:#141b17;
+    --line:rgba(255,255,255,.07);--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a;--ic-fg:#6fe79a;--btn-hover:#21c264}
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
   body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
@@ -499,9 +511,15 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   header .logo{width:50px;height:50px;border-radius:14px;overflow:hidden;flex:0 0 auto;
     box-shadow:0 6px 16px -4px rgba(29,185,84,.4)}
   header .logo svg{width:100%;height:100%;display:block}
-  .langsw{margin-left:auto;align-self:flex-start;font-size:.82rem;font-weight:700;color:var(--g7);text-decoration:none;
+  .hgrow{flex:1 1 auto;min-width:0}
+  .controls{margin-left:auto;flex:0 0 auto;display:flex;align-items:center;gap:8px}
+  .langsw{font-size:.82rem;font-weight:700;color:var(--g7);text-decoration:none;white-space:nowrap;
     border:1px solid var(--line);background:var(--card);padding:7px 12px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
   .langsw:hover{border-color:var(--g)}
+  .iconbtn{width:36px;height:36px;flex:0 0 auto;display:grid;place-items:center;cursor:pointer;color:var(--g7);
+    border:1px solid var(--line);background:var(--card);border-radius:10px;transition:border-color .15s ease,color .15s ease}
+  .iconbtn:hover{border-color:var(--g)}
+  .iconbtn svg{width:17px;height:17px}
   h1{font-size:1.78rem;margin:0;font-weight:800;letter-spacing:-.02em}
   .sub{color:var(--mut);margin:3px 0 0;font-size:.98rem}
   .lead{font-size:1.16rem;margin:20px 0 18px;max-width:60ch}
@@ -514,9 +532,8 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   .dot{width:8px;height:8px;border-radius:50%;background:var(--g);box-shadow:0 0 0 0 rgba(29,185,84,.5);animation:pulse 2s infinite}
   @keyframes pulse{70%{box-shadow:0 0 0 7px rgba(29,185,84,0)}100%{box-shadow:0 0 0 0 rgba(29,185,84,0)}}
   h2{font-size:1.32rem;margin:46px 0 16px;font-weight:800;letter-spacing:-.01em}
-  .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;color:var(--g7);
+  .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;color:var(--ic-fg);
     background:rgba(29,185,84,.11);border:1px solid var(--line);transition:transform .2s ease}
-  @media(prefers-color-scheme:dark){.ic{color:#6fe79a}}
   .ic .i{width:22px;height:22px}
   .grid{display:grid;gap:16px;grid-template-columns:1fr 1fr 1fr}
   @media(max-width:720px){.grid{grid-template-columns:1fr}}
@@ -525,11 +542,20 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   .card h3{margin:0 0 6px;font-size:1.04rem}
   .card p{color:var(--mut);font-size:.93rem;margin:0}
   .tag{display:inline-flex;align-items:center;gap:9px;font-size:.82rem;font-weight:800;color:var(--g7);
-    text-transform:uppercase;letter-spacing:.04em}
+    text-transform:uppercase;letter-spacing:.04em;flex-wrap:wrap}
   .tag .ic{width:30px;height:30px;border-radius:9px}
   .tag .ic .i{width:16px;height:16px}
   pre{margin:0;background:var(--code);color:#e8f0ec;border-radius:11px;padding:12px 14px;overflow-x:auto;
     border:1px solid rgba(255,255,255,.06);font:600 .82rem/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+  /* Copy button injected onto every <pre> by the inline script */
+  .codewrap{position:relative}
+  .codewrap pre{padding-right:46px}
+  .copy{position:absolute;top:8px;right:8px;width:30px;height:30px;display:grid;place-items:center;cursor:pointer;
+    border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.06);color:#cfe9d8;
+    transition:background .15s ease,color .15s ease,border-color .15s ease}
+  .copy:hover{background:rgba(255,255,255,.13);color:#fff}
+  .copy svg{width:15px;height:15px}
+  .copy.done{color:#5ee08a;border-color:rgba(94,224,138,.55)}
   .feat{list-style:none;padding:0;margin:0;display:grid;gap:12px}
   .feat li{display:flex;gap:13px;align-items:center;font-size:.97rem;padding:13px 16px}
   .feat li b{color:var(--ink)}
@@ -559,8 +585,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     background:var(--g);color:#fff;text-decoration:none;font-weight:700;font-size:.93rem;
     box-shadow:0 4px 12px -4px rgba(29,185,84,.5);transition:transform .15s ease,background .15s ease}
   .btn .i{width:18px;height:18px}
-  .btn:hover{transform:translateY(-1px);background:var(--g7)}
-  @media(prefers-color-scheme:dark){.btn:hover{background:#21c264}}
+  .btn:hover{transform:translateY(-1px);background:var(--btn-hover)}
   .btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line);box-shadow:none}
   .btn.ghost:hover{border-color:var(--g);background:var(--card)}
   .uses{display:grid;gap:14px;grid-template-columns:1fr 1fr;padding:0;margin:0;list-style:none}
@@ -577,15 +602,16 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   .msub{color:var(--mut);font-size:.92rem;margin:.5rem 0 1.2rem}
   .steps{list-style:none;margin:0;padding:0;display:grid;gap:16px}
   .steps li{display:flex;gap:14px}
-  .steps .n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--g7);
+  .steps .n{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--ic-fg);
     background:rgba(29,185,84,.12);border:1px solid var(--line);
     font:800 .85rem/1 system-ui;display:flex;align-items:center;justify-content:center}
-  @media(prefers-color-scheme:dark){.steps .n{color:#6fe79a}}
   .steps .body{flex:1;min-width:0;font-size:.95rem}
   .steps .body pre{margin-top:9px}
   .steps .body .btn{margin-top:10px}
-  code.inl{background:rgba(29,185,84,.13);color:var(--g7);padding:1px 6px;border-radius:6px;font-size:.85em;font-weight:600}
+  code.inl{background:rgba(29,185,84,.13);color:var(--g7);padding:1px 6px;border-radius:6px;font-size:.85em;font-weight:600;
+    overflow-wrap:anywhere;word-break:break-word}
   .note{font-size:.86rem;color:var(--mut);margin-top:10px}
+  .note + pre,.note + .codewrap{margin-top:9px}
   details{padding:2px 18px;margin-bottom:11px}
   details summary{cursor:pointer;font-weight:600;padding:15px 0;list-style:none;display:flex;align-items:center;gap:10px}
   details summary::-webkit-details-marker{display:none}
@@ -624,6 +650,31 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   @keyframes blink{50%{opacity:.55}}
   .cl-more{display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:.86rem;font-weight:600;color:var(--g7);text-decoration:none}
   .cl-more:hover{gap:9px}
+  @media(max-width:640px){
+    .wrap{padding:30px 15px 56px}
+    /* Header: logo + controls on the top row, title drops to its own full line */
+    header{flex-wrap:wrap;gap:12px}
+    .hgrow{order:2;flex:1 1 100%}
+    h1{font-size:1.4rem}
+    h2{font-size:1.2rem;margin:34px 0 14px}
+    .lead{font-size:1.05rem}
+    .method{padding:18px 15px}
+    .card{padding:18px}
+    .cl-wrap{padding:18px 16px 10px}
+    .langsw{padding:6px 10px}
+    .uses li,.feat li{padding:14px}
+    /* Flow diagram: stack vertically (the horizontal row overflows narrow screens) */
+    .flow{flex-direction:column;align-items:stretch;overflow:visible;padding:16px}
+    .flow .node{flex-direction:row;width:auto;align-items:center;gap:13px;text-align:left}
+    .flow .node .ic{width:44px;height:44px;border-radius:13px}
+    .flow .node .ic .i{width:22px;height:22px}
+    .flow .node b{font-size:.95rem}
+    .flow .node span{font-size:.8rem}
+    .flow .wire{flex:0 0 auto;width:2px;height:20px;min-width:0;margin:3px 0 3px 21px;
+      background:linear-gradient(var(--line),var(--g))}
+    .flow .wire::after{content:none}
+    .flow .wire .pkt{display:none}
+  }
   @media(prefers-reduced-motion:no-preference){
     @supports (animation-timeline:view()){
       .reveal{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 32%}
@@ -639,11 +690,14 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
 
   <header class="hero-in">
     <span class="logo">${ICON_SVG}</span>
-    <div>
+    <div class="hgrow">
       <h1>Webcake Landing MCP</h1>
       <p class="sub">${t.sub}</p>
     </div>
-    <a class="langsw" href="${otherHref}" hreflang="${otherLang}" rel="alternate">${icon("globe")} ${t.switchLabel}</a>
+    <div class="controls">
+      <button class="iconbtn" id="theme" type="button" aria-label="Toggle theme" title="Theme">${icon("moon")}</button>
+      <a class="langsw" href="${otherHref}" hreflang="${otherLang}" rel="alternate">${icon("globe")} ${t.switchLabel}</a>
+    </div>
   </header>
 
   <p class="hero-in" style="display:flex;gap:9px;flex-wrap:wrap"><span class="pill"><span class="dot"></span> ${t.running}</span>${
@@ -694,6 +748,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
       ${steps(t.m1Steps.map(fill))}
     </ol>
     <p class="note">${t.m1Note}</p>
+    <pre>${INSTALL_ALL_CMD}</pre>
   </div>
 
   <div class="glass card method reveal">
@@ -746,7 +801,36 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     <a href="${selfPath === "/" ? "/health" : "/health"}">Health</a>
   </footer>
 
-</div></body></html>`;
+</div>
+<script>
+(function(){
+  var COPY='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  var DONE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+  function copyText(t){
+    if(navigator.clipboard&&navigator.clipboard.writeText){return navigator.clipboard.writeText(t);}
+    return new Promise(function(res,rej){try{var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);res();}catch(e){rej(e);}});
+  }
+  document.querySelectorAll('pre').forEach(function(pre){
+    var w=document.createElement('div');w.className='codewrap';
+    pre.parentNode.insertBefore(w,pre);w.appendChild(pre);
+    var b=document.createElement('button');b.type='button';b.className='copy';b.title='Copy';b.setAttribute('aria-label','Copy');b.innerHTML=COPY;
+    b.addEventListener('click',function(){
+      copyText(pre.innerText).then(function(){b.classList.add('done');b.innerHTML=DONE;setTimeout(function(){b.classList.remove('done');b.innerHTML=COPY;},1400);}).catch(function(){});
+    });
+    w.appendChild(b);
+  });
+
+  // Dark / light toggle — overrides the OS preference and persists the choice.
+  var SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>';
+  var MOON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>';
+  var html=document.documentElement, tBtn=document.getElementById('theme');
+  function effective(){return html.getAttribute('data-theme')||(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');}
+  function paint(){if(tBtn)tBtn.innerHTML=effective()==='dark'?SUN:MOON;}
+  paint();
+  if(tBtn)tBtn.addEventListener('click',function(){var next=effective()==='dark'?'light':'dark';html.setAttribute('data-theme',next);try{localStorage.setItem('wc-theme',next);}catch(e){}paint();});
+})();
+</script>
+</body></html>`;
 }
 
 /**
