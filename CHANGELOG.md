@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.20] - 2026-06-07
+
+### Changed
+- `get_generation_guide` now includes a Layout Archetypes block that maps seven page types (sales/COD, lead-gen/service, event/invitation, app/SaaS promo, portfolio, local business, course/webinar) to concrete ordered section flows, so the agent picks the right structure for the page goal instead of defaulting to the sales template every time.
+- `get_generation_guide` now includes a Visual Variety block that prescribes four named hero treatments (text-beside-image, full-bleed overlay, bold centered type, product/mockup centered), a palette-derivation rule (one accent + neutrals + alternating band backgrounds), and tone-to-typography guidance, so pages of the same type still look different from one another.
+- `get_generation_guide` now includes a Section Build Hints block with per-band composition rules for hero, features/benefits, product/offer, social proof, form/CTA, and footer sections.
+- The intake process described in `get_generation_guide` and the server instructions is now framed as a design-consultant interaction: the agent must propose a section flow (matched to the detected archetype) and a hero treatment alongside each batch of questions, offer two to three concrete directions when the user is vague, and suggest relevant sections (social proof, FAQ, countdown) before confirming the outline, rather than asking open-ended questions and waiting.
+
 ## [1.0.19] - 2026-06-07
 
 ### Changed
