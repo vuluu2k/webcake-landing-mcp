@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.30] - 2026-06-08
+
+### Changed
+- The server instructions now direct the agent to gather all `get_element` and `get_generation_guide` results before assembling the page source, build the full element tree in one pass, and avoid interleaving reference calls between `create_page` or `update_page` previews.
+- The server instructions now enforce a single dry-run: call `create_page` or `update_page` with `dry_run=true` exactly once, show the result to the user, and only send `dry_run=false` after confirmation; if the dry-run exposes validation errors, fix them via `validate_page` and re-run once rather than looping dry-runs.
+
 ## [1.0.29] - 2026-06-08
 
 ### Fixed
