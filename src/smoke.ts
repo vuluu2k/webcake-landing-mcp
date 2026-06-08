@@ -13,6 +13,7 @@ import {
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { readConfig, resolveEnv, ENV_NAMES } from "./persistence/config.js";
 import { toEditorUrl } from "./persistence/webcake-client.js";
+import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -266,6 +267,39 @@ console.log("== config: named environment presets (local/staging/prod) ==");
   check("editor url from a path → builder host", toEditorUrl(localCfg, "/editor/v2/abc") === "http://builder.localhost:5800/editor/v2/abc");
   check("editor url from an absolute api url → builder host", toEditorUrl(localCfg, "http://localhost:5800/editor/v2/abc?x=1") === "http://builder.localhost:5800/editor/v2/abc?x=1");
   check("editor url passthrough when empty", toEditorUrl(localCfg, undefined) === undefined);
+}
+
+console.log("== pexels: key resolution + photo normalization (offline, no network) ==");
+{
+  for (const k of ["PEXELS_API_KEY"]) delete process.env[k];
+  check("no key → undefined", resolvePexelsKey() === undefined);
+  check("header key wins (override)", resolvePexelsKey("hdr-key") === "hdr-key");
+  process.env.PEXELS_API_KEY = "  env-key  ";
+  check("env key is read + trimmed", resolvePexelsKey() === "env-key");
+  delete process.env.PEXELS_API_KEY;
+  check("x-pexels-key header parsed", pexelsKeyFromHeaders({ "x-pexels-key": "abc" }) === "abc");
+  check("array header takes first", pexelsKeyFromHeaders({ "x-pexels-key": ["a", "b"] }) === "a");
+  check("absent header → undefined", pexelsKeyFromHeaders({}) === undefined);
+
+  const photo = normalizePhoto({
+    id: 42, alt: "a cat", width: 1200, height: 800, avg_color: "#446688",
+    photographer: "Jane", photographer_url: "https://pexels.com/@jane", url: "https://pexels.com/photo/42",
+    src: { large: "https://images.pexels.com/large.jpg", medium: "https://images.pexels.com/medium.jpg" },
+  });
+  check("normalizePhoto keeps the page-builder fields", photo.id === 42 && photo.alt === "a cat" && photo.avg_color === "#446688" && photo.src.large.includes("large.jpg") && photo.pexels_url.endsWith("/42"));
+  const sparse = normalizePhoto({ id: 1 });
+  check("normalizePhoto tolerates missing fields", sparse.alt === "" && sparse.avg_color === null && typeof sparse.src === "object");
+
+  // shared proxy fallback (used when no local key)
+  delete process.env.PEXELS_PROXY_BASE;
+  check("proxy base defaults to the hosted host", resolvePexelsProxyBase() === PEXELS_PROXY_DEFAULT);
+  check("proxy base override wins + trailing slash trimmed", resolvePexelsProxyBase("https://x.test/") === "https://x.test");
+  process.env.PEXELS_PROXY_BASE = "https://env.test";
+  check("proxy base read from PEXELS_PROXY_BASE env", resolvePexelsProxyBase() === "https://env.test");
+  delete process.env.PEXELS_PROXY_BASE;
+  const q = buildSearchQuery({ query: "coffee cup", perPage: 3, orientation: "landscape" });
+  check("buildSearchQuery encodes query + per_page + orientation", q.get("query") === "coffee cup" && q.get("per_page") === "3" && q.get("orientation") === "landscape");
+  check("buildSearchQuery clamps per_page to 1..80", buildSearchQuery({ query: "x", perPage: 999 }).get("per_page") === "80" && buildSearchQuery({ query: "x", perPage: 0 }).get("per_page") === "1");
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

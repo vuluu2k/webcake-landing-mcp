@@ -1,6 +1,6 @@
 ---
 name: webcake-landing
-description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 12 tools, intake questions, and the create/edit workflow with organization targeting and dry-run safety.
+description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 13 tools, intake questions, and the create/edit workflow with organization targeting and dry-run safety.
 metadata:
   author: Vũ Lưu
   version: "2026.06.05"
@@ -13,11 +13,14 @@ metadata:
 > `page_source` from a brief, and to edit existing pages. The same rules are served at
 > runtime via the server `instructions` (src/domains/landing/instructions.ts) — this skill is the long form.
 
-## Tools (12)
+## Tools (13)
 
 Reference/validation (no backend/env needed):
 `get_generation_guide`, `list_elements`, `get_element`, `new_element`,
 `new_page_skeleton`, `get_page_schema`, `validate_page`.
+
+Media (works out of the box via a shared proxy; optional own key via `PEXELS_API_KEY` env / `x-pexels-key` header — free at https://www.pexels.com/api/):
+`search_images` — real stock photos for the page; returns hotlinkable URLs (`src.large` hero, `src.medium` card) to drop into an image element's `specials.src`. Only on `ok:false` → fall back to `https://placehold.co/<w>x<h>`.
 
 Backend (need `WEBCAKE_API_BASE` + `WEBCAKE_JWT` env):
 `list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page`.

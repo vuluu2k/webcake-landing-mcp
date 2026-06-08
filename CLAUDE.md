@@ -67,13 +67,14 @@ Surrounding the domain:
 - [src/index.ts](src/index.ts) — thin entry: subcommand dispatch — `install|uninstall|--help` runs the bundled installer, `login` grabs the JWT via the browser and saves `~/.webcake-landing-mcp/auth.json` (see [src/auth/login.ts](src/auth/login.ts)), `serve [--port N]` (or `PORT` env) starts the remote HTTP server, no subcommand starts the stdio server.
 - [src/server.ts](src/server.ts) — `createServer()`: builds the `McpServer` with the domain's `instructions` and registers the tool groups. Used by BOTH transports.
 - [src/http.ts](src/http.ts) — remote **Streamable HTTP** transport (stateful sessions) so the server can be a Claude "custom connector" via a URL. Each request's headers carry the caller's own Webcake JWT (multi-user).
-- [src/tools/](src/tools/) — the 12 tools as three group modules (`reference.ts`, `generation.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain`. The `text()` helper lives in [src/mcp/response.ts](src/mcp/response.ts). Persistence tools resolve credentials per request from `extra.requestInfo.headers` (HTTP), else env.
-- [src/persistence/](src/persistence/) — the Webcake backend: `config.ts` (`readConfig` precedence: per-request overrides → env → the saved `auth.json` written by `login`; `configFromHeaders` for the HTTP `x-webcake-*` / `Authorization: Bearer` headers), `webcake-client.ts` (create/update/list pages, list orgs + JWT-redacted dry-run previews), `types.ts`.
+- [src/tools/](src/tools/) — the 13 tools as four group modules (`reference.ts`, `generation.ts`, `media.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain` (media needs no domain). The `text()` helper lives in [src/mcp/response.ts](src/mcp/response.ts). Persistence + media tools resolve credentials per request from `extra.requestInfo.headers` (HTTP), else env.
+- [src/persistence/](src/persistence/) — the Webcake backend: `config.ts` (`readConfig` precedence: per-request overrides → env → the saved `auth.json` written by `login`; `configFromHeaders` for the HTTP `x-webcake-*` / `Authorization: Bearer` headers), `webcake-client.ts` (create/update/list pages, list orgs + JWT-redacted dry-run previews), `pexels-client.ts` (the `search_images` stock-photo client — direct Pexels with a key, else the shared `mcp.toolvn.io.vn` proxy), `types.ts`.
 - [src/install.ts](src/install.ts) — bundled IDE installer; writes the MCP server block into claude-desktop / claude-code / cursor / windsurf / augment / codex config files.
 
-The 12 tools fall into three groups: **reference** (`get_generation_guide`, `list_elements`, `get_element`,
+The 13 tools fall into four groups: **reference** (`get_generation_guide`, `list_elements`, `get_element`,
 `get_page_schema` — no env needed), **generation** (`new_element`, `new_page_skeleton`, `validate_page`),
-and **persistence** (`list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page` — need env).
+**media** (`search_images` — Pexels stock photos; needs a Pexels key but no Webcake env), and
+**persistence** (`list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page` — need env).
 
 ### Page-source model invariants
 
@@ -104,6 +105,14 @@ When touching the model, preserve these (they live in the schema, the guide, and
 distinct from the API and SPA bases; defaults to the preset, else derived from the API host
 `api.x`→`builder.x`) are optional. The backend endpoints this calls live in the separate `landing_page_backend` repo
 (`LandingPageWeb.V1.AiController`, scope `/api/v1/ai`).
+
+Separately, the **`search_images`** tool fetches stock photos and is independent of the Webcake backend env.
+With a key — `PEXELS_API_KEY` env (loaded from `.env` at startup by [src/env.ts](src/env.ts)) or the per-request
+`x-pexels-key` header — it calls Pexels directly. WITHOUT one it falls back to a **shared hosted proxy**
+(`PEXELS_PROXY_BASE`, default `https://mcp.toolvn.io.vn`) so `npx` users get images with zero setup. That proxy
+is just this server in `serve` mode serving `GET /api/images/search` with its own `PEXELS_API_KEY` (see
+[src/http.ts](src/http.ts)). Free Pexels key: https://www.pexels.com/api/. A `.env` (gitignored; template
+[.env.example](.env.example)) is the convenient place to set these locally.
 
 ## Release flow
 

@@ -6,10 +6,12 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
 import { registerReferenceTools } from "./reference.js";
 import { registerGenerationTools } from "./generation.js";
+import { registerMediaTools } from "./media.js";
 import { registerPersistenceTools } from "./persistence.js";
 
 export function registerTools(server: McpServer, domain: Domain) {
   registerReferenceTools(server, domain);
   registerGenerationTools(server, domain);
+  registerMediaTools(server);
   registerPersistenceTools(server, domain);
 }

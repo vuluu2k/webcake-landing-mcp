@@ -447,6 +447,11 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | `new_page_skeleton` | An empty but complete top-level source `{ page, popup, settings, options, cartConfigs }`. |
 | `validate_page` | Structural + semantic validation (ids, event targets, containers, `field_name`). |
 
+### Media (works out of the box; optional Pexels key)
+| Tool | Description |
+|------|-------------|
+| `search_images` | Find REAL stock photos (Pexels) for a page — returns hotlinkable URLs at several sizes to drop into an image element's `specials.src`. Works with **no setup** (a shared hosted proxy supplies images); set `PEXELS_API_KEY` env or the `x-pexels-key` header to use your own [free Pexels key](https://www.pexels.com/api/) / quota. |
+
 ### Persistence (needs `WEBCAKE_API_BASE` + `WEBCAKE_JWT`)
 | Tool | Description |
 |------|-------------|

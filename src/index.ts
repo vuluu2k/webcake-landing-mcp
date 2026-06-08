@@ -17,6 +17,7 @@
  */
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createServer } from "./server.js";
+import { loadDotenv } from "./env.js";
 import { ENVIRONMENTS, ENV_NAMES, isEnvName } from "./persistence/config.js";
 
 /**
@@ -73,6 +74,9 @@ function printHelp(): void {
 }
 
 async function main() {
+  // Load `.env` (if any) before anything reads process.env — real env vars and
+  // per-request headers still win over the file.
+  loadDotenv();
   // Resolve the named environment (--env / WEBCAKE_ENV) before any config is read.
   applyEnvFlag(process.argv);
 

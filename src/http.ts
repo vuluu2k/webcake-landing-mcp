@@ -19,8 +19,10 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
 import { ICON_SVG, ICON_MIME } from "./branding.js";
 import { guideHtml, ogImageSvg, normalizeLang } from "./web-guide.js";
+import { searchPexels, resolvePexelsKey, type PexelsSearchParams } from "./persistence/pexels-client.js";
 
 const MCP_PATH = "/mcp";
+const IMAGES_PATH = "/api/images/search";
 
 // Social/search crawlers (Facebook, Zalo, Twitter/X, LinkedIn, Slack, Telegram,
 // WhatsApp, Discord, Google, Bing…) fetch the root with `Accept: */*` rather than
@@ -92,6 +94,43 @@ function applyQueryAuth(req: IncomingMessage) {
   }
 }
 
+/**
+ * Shared image proxy: GET /api/images/search?query=…&per_page=…&orientation=…
+ * Holds the server's own PEXELS_API_KEY (from env/.env) and returns the normalized
+ * search result, so `npx` clients without a key get images via this host. CORS is
+ * permissive so a browser can call it too; the key is never sent to the client.
+ */
+async function handleImageSearch(req: IncomingMessage, res: ServerResponse) {
+  const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*" };
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, cors);
+    return res.end();
+  }
+  const sendImgJson = (status: number, body: unknown) => {
+    res.writeHead(status, { "content-type": "application/json", ...cors });
+    res.end(JSON.stringify(body));
+  };
+  const key = resolvePexelsKey();
+  if (!key) {
+    return sendImgJson(503, { ok: false, reason: "proxy_no_key", error: "Image proxy has no PEXELS_API_KEY configured." });
+  }
+  const sp = new URL(req.url ?? "/", "http://x").searchParams;
+  const query = sp.get("query")?.trim();
+  if (!query) {
+    return sendImgJson(400, { ok: false, reason: "missing_query", error: "Pass ?query=<subject>." });
+  }
+  const params: PexelsSearchParams = {
+    query,
+    perPage: sp.get("per_page") ? Number(sp.get("per_page")) : undefined,
+    page: sp.get("page") ? Number(sp.get("page")) : undefined,
+    orientation: (sp.get("orientation") as PexelsSearchParams["orientation"]) ?? undefined,
+    size: (sp.get("size") as PexelsSearchParams["size"]) ?? undefined,
+    color: sp.get("color") ?? undefined,
+  };
+  const result = await searchPexels(key, params);
+  return sendImgJson(result.ok ? 200 : result.status || 502, result);
+}
+
 export async function startHttpServer(port: number): Promise<void> {
   // mcp-session-id -> live transport (each bound to its own McpServer instance).
   const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -144,6 +183,10 @@ export async function startHttpServer(port: number): Promise<void> {
       }
       return sendJson(res, 200, { ok: true, server: "webcake-landing", transport: "streamable-http", endpoint: MCP_PATH });
     }
+
+    // Shared image proxy (for `npx` clients without their own Pexels key).
+    if (path === IMAGES_PATH) return handleImageSearch(req, res);
+
     if (path !== MCP_PATH) return rpcError(res, 404, `Not found. Send MCP requests to ${MCP_PATH}.`);
 
     // Accept credentials via ?jwt=/?api_base=/... (for clients that can't set headers).

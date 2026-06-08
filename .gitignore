@@ -2,5 +2,8 @@ node_modules/
 dist/
 *.log
 .omc
+# Local secrets — never commit (repo is public). Use .env.example as the template.
+.env
+.env.local
 # Generated from CHANGELOG.md by scripts/gen-changelog.mjs
 src/changelog.json
