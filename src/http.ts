@@ -22,6 +22,15 @@ import { guideHtml, ogImageSvg, normalizeLang } from "./web-guide.js";
 
 const MCP_PATH = "/mcp";
 
+// Social/search crawlers (Facebook, Zalo, Twitter/X, LinkedIn, Slack, Telegram,
+// WhatsApp, Discord, Google, Bing…) fetch the root with `Accept: */*` rather than
+// `text/html`, so they'd otherwise get the JSON health blob and never see the OG
+// tags — links wouldn't unfurl and Facebook's debugger reports a missing og:image.
+// Detect them by User-Agent so they get the full HTML <head>. (Programmatic MCP /
+// healthcheck probes also send `*/*` but don't match, so they still get JSON.)
+const BOT_UA =
+  /facebookexternalhit|facebot|twitterbot|linkedinbot|slackbot|slack-imgproxy|telegrambot|whatsapp|discordbot|pinterest|redditbot|googlebot|bingbot|applebot|yandexbot|baiduspider|embedly|quora link preview|outbrain|vkshare|w3c_validator|skypeuripreview|zalo/i;
+
 // The raster social card (1200x630), pre-rendered and committed at src/og.png,
 // mirrored to dist/og.png by copy-assets. Served at GET /og.png as the og:image —
 // SVG OG images don't unfurl on Facebook/X/LinkedIn/Zalo. Read once, lazily.
@@ -121,7 +130,8 @@ export async function startHttpServer(port: number): Promise<void> {
       // page that links the favicon (helps icon discovery); programmatic probes
       // (the container healthcheck uses `Accept: */*`) still get the JSON health.
       const accept = String(req.headers["accept"] ?? "");
-      if (path === "/" && accept.includes("text/html")) {
+      const ua = String(req.headers["user-agent"] ?? "");
+      if (path === "/" && (accept.includes("text/html") || BOT_UA.test(ua))) {
         // Public base URL, honoring the reverse proxy (Coolify/Traefik/Cloudflare).
         const fwdHost = req.headers["x-forwarded-host"];
         const host = (Array.isArray(fwdHost) ? fwdHost[0] : fwdHost) || req.headers.host || "localhost";
