@@ -232,6 +232,7 @@ export const FORM: ElementDescriptor[] = [
     useWhen: "International forms.",
     keySpecials: {
       field_name: "REQUIRED unique data key.",
+      field_placeholder: "REQUIRED — the disabled first-option label. Key is `field_placeholder`, NOT `placeholder`. The country-select renderer crashes if this is missing.",
       countries: "array of country dial-prefix codes (e.g. ['84','1','65']) shown in the dropdown and used to preload address data.",
       autofill_phone: "boolean — listen to sibling phone_number inputs to auto-select the country by dial prefix and auto-prepend the dial code.",
     },
@@ -239,6 +240,7 @@ export const FORM: ElementDescriptor[] = [
       seedPosition(el);
       setBox(el, 150, 36);
       el.specials.field_name = `country_select_${el.id}`;
+      el.specials.field_placeholder = "Quốc gia";
     },
   },
   {
@@ -330,7 +332,7 @@ export const FORM: ElementDescriptor[] = [
     useWhen: "Child of group-select only.",
     keySpecials: {
       field_name: "REQUIRED unique data key (becomes 'quantity' when field_quantity=true).",
-      field_placeholder: "string — the item's visible label/placeholder (the editor seeds 'AttrName' for attribute items, 'Quantity' for the quantity item).",
+      field_placeholder: "REQUIRED string — the disabled first-option label (the editor seeds 'AttrName' for attribute items, 'Quantity' for the quantity item). Key is `field_placeholder`, NOT `placeholder`. The renderer crashes if this is missing.",
       field_quantity: "boolean — when true this item is the quantity selector (value goes to parent._setQuantity), not a product attribute. Only one item per group.",
       attrName: "string — the product attribute name this item maps to (e.g. 'Color','Size'); numeric strings ('1','2') index product_attributes for custom products; 'sprod-name'/'sprod-sku' show the product name/SKU.",
       options: "array [{id,name,value}] — STATIC option list used by the quantity item (field_quantity=true), e.g. 1..4; attribute items leave this empty and populate from the catalog at runtime.",
@@ -339,6 +341,7 @@ export const FORM: ElementDescriptor[] = [
     },
     seed: (el) => {
       el.specials.field_name = `gs_${el.id}`;
+      el.specials.field_placeholder = "Chọn...";
     },
   },
 ];

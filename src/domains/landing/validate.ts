@@ -43,6 +43,12 @@ const TOP_LEVEL_TYPES = new Set(["section", "dynamic_page", "popup"]);
 // the HTML-style {label, value}.
 const OPTION_NAME_FIELDS = new Set(["select", "radio", "checkbox-group"]);
 
+// Fields whose renderer ALWAYS emits unescapeHTML(field_placeholder) with NO
+// default (renderSelect / renderCountrySelect / renderGroupSelectItem) — a missing
+// field_placeholder throws "Cannot read properties of undefined (reading 'replace')"
+// and the whole page fails to render.
+const PLACEHOLDER_REQUIRED_FIELDS = new Set(["select", "country-select", "group-select-item"]);
+
 // Fixed canvas reference (matches vocab CANVAS) used for the layout/bounds check.
 const CANVAS_DESKTOP = 960;
 const CANVAS_MOBILE = 420;
@@ -146,8 +152,8 @@ export function validatePage(input: unknown): ValidationResult {
         if (typeof specials.placeholder === "string" && !hasFieldPlaceholder) {
           warnings.push(`${path} (${type}): uses specials.placeholder — the renderer reads specials.field_placeholder. Rename "placeholder" → "field_placeholder".`);
         }
-        if (type === "select" && !hasFieldPlaceholder) {
-          errors.push(`${path} (select): needs a string specials.field_placeholder (the select renderer crashes without it).`);
+        if (PLACEHOLDER_REQUIRED_FIELDS.has(type) && !hasFieldPlaceholder) {
+          errors.push(`${path} (${type}): needs a string specials.field_placeholder (this element's renderer crashes without it).`);
         }
       }
 
