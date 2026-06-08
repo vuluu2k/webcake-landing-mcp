@@ -112,9 +112,9 @@ export const MARKETING: ElementDescriptor[] = [
     summary: "Lucky-spin wheel with configurable prize segments and coupon codes. Can open a result popup after spinning and supports dataset-driven coupon lists.",
     useWhen: "Gamified lead capture / promos. Users spin to win a coupon or prize.",
     keySpecials: {
-      message: "array of strings — prize label for each wheel segment.",
+      message: "string — result-popup message template shown after a spin (NOT segment labels). Supports placeholders {{coupon_text}}, {{coupon_code}}, {{spin_turn_left}}, {{coupon_codes}}.",
       spin: "object — spin configuration (segment colors, angles, etc.).",
-      code: "array of strings — coupon codes corresponding to each segment.",
+      code: "string (NOT an array) — the segments. ONE LINE PER SEGMENT, each line `couponCode|Prize Name|percent`, lines joined by \\n. The visible label on each wheel slice is the middle field (Prize Name); percent is the win weight. e.g. 'SALE10|Giảm 10%|40\\nSALE50|Giảm 50%|10\\nMISS|Chúc may mắn|50'.",
       dataType: "0 | 1 — 0=static codes, 1=dataset-driven codes.",
       datasetId: "string — webcake dataset ID for coupon codes.",
       codeDataset: "string — dataset column key for the coupon code.",
@@ -130,6 +130,16 @@ export const MARKETING: ElementDescriptor[] = [
       seedPosition(el);
       setBox(el, 400, 400);
       setStyle(el, "color", "rgba(255, 255, 255, 1)");
+      // `code` is a newline-delimited string, ONE segment per line `couponCode|Prize Name|percent`
+      // (the editor preview does code.split("\n") and crashes/renders blank if it is missing).
+      el.specials.code = [
+        "PRIZE1|Giải 1|20",
+        "PRIZE2|Giải 2|20",
+        "PRIZE3|Giải 3|20",
+        "MISS|Chúc may mắn|40",
+      ].join("\n");
+      // `message` is the result-popup template (a string), NOT segment labels.
+      el.specials.message = "Chúc mừng! Bạn nhận được {{coupon_text}} (mã: {{coupon_code}}).";
     },
   },
   {

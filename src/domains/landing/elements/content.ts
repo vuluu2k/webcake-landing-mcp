@@ -158,9 +158,9 @@ export const CONTENT: ElementDescriptor[] = [
   {
     type: "gallery", category: "content", container: false, defaultName: "Gallery",
     summary: "Multi-image/video gallery with thumbnail strip. Content comes entirely from specials.media — this is NOT a container and has no children.",
-    useWhen: "Photo grids/galleries with several images or videos. No image API — fill specials.media with placeholder URLs (https://placehold.co/600x400).",
+    useWhen: "Photo grids/galleries with several images or videos. No image API — fill specials.media with placeholder image objects (see media). NEVER use plain URL strings — the gallery reads item.link and renders blank for a string.",
     keySpecials: {
-      media: "array of image URLs or video objects {type:'video', linkVideo:'<url>', typeVideo:'youtube'|'upload'} — use placeholder URLs if no real images.",
+      media: "array of media OBJECTS (NOT plain URLs — the gallery reads item.link). Image item: {type:'image', link:'<url>', linkVideo:'', typeVideo:'youtube', imageCompression:true} — use a https://placehold.co/WxH URL for link if no real image. Video item: {type:'image', link:'<poster-url>', linkVideo:'<video-url>', typeVideo:'youtube'|'upload', imageCompression:true}.",
       allowZoom: "'off' | 'carousel' | 'lightbox' — (config) zoom/lightbox mode when clicking an image.",
       showNavigation: "boolean — (config) show prev/next navigation arrows.",
       thumbnailAutoplay: "number (ms) | 'off' — (config) auto-advance thumbnails every N ms, or 'off' to disable.",
@@ -173,7 +173,15 @@ export const CONTENT: ElementDescriptor[] = [
     seed: (el) => {
       seedPosition(el);
       setBox(el, 350, 400);
-      el.specials.media = [imgPlaceholder(600, 400, "1"), imgPlaceholder(600, 400, "2"), imgPlaceholder(600, 400, "3")];
+      // gallery media items are OBJECTS, not strings — the renderer reads item.link
+      // (a plain URL string renders blank). Shape mirrors the editor's seed.
+      el.specials.media = [1, 2, 3].map((n) => ({
+        type: "image",
+        link: imgPlaceholder(600, 400, String(n)),
+        linkVideo: "",
+        typeVideo: "youtube",
+        imageCompression: true,
+      }));
       // gallery has NO children — content comes entirely from specials.media (gallery.js never reads vm.children)
     },
   },
