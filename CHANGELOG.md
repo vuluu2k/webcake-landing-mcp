@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.33] - 2026-06-08
+
+### Fixed
+- `get_element` for `country-select` now marks `specials.field_placeholder` as required (the renderer crashes without it), and the element seed now emits a default value.
+- `get_element` for `group-select-item` now marks `specials.field_placeholder` as required (the renderer crashes without it), and the element seed now emits a default value.
+- `validate_page` now raises an error when `specials.field_placeholder` is absent on `country-select` or `group-select-item` elements, extending the `select` coverage added in 1.0.32.
+
 ## [1.0.32] - 2026-06-08
 
 ### Fixed
