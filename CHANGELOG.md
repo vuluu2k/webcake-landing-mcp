@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.39] - 2026-06-08
+
+### Internal
+- Added `server.json` MCP Registry manifest (namespace `io.github.vuluu2k/webcake-landing-mcp`) and the corresponding `mcpName` field in `package.json` so the official MCP Registry can verify npm package ownership.
+
 ## [1.0.38] - 2026-06-08
 
 ### Added
