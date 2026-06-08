@@ -117,19 +117,40 @@ export const FORM: ElementDescriptor[] = [
     useWhen: "Pick one from a list.",
     keySpecials: {
       field_name: "REQUIRED unique data key.",
-      field_placeholder: "placeholder/label.",
+      field_placeholder: "REQUIRED — the disabled first-option label (the placeholder/prompt). The key is `field_placeholder`, NOT `placeholder`. The select renderer crashes if this is missing.",
       default_value: "string (option id) to pre-select; 'default-none' = no pre-selection.",
       defaultVariationId: "string — default product variation id registered on the parent form regardless of selection.",
       defaultVariationQuantity: "number — quantity registered with defaultVariationId.",
       ignoreOnHidden: "boolean — when CSS-hidden, remove this element's variations from the form total.",
       isConnectSurvey: "boolean — link to a survey for conditional show/hide.",
       connectedSurvey: "string — id of the connected survey.",
-      options: "array of rich option objects {id, name, value, variations:[{id,quantity,price}], attrOnly/prodId/attrName/attrVal/attrs (attribute mode), quantityOnly/quantityProd/quantityValue (quantity mode), tags:[], toggleEvent, events_option:[]} — events_option items drive show/hide, collapse, and price/discount/shipping adjustments. See docs/element-specials-reference.md for the full option schema.",
+      options: "array of option objects. The renderer builds each <option> from `id` and `name` ONLY — MINIMUM shape is {id, name} where name is BOTH the visible text and the submitted value. Do NOT use the HTML-style {label, value} — those keys are ignored and the option renders blank. Rich commerce options may also carry value, variations:[{id,quantity,price}], attrOnly/prodId/attrName/attrVal/attrs, quantityOnly/quantityProd/quantityValue, tags:[], toggleEvent, events_option:[] (show/hide, collapse, price/discount/shipping). See docs/element-specials-reference.md for the full option schema.",
     },
     seed: (el) => {
       seedPosition(el);
       setBox(el, 150, 36);
       el.specials.field_name = `select_${el.id}`;
+      el.specials.field_placeholder = "Chọn...";
+      el.specials.default_value = "default-none";
+    },
+    example: {
+      id: "sel_attend", type: "select",
+      properties: { name: "Select", movable: true, sync: true },
+      responsive: {
+        desktop: { config: {}, styles: { top: 0, left: 0, width: 300, height: 44 } },
+        mobile: { config: {}, styles: { top: 0, left: 0, width: 280, height: 44 } },
+      },
+      // options use {id, name} — NOT {label, value}. field_placeholder is required.
+      specials: {
+        field_name: "attendance",
+        field_placeholder: "Bạn có tham dự không?",
+        default_value: "default-none",
+        options: [
+          { id: "opt_yes", name: "Tôi sẽ tham dự" },
+          { id: "opt_no", name: "Rất tiếc, tôi không thể đến" },
+        ],
+      },
+      runtime: {}, events: [],
     },
   },
   {
@@ -155,7 +176,7 @@ export const FORM: ElementDescriptor[] = [
       ignoreOnHidden: "boolean — when CSS-hidden, exclude this element's variations from the form total.",
       isConnectSurvey: "boolean — link to a survey for conditional show/hide.",
       connectedSurvey: "string — id of the connected survey.",
-      options: "array of rich option objects (same shape as select) — additionally supports the tcb_auto_banking event type in events_option (sets the storecake_tcb payment gateway). See docs/element-specials-reference.md for the full option schema.",
+      options: "array of option objects, MINIMUM shape {id, name} (name = visible text; the renderer crashes on options that lack a string `name`). Do NOT use {label, value}. Same rich shape as select — additionally supports the tcb_auto_banking event type in events_option (sets the storecake_tcb payment gateway). See docs/element-specials-reference.md for the full option schema.",
     },
     seed: (el) => {
       seedPosition(el);
@@ -177,7 +198,7 @@ export const FORM: ElementDescriptor[] = [
       ignoreOnHidden: "boolean — when hidden, exclude this element's variations from the form total.",
       isConnectSurvey: "boolean — link to a survey for conditional show/hide.",
       connectedSurvey: "string — id of the connected survey.",
-      options: "array of rich option objects (same shape as select) — events_option additionally supports 9 payment-gateway event types (tcb_auto_banking, xendit_banking, onepay_banking, mercadopago_banking, vnpay_banking, paymongo_banking, stripe_banking, paypal_banking, momopay_banking) that set the form's payment provider. See docs/element-specials-reference.md for the full option schema.",
+      options: "array of option objects, MINIMUM shape {id, name} (name = visible text; the renderer crashes on options that lack a string `name`). Do NOT use {label, value}. Same rich shape as select — events_option additionally supports 9 payment-gateway event types (tcb_auto_banking, xendit_banking, onepay_banking, mercadopago_banking, vnpay_banking, paymongo_banking, stripe_banking, paypal_banking, momopay_banking) that set the form's payment provider. See docs/element-specials-reference.md for the full option schema.",
     },
     seed: (el) => {
       seedPosition(el);

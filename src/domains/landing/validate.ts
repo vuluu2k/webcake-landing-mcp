@@ -37,6 +37,12 @@ const ELEMENT_TARGET_ACTIONS = new Set([
 
 const TOP_LEVEL_TYPES = new Set(["section", "dynamic_page", "popup"]);
 
+// Fields whose renderer builds each <option> from `option.name`. A missing name
+// crashes the published renderer (radio/checkbox-group call .replace/.normalize on
+// it; select shows a blank option). The correct option shape is {id, name} — NOT
+// the HTML-style {label, value}.
+const OPTION_NAME_FIELDS = new Set(["select", "radio", "checkbox-group"]);
+
 // Fixed canvas reference (matches vocab CANVAS) used for the layout/bounds check.
 const CANVAS_DESKTOP = 960;
 const CANVAS_MOBILE = 420;
@@ -126,9 +132,37 @@ export function validatePage(input: unknown): ValidationResult {
 
     // form fields need field_name
     if (type && FIELD_TYPES.has(type)) {
-      const fn = node.specials?.field_name;
+      const specials = node.specials;
+      const fn = specials?.field_name;
       if (!fn || typeof fn !== "string" || fn.trim() === "") {
         warnings.push(`${path} (${type}): form input should have a unique specials.field_name.`);
+      }
+
+      // `field_placeholder` is the ONLY placeholder key the renderer reads. A stray
+      // `placeholder` renders blank; a select with no field_placeholder crashes the
+      // published renderer (unescapeHTML(undefined)).
+      if (specials && typeof specials === "object") {
+        const hasFieldPlaceholder = typeof specials.field_placeholder === "string";
+        if (typeof specials.placeholder === "string" && !hasFieldPlaceholder) {
+          warnings.push(`${path} (${type}): uses specials.placeholder — the renderer reads specials.field_placeholder. Rename "placeholder" → "field_placeholder".`);
+        }
+        if (type === "select" && !hasFieldPlaceholder) {
+          errors.push(`${path} (select): needs a string specials.field_placeholder (the select renderer crashes without it).`);
+        }
+      }
+
+      // select/radio/checkbox-group render each option from option.name; a missing
+      // name crashes the renderer (radio/checkbox-group) or renders blank (select).
+      if (OPTION_NAME_FIELDS.has(type) && Array.isArray(specials?.options)) {
+        specials.options.forEach((opt: any, oi: number) => {
+          if (typeof opt?.name !== "string" || opt.name.trim() === "") {
+            const keys = opt && typeof opt === "object" ? Object.keys(opt) : [];
+            const hint = keys.includes("label") || keys.includes("value")
+              ? ` Use {id, name} — not {label, value} (found keys: ${keys.join(", ")}).`
+              : "";
+            errors.push(`${path} (${type}): specials.options[${oi}] needs a non-empty string "name" (the visible option text).${hint}`);
+          }
+        });
       }
     }
 
