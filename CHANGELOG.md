@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.27] - 2026-06-08
+
+### Fixed
+- The HTTP server's `GET /` route now serves the full HTML guide page to social and search crawlers (Facebook, Zalo, Twitter/X, LinkedIn, Slack, Telegram, WhatsApp, Discord, Google, Bing, and others) that send `Accept: */*` rather than `text/html`, so link previews and Open Graph tags are correctly seen by these bots.
+
 ## [1.0.26] - 2026-06-07
 
 ### Added
