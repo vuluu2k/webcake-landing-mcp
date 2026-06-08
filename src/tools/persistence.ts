@@ -83,10 +83,21 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const parsed = domain.coerce(source);
       const { config, missing } = cfgFor(extra);
 
+      // A big single create_page payload is what drops the client↔Claude
+      // connection on large pages. If the source is heavy, steer the model to the
+      // incremental path (small skeleton now, then add_section per section).
+      const sectionCount = Array.isArray((parsed as any)?.page) ? (parsed as any).page.length : 0;
+      const payloadKB = Math.round(JSON.stringify(parsed ?? {}).length / 1024);
+      const isLarge = sectionCount >= 4 || payloadKB > 80;
+      const largePageAdvisory = isLarge
+        ? `This page is large (${sectionCount} sections, ~${payloadKB}KB) — a single create_page payload this size can drop the connection. Prefer the INCREMENTAL path: create_page with just ONE section (a hero skeleton), then call add_section once per remaining section (each call ships only that section). Send the sections you already built one at a time via add_section instead of all in this one call.`
+        : undefined;
+
       if (isDry) {
         return text({
           dry_run: true,
           validation: { valid: true, warnings: result.warnings, stats: result.stats },
+          ...(largePageAdvisory ? { large_page_advisory: largePageAdvisory } : {}),
           env_ready: missing.length === 0,
           missing_env: missing,
           target_organization_id: orgId ?? config?.orgId ?? null,
@@ -96,7 +107,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
                 note:
                   "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable real creation. Would POST to {WEBCAKE_API_BASE}/api/v1/ai/create_page_from_source.",
               },
-          hint: "Re-run with dry_run=false to actually create the page.",
+          hint: largePageAdvisory
+            ? "Large page — consider the skeleton + add_section flow above. Otherwise re-run with dry_run=false to create in one call."
+            : "Re-run with dry_run=false to actually create the page.",
         });
       }
 

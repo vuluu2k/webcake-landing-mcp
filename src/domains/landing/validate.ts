@@ -380,6 +380,47 @@ export function validatePage(input: unknown): ValidationResult {
       `page[${i}]`
     );
   });
+
+  // 3b) Page margin axis — every band (header included) should put its
+  //     left-anchored content on ONE shared left margin. A header/section that
+  //     starts on a different left than the rest is the #1 "looks misaligned"
+  //     defect (and exactly what eyeballing `left` produces). For each section
+  //     compute its left-anchored content edge (desktop), then warn ONCE if those
+  //     edges diverge. Advisory only.
+  const leftEdgeFor = (sec: any): number | undefined => {
+    if (!sec || !Array.isArray(sec.children)) return undefined;
+    let edge = Infinity;
+    for (const child of sec.children) {
+      const styles = child?.responsive?.desktop?.styles;
+      if (!styles) continue;
+      const left = num(styles.left);
+      const width = num(styles.width);
+      if (left == null || width == null || left < 0) continue;
+      // skip full-bleed backgrounds / near-full-width media (their left is 0-ish)
+      if (width >= rootCanvasD * 0.9) continue;
+      // skip horizontally-centered content (its left is dictated by centering math)
+      if (Math.abs(left - (rootCanvasD - width) / 2) <= 16) continue;
+      // only LEFT-anchored content participates (right-anchored CTAs sit on the right axis)
+      if (left >= rootCanvasD * 0.4) continue;
+      if (left < edge) edge = left;
+    }
+    return Number.isFinite(edge) ? edge : undefined;
+  };
+  const sectionEdges: { i: number; edge: number }[] = [];
+  topList.forEach((sec, i) => {
+    const e = leftEdgeFor(sec);
+    if (e != null) sectionEdges.push({ i, edge: e });
+  });
+  if (sectionEdges.length >= 2) {
+    const minEdge = Math.min(...sectionEdges.map((e) => e.edge));
+    const maxEdge = Math.max(...sectionEdges.map((e) => e.edge));
+    if (maxEdge - minEdge > 48) {
+      const list = sectionEdges.map((e) => `page[${e.i}] left=${e.edge}`).join(", ");
+      warnings.push(
+        `Sections start on different left margins (${list}). Put every band's left-anchored content (the header logo included) on ONE shared left axis — e.g. left=${minEdge} desktop — so the page reads aligned, not ragged. This is the #1 header-misalignment defect.`
+      );
+    }
+  }
   popups.forEach((p, i) => {
     const ds = p?.responsive?.desktop?.styles ?? {};
     const ms = p?.responsive?.mobile?.styles ?? {};
