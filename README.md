@@ -89,7 +89,7 @@ persists it (source-only — the page opens in the editor where re-saving render
 | **npx (local)** — runs on your machine | Personal daily use, full control | browser `login`, a JWT, or none (reference tools) |
 | **Hosted URL** — use our live server, nothing to install | No Node.js, teams, the claude.ai dialog | your personal `?jwt=` link / `x-webcake-jwt` header |
 
-The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `list_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
+The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `add_section`, `list_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
 
 > 🛠️ Prefer a shell-script installer (`install.sh`/`install.ps1`), a cloned local build, or hand-written per-IDE config? See **[docs/manual-install.md](docs/manual-install.md)**.
 
@@ -413,6 +413,12 @@ create_page({ source, dry_run: false })                  # actually create
 list_pages({})                                           # find the page
 get_page({ page_id })                                    # fetch decoded source
 update_page({ page_id, source, dry_run: false })         # overwrite (dry_run=true by default)
+
+# Build a LARGE page incrementally (avoids the giant single create_page payload
+# that can drop the connection): small skeleton first, then one section at a time.
+create_page({ source: smallSkeleton, dry_run: false })   # → page_id
+add_section({ page_id, sections: heroSection, dry_run: false })   # server fetches, appends, validates, saves
+add_section({ page_id, sections: [formSection, footerSection], dry_run: false })
 ```
 
 `create_page` calls **`POST {WEBCAKE_API_BASE}/api/v1/ai/create_page_from_source`** on the backend.

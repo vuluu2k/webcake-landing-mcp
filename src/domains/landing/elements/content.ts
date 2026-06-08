@@ -9,7 +9,7 @@ export const CONTENT: ElementDescriptor[] = [
   {
     type: "text-block", category: "content", container: false, defaultName: "Text",
     summary: "Text. specials.text holds the content (may contain inline HTML); specials.tag sets the semantic tag. Supports template variables ({{key}}), formula mode, URL-param injection, and date formatting.",
-    useWhen: "Any headline, paragraph, label. Use tag h1/h2 for headings, p for body. Style via responsive.styles (fontSize, color, fontWeight, textAlign).",
+    useWhen: "Any headline, paragraph, label. Use tag h1/h2 for headings, p for body. Style via responsive.styles (fontSize, color, fontWeight, textAlign). ALWAYS set color to CONTRAST the band it sits on: near-black (e.g. rgba(26,32,44,1)) on light bands, near-white ONLY on a dark/image band — white text on a light band renders invisible.",
     keySpecials: {
       text: "string — the visible text; may include inline HTML (<b>, <br>, <span style>…). Also supports template variables: {{today}}, {{yesterday}}, {{tomorrow}} (formatted dates), {{coupon_text}}, {{coupon_code}}, {{coupon_codes}}, {{spin_turn_left}}, {{cart_total_price}}, {{cart_subtotal}}, {{cart_shipping_fee}}, {{cart_discount_code}}, {{voucher_price_cart}}, {{cart_item}}, {{cart_bonus_item}}, {{form_error_log}}, {{total_cart}}. Dynamic form field binding: {{formId__fieldName}} substitutes a field value from a sibling form.",
       tag: "p | h1 | h2 | h3 | h4 | h5 | h6 | span | div.",
@@ -32,8 +32,8 @@ export const CONTENT: ElementDescriptor[] = [
       id: "headline1", type: "text-block",
       properties: { name: "Headline", movable: true, sync: true },
       responsive: {
-        desktop: { config: {}, styles: { top: 80, left: 180, width: 600, fontSize: 44, fontWeight: "bold", color: "rgba(255,255,255,1)", textAlign: "center" } },
-        mobile: { config: {}, styles: { top: 60, left: 20, width: 380, fontSize: 28, fontWeight: "bold", color: "rgba(255,255,255,1)", textAlign: "center" } },
+        desktop: { config: {}, styles: { top: 80, left: 180, width: 600, fontSize: 44, fontWeight: "bold", color: "rgba(26,32,44,1)", textAlign: "center" } },
+        mobile: { config: {}, styles: { top: 60, left: 20, width: 380, fontSize: 28, fontWeight: "bold", color: "rgba(26,32,44,1)", textAlign: "center" } },
       },
       specials: { text: "Bán hàng dễ hơn với Webcake", tag: "h1" },
       runtime: {}, events: [],

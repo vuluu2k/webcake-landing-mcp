@@ -13,7 +13,7 @@ metadata:
 > `page_source` from a brief, and to edit existing pages. The same rules are served at
 > runtime via the server `instructions` (src/domains/landing/instructions.ts) — this skill is the long form.
 
-## Tools (13)
+## Tools (14)
 
 Reference/validation (no backend/env needed):
 `get_generation_guide`, `list_elements`, `get_element`, `new_element`,
@@ -23,8 +23,9 @@ Media (works out of the box via a shared proxy; optional own key via `PEXELS_API
 `search_images` — real stock photos for the page; returns hotlinkable URLs (`src.large` hero, `src.medium` card) to drop into an image element's `specials.src`. Only on `ok:false` → fall back to `https://placehold.co/<w>x<h>`.
 
 Backend (need `WEBCAKE_API_BASE` + `WEBCAKE_JWT` env):
-`list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page`.
-`create_page` / `update_page` default to `dry_run=true`.
+`list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page`, `add_section`.
+`create_page` / `update_page` / `add_section` default to `dry_run=true`.
+`add_section` appends section(s) to an existing page server-side so you send only the new section, not the whole source — use it to build a LARGE page incrementally (`create_page` small skeleton → `add_section` per section) and avoid the giant single payload that can drop the connection.
 
 Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-element-schema.md),
 [src/domains/landing/page-schema.json](../../../src/domains/landing/page-schema.json).
