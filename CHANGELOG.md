@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.32] - 2026-06-08
+
+### Fixed
+- `get_element` for `select` now marks `specials.field_placeholder` as required (the published renderer crashes without it), the element seed now emits a default value, and `validate_page` now raises an error when it is absent and a warning when the wrong key (`specials.placeholder`) is used instead.
+- `get_element` for `select`, `radio`, and `checkbox-group` now documents that `specials.options` items must use `{id, name}` shape — not HTML-style `{label, value}` — and `validate_page` now raises an error on any option that lacks a string `name`, with a diagnostic hint when `label`/`value` keys are detected.
+
 ## [1.0.31] - 2026-06-08
 
 ### Fixed
