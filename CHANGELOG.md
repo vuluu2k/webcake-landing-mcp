@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.31] - 2026-06-08
+
+### Fixed
+- `get_element` for `spin_wheel` now correctly documents `specials.code` as a newline-delimited string (one line per segment in `couponCode|Prize Name|percent` format), not an array, and `specials.message` as the result-popup template string (not an array of segment labels); the element seed now emits both fields in the correct format so generated pages render properly.
+- `get_element` for `gallery` now correctly documents `specials.media` as an array of media objects (`{type, link, linkVideo, typeVideo, imageCompression}`), not plain URL strings; the element seed, `get_generation_guide`, and server instructions all now document the correct object shape so that generated gallery elements display images instead of rendering blank.
+
 ## [1.0.30] - 2026-06-08
 
 ### Changed
