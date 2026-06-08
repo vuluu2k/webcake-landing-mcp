@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.29] - 2026-06-08
+
+### Fixed
+- The `GET /` guide page now takes full control of scroll restoration across reloads: native browser scroll restoration is disabled in the `<head>` script and the exact `window.scrollY` offset is saved to `sessionStorage` on `beforeunload`/`pagehide` and restored at body-end so the position no longer drifts as reveal and hero animations settle.
+- The social-card OG image now displays the correct install command (`npx -y webcake-landing-mcp install`) instead of the shorter form that omitted the `-y` flag and the `install` subcommand.
+
 ## [1.0.28] - 2026-06-08
 
 ### Fixed
