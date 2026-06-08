@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.35] - 2026-06-08
+
+### Changed
+- `get_generation_guide` now includes an explicit workflow step (3b) directing the agent to call `search_images` for every image a page needs (hero, product, about, feature, gallery items), placing a returned URL into `specials.src` or a gallery item's `link` using `src.large` for heroes/banners and `src.medium` for cards/thumbnails, with `avg_color` noted as a guide for matching section backgrounds; `https://placehold.co/<width>x<height>` is now documented as a fallback only when `search_images` returns `ok:false`.
+
 ## [1.0.34] - 2026-06-08
 
 ### Added
