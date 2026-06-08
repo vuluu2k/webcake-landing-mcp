@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.37] - 2026-06-08
+
+### Changed
+- `get_generation_guide` now includes a HEADER section build hint directing the agent to place every header child (logo, brand text, CTA button) on a shared vertical centerline by matching `top + height/2` across all children, and to keep the header's left/right margins consistent with the sections below.
+- `get_generation_guide` now expands the CONTRAST rule to explicitly cover saturated and mid-tone section bands (yellow, orange, teal, pink): the agent must choose text color by the band's luminance — near-black on light or bright mid-tone bands, near-white on dark bands — and the rule now forbids low-alpha (below ~0.85), muted-grey, or near-white text on any colored band; icons and their captions are required to follow the same rule as the text beside them.
+
 ## [1.0.36] - 2026-06-08
 
 ### Changed
