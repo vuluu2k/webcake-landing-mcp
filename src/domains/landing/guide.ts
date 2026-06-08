@@ -79,7 +79,7 @@ SECTION BUILD HINTS (apply to whichever sections the chosen archetype uses)
 RULES
 - Visible content goes in "specials" (text-block.specials.text, image-block.specials.src…), NEVER in "styles".
 - Colors as rgba(r,g,b,a). fontSize/borderWidth/top/left/width/height are NUMBERS (px).
-- IMAGES: a real landing page has images (hero/product shot, feature icons, about photo). There is NO image API yet, so set image-block specials.src to a PLACEHOLDER URL sized to the box: "https://placehold.co/<width>x<height>". NEVER leave src empty — it renders blank and the page looks broken. gallery.media = array of OBJECTS {type:'image', link:'<placeholder-url>', linkVideo:'', typeVideo:'youtube', imageCompression:true} (NOT plain URL strings — the gallery reads item.link); video.specials.img = a poster placeholder. The user replaces these later.
+- IMAGES: a real landing page has images (hero/product shot, feature icons, about photo). PREFER REAL PHOTOS: call search_images with a short English subject (e.g. 'fresh coffee cup', 'modern office team') and put a returned URL into image-block specials.src — use src.large for a hero/banner, src.medium for a card/thumb (avg_color helps pick a matching section background). ONLY if search_images returns ok:false (or is unreachable) FALL BACK to a PLACEHOLDER sized to the box: "https://placehold.co/<width>x<height>". NEVER leave src empty — it renders blank and the page looks broken. gallery.media = array of OBJECTS {type:'image', link:'<real-or-placeholder-url>', linkVideo:'', typeVideo:'youtube', imageCompression:true} (NOT plain URL strings — the gallery reads item.link); video.specials.img = a poster image (real photo, else placeholder).
 - CONTRAST: text must contrast with the section background (dark text on light sections, light text on dark sections). Don't put light-gray text on white or faint text on a dark background.
 - movable:false for section/slide/grid-item/popup; otherwise true. runtime is always {}.
 - Every form input MUST have a unique specials.field_name.
@@ -109,6 +109,7 @@ WORKFLOW (recommended)
 1. Call get_generation_guide (this) once, then new_page_skeleton for the top-level shape.
 2. For each element type you'll use, call get_element to learn its specials & see an example.
 3. Optionally call new_element to get a correct skeleton, then fill specials + coordinates.
+3b. For every image the page needs (hero, product, about, feature, gallery), call search_images and put a returned URL into specials.src / gallery item.link. Use placehold.co ONLY when search_images returns ok:false.
 4. Assemble { page, popup, settings, options, cartConfigs }.
 5. Call validate_page and fix every error.
 6. To save: call list_organizations, show the orgs to the user and ask which to use (default to is_default). Then create_page (dry_run first, then dry_run:false with the chosen organization_id).
