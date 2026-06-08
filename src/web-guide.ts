@@ -457,7 +457,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
 <html lang="${L}"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script>(function(){try{var t=localStorage.getItem('wc-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();</script>
+<script>(function(){try{var t=localStorage.getItem('wc-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}})();</script>
 <title>${m.title}</title>
 <meta name="description" content="${m.desc}">
 <meta name="keywords" content="${m.keywords}">
@@ -845,6 +845,17 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   paint();
   if(tBtn)tBtn.addEventListener('click',function(){var next=effective()==='dark'?'light':'dark';html.setAttribute('data-theme',next);try{localStorage.setItem('wc-theme',next);}catch(e){}paint();});
 
+  // Restore scroll position exactly across reloads. Native scroll restoration is
+  // disabled (see head script); the browser's own restore drifts a little each
+  // reload as the reveal/hero animations settle. We persist the exact offset per
+  // URL and re-apply it now (DOM is fully parsed — this script is at body end, the
+  // page has no async images, so layout height is already final → no drift).
+  var SKEY='wc-scroll:'+location.pathname+location.search;
+  try{var y=sessionStorage.getItem(SKEY);if(y!==null)window.scrollTo(0,parseFloat(y)||0);}catch(e){}
+  function saveScroll(){try{sessionStorage.setItem(SKEY,String(window.scrollY));}catch(e){}}
+  window.addEventListener('beforeunload',saveScroll);
+  window.addEventListener('pagehide',saveScroll);
+
   // Enable smooth scrolling only after the browser has restored scroll position
   // on (re)load — applying it globally animates that restore into a jerky scroll.
   window.addEventListener('load',function(){requestAnimationFrame(function(){html.classList.add('smooth');});});
@@ -883,8 +894,8 @@ export function ogImageSvg(): string {
   <text x="90" y="400" fill="#ffffff" font-size="64" font-weight="800" letter-spacing="-2">pages from <tspan fill="#1DB954">one sentence</tspan>.</text>
   <text x="90" y="478" fill="#9fb1a8" font-size="30" font-weight="500">No drag-and-drop · No JSON · Saves straight to your Webcake account</text>
   <g transform="translate(90 520)">
-    <rect width="290" height="56" rx="12" fill="#1DB954"/>
-    <text x="145" y="36" fill="#ffffff" font-size="24" font-weight="700" text-anchor="middle">npx webcake-landing-mcp</text>
+    <rect width="470" height="56" rx="12" fill="#1DB954"/>
+    <text x="235" y="36" fill="#ffffff" font-size="24" font-weight="700" text-anchor="middle">npx -y webcake-landing-mcp install</text>
   </g>
   <text x="1110" y="560" fill="#5b6b63" font-size="24" font-weight="600" text-anchor="end">github.com/vuluu2k/webcake-landing-mcp</text>
 </svg>`;
