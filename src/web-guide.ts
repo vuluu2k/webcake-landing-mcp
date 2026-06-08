@@ -498,7 +498,11 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   :root[data-theme="dark"]{--ink:#e8f0ec;--mut:#9aaba2;--bg:#0b110e;--card:#141b17;
     --line:rgba(255,255,255,.07);--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a;--ic-fg:#6fe79a;--btn-hover:#21c264}
   *{box-sizing:border-box}
-  html{scroll-behavior:smooth}
+  /* Smooth scrolling only AFTER first load — applied globally it makes the
+     browser *animate* scroll-position restoration on reload, which reads as a
+     jerky scroll. The .smooth class is added a frame after load (see script). */
+  html{scroll-behavior:auto}
+  html.smooth{scroll-behavior:smooth}
   body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);
     background:var(--bg);line-height:1.62;overflow-x:hidden}
   /* Subtle background tint — one faint, slow accent glow */
@@ -840,6 +844,10 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   function paint(){if(tBtn)tBtn.innerHTML=effective()==='dark'?SUN:MOON;}
   paint();
   if(tBtn)tBtn.addEventListener('click',function(){var next=effective()==='dark'?'light':'dark';html.setAttribute('data-theme',next);try{localStorage.setItem('wc-theme',next);}catch(e){}paint();});
+
+  // Enable smooth scrolling only after the browser has restored scroll position
+  // on (re)load — applying it globally animates that restore into a jerky scroll.
+  window.addEventListener('load',function(){requestAnimationFrame(function(){html.classList.add('smooth');});});
 })();
 </script>
 </body></html>`;
