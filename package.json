@@ -3,6 +3,7 @@
   "version": "1.0.27",
   "description": "MCP server exposing Webcake landing-page element schemas + AI usage hints, and persisting LLM-generated page sources to a Webcake backend.",
   "type": "module",
+  "license": "MIT",
   "bin": {
     "webcake-landing-mcp": "dist/index.js"
   },
