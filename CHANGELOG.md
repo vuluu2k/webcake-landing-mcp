@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.28] - 2026-06-08
+
+### Fixed
+- The `GET /` guide page no longer animates the browser's scroll-position restoration on reload; smooth scrolling is now enabled one animation frame after load so that anchor-link navigation remains smooth without causing a jerky scroll on page refresh.
+
 ## [1.0.27] - 2026-06-08
 
 ### Fixed
