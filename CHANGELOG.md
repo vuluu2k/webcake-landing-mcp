@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.34] - 2026-06-08
+
+### Added
+- New `search_images` tool queries Pexels stock photos by short English subject and returns ready-to-hotlink URLs at several sizes; use `src.large` for hero/banner images and `src.medium` for card/thumbnail images — works out of the box via a shared hosted proxy, or set `PEXELS_API_KEY` (env) or the `x-pexels-key` request header to use your own Pexels quota (free at pexels.com/api).
+- The HTTP server now exposes `GET /api/images/search` as a shared image proxy, allowing `npx` users without a local Pexels API key to retrieve real stock photos through the hosted server.
+- Startup now loads a local `.env` file (from the working directory or next to the binary) for environment variables such as `PEXELS_API_KEY`; real environment variables and per-request headers continue to take precedence.
+
+### Changed
+- Server instructions now direct the agent to call `search_images` first and place a real Pexels photo URL into `specials.src`, falling back to `https://placehold.co/<width>x<height>` only when `search_images` returns `ok: false`.
+
 ## [1.0.33] - 2026-06-08
 
 ### Fixed
