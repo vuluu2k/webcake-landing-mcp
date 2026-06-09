@@ -21,6 +21,7 @@ import {
   createPage,
   listOrganizations,
   listPages,
+  searchPages,
   getPageSource,
   updatePageSource,
   appendSection,
@@ -144,6 +145,56 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const { config, missing } = cfgFor(extra);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
       return text(await listPages(config));
+    }
+  );
+
+  // 10b) Find pages (search by name / domain / id) ----------------------------
+  // The lookup step before an edit: locate the page the user means by name,
+  // domain (custom OR default), and/or page id, then feed its id to get_page →
+  // (edit) → update_page/add_section. Filters are AND-combined server-side and
+  // results carry both domain fields so the model can disambiguate by URL.
+  //
+  // Searches via the dedicated /api/v1/ai/search_pages endpoint (proper DB query,
+  // not limited to the 50 most-recent). If that route is missing (older backend
+  // → 404) it FALLS BACK to listing pages and filtering client-side by name/id
+  // (domain search is unavailable in the fallback — list_pages omits domains).
+  server.tool(
+    "find_pages",
+    "Searches the account's pages by name, domain, and/or page id so you can locate the page to edit, then pass its id to get_page → update_page/add_section. Filters are AND-combined (e.g. name='sale' + domain='shop.com'). Each result includes id, name, organization_id, custom_domain, default_domain, updated_at. With no filters it returns the most-recent pages (like list_pages). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    {
+      name: z.string().optional().describe("Case-insensitive substring of the page name to match."),
+      domain: z
+        .string()
+        .optional()
+        .describe("Case-insensitive substring of the page's domain (matches custom_domain OR default_domain)."),
+      page_id: z.string().optional().describe("Exact page id — narrows to that single page (useful to confirm it exists/owned)."),
+      limit: z.number().int().positive().max(100).optional().describe("Max results (default 50, capped at 100)."),
+    },
+    { title: "Find Webcake Pages", readOnlyHint: true, openWorldHint: true },
+    async ({ name, domain, page_id, limit }, extra) => {
+      const { config, missing } = cfgFor(extra);
+      if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
+
+      const res = await searchPages(config, { name, domain, id: page_id, limit });
+      if (!res.endpoint_missing) {
+        return text({ ok: res.ok, pages: res.pages, count: res.pages?.length ?? 0, status: res.status, error: res.error });
+      }
+
+      // Fallback: older backend without /search_pages — list and filter client-side.
+      const listed = await listPages(config);
+      if (!listed.ok) return text({ ok: false, status: listed.status, error: listed.error });
+      let pages = listed.pages ?? [];
+      const nameQ = name?.toLowerCase();
+      if (nameQ) pages = pages.filter((p) => p.name?.toLowerCase().includes(nameQ));
+      if (page_id) pages = pages.filter((p) => `${p.id}` === page_id);
+      if (limit != null) pages = pages.slice(0, limit);
+      return text({
+        ok: true,
+        pages,
+        count: pages.length,
+        via: "legacy_list_filter_fallback",
+        ...(domain ? { note: "Domain search is unavailable on this backend (list_pages omits domains); the domain filter was ignored." } : {}),
+      });
     }
   );
 

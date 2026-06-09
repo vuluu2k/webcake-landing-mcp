@@ -89,7 +89,7 @@ persists it (source-only — the page opens in the editor where re-saving render
 | **npx (local)** — runs on your machine | Personal daily use, full control | browser `login`, a JWT, or none (reference tools) |
 | **Hosted URL** — use our live server, nothing to install | No Node.js, teams, the claude.ai dialog | your personal `?jwt=` link / `x-webcake-jwt` header |
 
-The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) and the **ingest tools** (`ingest_html`, `ingest_url` — turn an existing HTML or URL into a layout anchor so the AI can recreate or adapt it) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `add_section`, `list_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
+The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) and the **ingest tools** (`ingest_html`, `ingest_url` — turn an existing HTML or URL into a layout anchor so the AI can recreate or adapt it) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `add_section`, `list_pages`, `find_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
 
 > 🛠️ Prefer a shell-script installer (`install.sh`/`install.ps1`), a cloned local build, or hand-written per-IDE config? See **[docs/manual-install.md](docs/manual-install.md)**.
 
@@ -464,6 +464,7 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | `list_organizations` | List the account's organizations (id, name, is_default). Default = the `is_default` org. |
 | `create_page` | Persist a generated source as a new page (source-only). **Defaults to `dry_run=true`.** |
 | `list_pages` | List the account's pages (id, name, organization_id, updated_at) to pick one to edit. |
+| `find_pages` | Search the account's pages by name, domain, and/or page id (AND-combined) to locate one to edit; returns id, name, org, custom/default domain, updated_at. |
 | `get_page` | Fetch an existing page's decoded source tree so you can edit it. |
 | `update_page` | Overwrite an existing page's source with an edited tree. **Defaults to `dry_run=true`.** |
 

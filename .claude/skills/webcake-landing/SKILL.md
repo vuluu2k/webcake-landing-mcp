@@ -26,8 +26,9 @@ Reference ingest (no env needed) — turn an EXISTING page into a layout anchor:
 `ingest_html(html, intent?)` / `ingest_url(url, intent?)` — parse HTML or fetch a URL into a compact AST (title, description, sections classified by role — hero/features/form/cta/footer/… — with headings, CTAs, images, form fields, plus top colors + fonts from inline styles). Use as a LAYOUT REFERENCE, not a clone source. Default `intent='adapt'` (rewrite content for user's brand); `intent='clone'` only when the user explicitly asks. For a screenshot/image input, no tool is needed — Claude analyzes it natively.
 
 Backend (need `WEBCAKE_API_BASE` + `WEBCAKE_JWT` env):
-`list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page`, `add_section`.
+`list_organizations`, `create_page`, `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`.
 `create_page` / `update_page` / `add_section` default to `dry_run=true`.
+`find_pages` searches the account's pages by name, domain, and/or page id (AND-combined) to locate the page to edit when you don't already have a `page_id` — results include both `custom_domain` and `default_domain` to disambiguate by URL.
 `add_section` appends section(s) to an existing page server-side so you send only the new section, not the whole source — use it to build a LARGE page incrementally (`create_page` small skeleton → `add_section` per section) and avoid the giant single payload that can drop the connection.
 
 Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-element-schema.md),
@@ -58,7 +59,7 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 
 ## Workflow — edit existing page
 
-1. `list_pages` → user picks (or take a `page_id` from a URL).
+1. `find_pages({ name?, domain?, page_id? })` to locate the page by name/domain/id (or `list_pages` to browse; or take a `page_id` straight from a URL).
 2. `get_page(page_id)` → the live `{ page, popup, settings, ... }`.
 3. **Edit surgically**: change only what was asked; keep every other element, its `id`, and coordinates. To add: `new_element`, unique id, place in the right section's `children`.
 4. `validate_page` → `update_page(page_id, source)` (`dry_run:true` then `dry_run:false`).

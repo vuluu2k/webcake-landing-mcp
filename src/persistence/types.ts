@@ -31,5 +31,7 @@ export type PageSummary = {
   name: string;
   organization_id: number | string | null;
   engine?: number;
+  custom_domain?: string | null;
+  default_domain?: string | null;
   updated_at?: string;
 };

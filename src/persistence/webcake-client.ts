@@ -15,6 +15,7 @@ import type { WebcakeConfig, Organization, CreateOutcome, PageSummary } from "./
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
 const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
+const SEARCH_PAGES_ENDPOINT = "/api/v1/ai/search_pages";
 const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
 const APPEND_ENDPOINT = "/api/v1/ai/append_section";
@@ -185,6 +186,30 @@ export async function listPages(
   config: WebcakeConfig
 ): Promise<{ ok: boolean; status: number; pages?: PageSummary[]; error?: string }> {
   const r = await getJson(`${config.base}${PAGES_ENDPOINT}`, config);
+  if (!r.ok) return { ok: false, status: r.status, error: r.error };
+  const pages: PageSummary[] = r.json?.data?.pages ?? r.json?.pages ?? [];
+  return { ok: true, status: r.status, pages };
+}
+
+/**
+ * Search the account's pages by name / domain / id via the dedicated backend
+ * endpoint. Filters are AND-combined server-side; each row carries the page's
+ * `custom_domain` + `default_domain` so the caller can disambiguate by URL.
+ * Returns `endpoint_missing:true` on a 404 so the caller can fall back to
+ * filtering `listPages` client-side against an older backend lacking the route.
+ */
+export async function searchPages(
+  config: WebcakeConfig,
+  filters: { name?: string; domain?: string; id?: string; limit?: number }
+): Promise<{ ok: boolean; status: number; pages?: PageSummary[]; endpoint_missing?: boolean; error?: string }> {
+  const qs = new URLSearchParams();
+  if (filters.name) qs.set("name", filters.name);
+  if (filters.domain) qs.set("domain", filters.domain);
+  if (filters.id) qs.set("id", filters.id);
+  if (filters.limit != null) qs.set("limit", `${filters.limit}`);
+  const url = `${config.base}${SEARCH_PAGES_ENDPOINT}${qs.toString() ? `?${qs}` : ""}`;
+  const r = await getJson(url, config);
+  if (r.status === 404) return { ok: false, status: 404, endpoint_missing: true, error: "search_pages endpoint not found on backend" };
   if (!r.ok) return { ok: false, status: r.status, error: r.error };
   const pages: PageSummary[] = r.json?.data?.pages ?? r.json?.pages ?? [];
   return { ok: true, status: r.status, pages };
