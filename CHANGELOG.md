@@ -6,6 +6,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.39] - 2026-06-08
+
+### Internal
+- Added `server.json` MCP Registry manifest (namespace `io.github.vuluu2k/webcake-landing-mcp`) and the corresponding `mcpName` field in `package.json` so the official MCP Registry can verify npm package ownership.
+
+## [1.0.38] - 2026-06-08
+
+### Added
+- New `add_section` tool appends one or more sections to an existing page without re-sending the full source: the server fetches the current page, appends the new section(s), validates the entire merged tree (errors block; warnings are advisory), and saves — enabling large pages to be built incrementally (`create_page` with a small skeleton, then `add_section` once per section) to avoid connection drops caused by giant single-pass `create_page` payloads.
+
+### Changed
+- `get_generation_guide` and server instructions now frame the agent as a professional landing-page designer who must lock a design system (exact palette, type scale, 8px spacing grid, and button/card component specs derived from the customer's primary color) before building any element, so the whole page is consistent and looks studio-made rather than ad hoc.
+- `get_generation_guide` now includes a PREMIUM CRAFT section with explicit guidance on whitespace, type hierarchy, palette restraint, 8px spacing rhythm, component consistency, and CTA weight to raise the quality of generated pages.
+- `get_generation_guide` expands the page-margin rule into a full shared horizontal axis (left edge at 80 desktop / 20 mobile, content width 800 / 380) applied to every section and the header, and updates the HEADER build hint to anchor the logo and CTA explicitly to this axis.
+- `get_generation_guide` and server instructions now require the agent to communicate with customers in plain everyday words rather than design jargon, and to restate proposed designs in non-technical language before generating.
+- `get_generation_guide` workflow adds step 0b directing the agent to lock the design system (palette, type scale, spacing, and component specs) immediately after customer confirmation, before assembling the page JSON.
+- Server instructions add an incremental build rule for large pages (4+ sections): use `create_page` with a small skeleton then `add_section` once per section, and `add_section` is now listed in the tools list.
+- `get_element` for `text-block` now explicitly warns that text color must always contrast with the section band it sits on, and the element seed's default headline color changes from white (`rgba(255,255,255,1)`) to near-black (`rgba(26,32,44,1)`) to prevent invisible text on light bands.
+
 ## [1.0.37] - 2026-06-08
 
 ### Changed

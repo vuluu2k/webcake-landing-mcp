@@ -28,6 +28,7 @@ jobs:
     if: "!contains(github.event.head_commit.message, 'chore(release):')"
     permissions:
       contents: write
+      id-token: write # OIDC token for MCP Registry auth (mcp-publisher login github-oidc)
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -282,7 +283,9 @@ jobs:
       - name: Commit, tag and push
         if: steps.mode.outputs.resume != 'true'
         run: |
-          git add package.json CHANGELOG.md CHANGELOG.vi.md
+          # Keep server.json (MCP Registry manifest) version in lockstep with the release.
+          node -e "const fs=require('fs'),v='${{ steps.version.outputs.new }}',j=require('./server.json');j.version=v;if(j.packages&&j.packages[0])j.packages[0].version=v;fs.writeFileSync('server.json',JSON.stringify(j,null,2)+'\n')"
+          git add package.json server.json CHANGELOG.md CHANGELOG.vi.md
           git diff --cached --quiet || git add -u
           git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
           git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
@@ -338,3 +341,33 @@ jobs:
               --title "${{ steps.final.outputs.tag }}" \
               --notes-file .release_notes.md
           fi
+
+      # --- Publish to the official MCP Registry (registry.modelcontextprotocol.io) ---
+      # Runs AFTER npm publish so the registry's npm package-ownership check
+      # (it fetches the npm tarball and matches package.json#mcpName) can pass.
+      # OIDC maps the repo owner to the io.github.<owner>/* namespace — no secret.
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Wait for npm to expose the released version
+        run: |
+          PKG=$(node -p "require('./package.json').name")
+          VER="${{ steps.final.outputs.version }}"
+          for i in $(seq 1 30); do
+            if npm view "${PKG}@${VER}" version >/dev/null 2>&1; then
+              echo "npm has ${PKG}@${VER}"; exit 0
+            fi
+            echo "waiting for npm ${PKG}@${VER}... ($i/30)"; sleep 10
+          done
+          echo "npm did not expose ${VER} within timeout" >&2; exit 1
+
+      - name: Sync server.json to the released version
+        run: |
+          node -e "const fs=require('fs'),v='${{ steps.final.outputs.version }}',j=require('./server.json');j.version=v;if(j.packages&&j.packages[0])j.packages[0].version=v;fs.writeFileSync('server.json',JSON.stringify(j,null,2)+'\n')"
+
+      - name: Authenticate to MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish

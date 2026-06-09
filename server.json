@@ -1,0 +1,49 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vuluu2k/webcake-landing-mcp",
+  "description": "Build, validate, and persist Webcake landing-page source JSON: element schemas plus AI usage hints.",
+  "title": "Webcake Landing",
+  "repository": {
+    "url": "https://github.com/vuluu2k/webcake-landing-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/vuluu2k/webcake-landing-mcp#readme",
+  "version": "1.0.39",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "webcake-landing-mcp",
+      "version": "1.0.39",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "WEBCAKE_JWT",
+          "description": "Webcake backend JWT; required only for the persistence tools (create/update/list pages).",
+          "isSecret": true
+        },
+        {
+          "name": "WEBCAKE_ENV",
+          "description": "Webcake environment preset that fills the API/app/builder base URLs.",
+          "choices": ["local", "staging", "prod"]
+        },
+        {
+          "name": "WEBCAKE_API_BASE",
+          "description": "Override for the Webcake API base URL (takes precedence over WEBCAKE_ENV)."
+        },
+        {
+          "name": "WEBCAKE_ORG_ID",
+          "description": "Default Webcake organization id for the persistence tools."
+        },
+        {
+          "name": "PEXELS_API_KEY",
+          "description": "Optional Pexels API key for search_images; without one a shared hosted proxy is used.",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
