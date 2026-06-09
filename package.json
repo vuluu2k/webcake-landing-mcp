@@ -14,9 +14,14 @@
   "engines": {
     "node": ">=18"
   },
+  "author": "vuluu2k (https://github.com/vuluu2k)",
+  "homepage": "https://mcp.toolvn.io.vn",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vuluu2k/webcake-landing-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vuluu2k/webcake-landing-mcp/issues"
   },
   "scripts": {
     "build": "node scripts/gen-changelog.mjs && tsc && node scripts/copy-assets.mjs",

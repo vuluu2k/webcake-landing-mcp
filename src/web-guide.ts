@@ -101,16 +101,16 @@ const META: Record<
   { title: string; desc: string; keywords: string; locale: string }
 > = {
   vi: {
-    title: "Webcake Landing MCP — AI dựng landing page Webcake bằng lời nói",
-    desc: "MCP server cho phép AI (Claude, Cursor, Windsurf…) dựng, kiểm tra và lưu thẳng landing page Webcake từ một câu mô tả. Không kéo-thả, không viết JSON, kết nối một lần là xong.",
+    title: "Webcake Landing MCP — AI tự dựng landing page Webcake cho bạn",
+    desc: "Bạn chỉ cần mô tả bằng lời, AI (Claude, Cursor, Windsurf…) sẽ tự dựng, tự kiểm tra và lưu landing page Webcake cho bạn. Không cần kéo-thả, không cần biết code, kết nối một lần là xong.",
     keywords:
       "Webcake, landing page, MCP, Model Context Protocol, AI, Claude, Cursor, Windsurf, tạo landing page bằng AI, no-code, COD, lead generation",
     locale: "vi_VN",
   },
   en: {
     title:
-      "Webcake Landing MCP — let AI build Webcake landing pages from a sentence",
-    desc: "An MCP server that lets AI (Claude, Cursor, Windsurf…) build, validate and save Webcake landing pages straight from a plain-language description. No drag-and-drop, no JSON, connect once.",
+      "Webcake Landing MCP — let AI build Webcake landing pages for you",
+    desc: "Just describe it in plain words and AI (Claude, Cursor, Windsurf…) builds, checks and saves a Webcake landing page for you. No drag-and-drop, no coding — connect once and you're set.",
     keywords:
       "Webcake, landing page, MCP, Model Context Protocol, AI, Claude, Cursor, Windsurf, AI website builder, no-code, COD, lead generation",
     locale: "en_US",
@@ -122,45 +122,45 @@ const FAQ: Record<Lang, Array<{ q: string; a: string }>> = {
   vi: [
     {
       q: "Webcake Landing MCP là gì?",
-      a: "Một MCP server dạy AI cách dựng trọn cấu trúc nguồn của landing page Webcake từ yêu cầu bằng lời, kiểm tra hợp lệ rồi lưu về tài khoản Webcake của bạn. Server lo phần khó; bạn chỉ mô tả và duyệt.",
+      a: "Là một công cụ giúp AI (như Claude, Cursor) tự dựng landing page Webcake cho bạn từ một câu mô tả, tự kiểm tra rồi lưu vào tài khoản Webcake của bạn. Công cụ lo phần khó; bạn chỉ cần mô tả và xem lại.",
     },
     {
       q: "Tôi có cần biết lập trình không?",
-      a: "Không. Bạn chỉ cần mô tả trang bằng ngôn ngữ tự nhiên trong AI (Claude, Cursor…). AI dùng các tool của server để dựng đúng mô hình element thật của Webcake.",
+      a: "Không. Bạn chỉ cần mô tả trang bằng lời, ngay trong ứng dụng AI mà bạn đang dùng. Mọi phần kỹ thuật để công cụ tự lo.",
     },
     {
       q: "Có miễn phí không?",
-      a: "Có. Server là mã nguồn mở và miễn phí. Bạn chỉ cần một tài khoản Webcake để lưu trang; các tool tham chiếu + kiểm tra còn chạy được mà không cần token.",
+      a: "Có. Công cụ miễn phí và mã nguồn mở. Bạn chỉ cần một tài khoản Webcake để lưu trang.",
     },
     {
-      q: "Dùng được với AI/IDE nào?",
-      a: "Claude Desktop, Claude Code, Cursor, Windsurf, Augment (VS Code), Codex, và claude.ai trên web — hay bất kỳ client nào hỗ trợ Model Context Protocol.",
+      q: "Dùng được với ứng dụng nào?",
+      a: "Claude (máy tính, web, Claude Code), Cursor, Windsurf, Augment, Codex — và bất kỳ ứng dụng AI nào hỗ trợ chuẩn kết nối MCP.",
     },
     {
-      q: "Token của tôi có an toàn không?",
-      a: "Có. Token chỉ là của riêng bạn, gửi qua header hoặc link cá nhân, không lưu lại; và mọi thao tác ghi đều mặc định xem trước (dry-run) trước khi thực sự lưu.",
+      q: "Thông tin của tôi có an toàn không?",
+      a: "Có. Mã đăng nhập là của riêng bạn và không bị lưu lại. Ngoài ra, mỗi lần lưu trang công cụ đều cho bạn xem trước, chắc chắn rồi mới thực hiện.",
     },
   ],
   en: [
     {
       q: "What is Webcake Landing MCP?",
-      a: "An MCP server that teaches AI how to build the full source structure of a Webcake landing page from a plain-language request, validate it, then save it to your Webcake account. The server does the hard part; you just describe and review.",
+      a: "It's a tool that lets AI (like Claude or Cursor) build a Webcake landing page for you from a single description, check it, then save it to your Webcake account. The tool does the hard part; you just describe and review.",
     },
     {
       q: "Do I need to know how to code?",
-      a: "No. You just describe the page in natural language in your AI (Claude, Cursor…). The AI uses the server's tools to build against Webcake's real element model.",
+      a: "No. You just describe the page in plain words, right inside the AI app you already use. The tool handles all the technical parts.",
     },
     {
       q: "Is it free?",
-      a: "Yes. The server is open-source and free. You only need a Webcake account to save pages; the reference and validation tools work without a token.",
+      a: "Yes. The tool is free and open-source. You only need a Webcake account to save pages.",
     },
     {
-      q: "Which AI / IDEs work with it?",
-      a: "Claude Desktop, Claude Code, Cursor, Windsurf, Augment (VS Code), Codex, and claude.ai on the web — or any client that supports the Model Context Protocol.",
+      q: "Which apps work with it?",
+      a: "Claude (desktop, web, Claude Code), Cursor, Windsurf, Augment, Codex — and any AI app that supports the MCP connection standard.",
     },
     {
-      q: "Is my token safe?",
-      a: "Yes. The token is yours alone, sent via a header or your personal link and never stored; and every write defaults to a preview (dry-run) before anything is actually saved.",
+      q: "Is my information safe?",
+      a: "Yes. Your login code is yours alone and is never stored. On top of that, every save shows you a preview first, so nothing happens until you're sure.",
     },
   ],
 };
@@ -206,175 +206,176 @@ type Strings = {
 
 const T: Record<Lang, Strings> = {
   vi: {
-    sub: "Cho AI dựng & sửa landing page Webcake bằng lời nói",
-    running: "Server đang chạy",
+    sub: "Để AI tự dựng & sửa landing page Webcake cho bạn, chỉ bằng lời nói",
+    running: "Đang hoạt động",
     leadPre:
-      "Bạn gõ yêu cầu, AI (Claude, Cursor…) dựng nguyên cái landing page rồi ",
+      "Bạn gõ yêu cầu, AI (như Claude, Cursor…) tự dựng cả trang landing page rồi ",
     leadGrad: "lưu thẳng vào tài khoản Webcake",
     leadPost:
-      " của bạn. Không kéo thả, không cài server — kết nối một lần là xong.",
+      " của bạn. Không cần kéo thả, không cần cài đặt phức tạp — kết nối một lần là xong.",
     ctaStart: "Bắt đầu kết nối",
-    ctaStar: "Star trên GitHub",
-    flowH2: "Mô hình hoạt động",
+    ctaStar: "Tặng sao trên GitHub",
+    flowH2: "Mọi thứ diễn ra thế nào",
     flow: [
-      { icon: "bulb", t: "Bạn", s: "ý tưởng" },
-      { icon: "brain", t: "Trợ lý AI", s: "Claude · Codex · Cursor,etc..." },
-      { icon: "server", t: "MCP", s: "webcake-landing" },
-      { icon: "window", t: "WebCake", s: "trang thật" },
+      { icon: "bulb", t: "Bạn", s: "ý tưởng của bạn" },
+      { icon: "brain", t: "Trợ lý AI", s: "Claude · Cursor · Codex…" },
+      { icon: "server", t: "Webcake MCP", s: "cầu nối thông minh" },
+      { icon: "window", t: "Webcake", s: "trang web thật" },
     ],
     flowCap:
-      "Bạn mô tả bằng lời → AI học mô hình thật từ MCP → MCP dựng JSON + kiểm tra → lưu thành trang thật trên WebCake. Bạn nhận link, mở editor, publish.",
-    howH2: "Cách hoạt động",
+      "Bạn nói ý tưởng → AI hiểu cách Webcake hoạt động → tự dựng trang và tự kiểm tra → trang được lưu thật vào Webcake. Bạn nhận link, mở lên xem và đăng trang.",
+    howH2: "Vì sao bạn không cần biết kỹ thuật",
     how: [
       {
         icon: "brain",
-        t: "AI học mô hình thật",
-        d: 'Danh mục element, <code class="inl">specials</code>, hệ toạ độ và sự kiện của Webcake — lấy trực tiếp qua các tool của server.',
+        t: "AI lo phần dựng trang",
+        d: "AI tự sắp xếp chữ, hình ảnh, nút bấm, biểu mẫu… theo đúng chuẩn của Webcake. Bạn không phải đụng tới.",
       },
       {
         icon: "check2",
-        t: "Server lo phần khó",
-        d: "Dựng JSON nguồn, kiểm tra hợp lệ (validate) rồi lưu trang về backend Webcake — bạn khỏi đụng schema.",
+        t: "Hệ thống tự kiểm tra",
+        d: "Trang được dựng và kiểm tra tự động trước khi lưu, nên hiếm khi lỗi — bạn không cần biết gì về kỹ thuật.",
       },
       {
         icon: "edit",
-        t: "Bạn chỉ duyệt",
-        d: "Mở trang trong editor Webcake, chỉnh vài chỗ nếu thích, lưu lại để render — xong.",
+        t: "Bạn chỉ việc xem lại",
+        d: "Mở trang trong trình chỉnh sửa Webcake, sửa vài chỗ nếu thích, bấm lưu là trang hiển thị. Vậy là xong.",
       },
     ],
-    buildH2: "Bạn dựng được những gì",
+    buildH2: "Bạn có thể tạo những gì",
     uses: [
       {
         icon: "magnet",
-        t: "Trang thu lead",
-        e: '"Trang waitlist cho SaaS — hero, 3 lợi ích, form thu email."',
+        t: "Trang thu khách tiềm năng",
+        e: '"Trang đăng ký nhận tin cho ứng dụng — phần đầu nổi bật, 3 lợi ích, ô nhập email."',
       },
       {
         icon: "cart",
-        t: "Bán hàng COD / online",
-        e: '"Trang một sản phẩm — gallery, giá, biến thể, form đặt hàng có giỏ."',
+        t: "Bán hàng (COD / online)",
+        e: '"Trang bán một sản phẩm — ảnh, giá, lựa chọn mẫu mã, form đặt hàng."',
       },
       {
         icon: "ticket",
-        t: "Sự kiện / webinar",
-        e: '"Trang đăng ký — đếm ngược, agenda, form đăng ký."',
+        t: "Sự kiện / hội thảo",
+        e: '"Trang đăng ký tham gia — đồng hồ đếm ngược, lịch trình, form đăng ký."',
       },
       {
         icon: "mail",
         t: "Thiệp mời",
-        e: '"Thiệp cưới — tên, ngày, bản đồ, form RSVP."',
+        e: '"Thiệp cưới — tên cô dâu chú rể, ngày giờ, bản đồ, form xác nhận tham dự."',
       },
       {
         icon: "phone",
-        t: "Quảng bá app",
-        e: '"Mockup điện thoại, danh sách tính năng, nút App Store + Google Play."',
+        t: "Giới thiệu ứng dụng",
+        e: '"Ảnh điện thoại, danh sách tính năng, nút tải trên App Store và Google Play."',
       },
       {
         icon: "flame",
-        t: "Flash sale",
-        e: '"Đồng hồ đếm ngược to, lưới sản phẩm giảm giá, nút Mua dính."',
+        t: "Sale chớp nhoáng",
+        e: '"Đồng hồ đếm ngược cỡ lớn, lưới sản phẩm giảm giá, nút Mua luôn nổi."',
       },
     ],
     connectH2: "Kết nối — chọn 1 trong 2 cách",
-    m1Tag: "Cách ① · npx — chạy trên máy bạn",
-    m1Sub: "Hợp khi dùng cá nhân, muốn toàn quyền. Cần cài Node.js 18+.",
+    m1Tag: "Cách ① · Cài trên máy của bạn",
+    m1Sub:
+      "Phù hợp khi bạn tự dùng và muốn chủ động. Cần có sẵn Node.js (một phần mềm miễn phí giúp chạy lệnh).",
     m1Steps: [
-      '<b>Cài Node.js 18+</b> nếu chưa có. Kiểm tra bằng <code class="inl">node -v</code>; chưa có thì tải ở <b>nodejs.org</b>.',
-      "<b>Mở Terminal và chạy:</b><pre>npx -y webcake-landing-mcp install</pre>",
-      '<b>Làm theo hỏi đáp:</b> chọn môi trường (<code class="inl">prod</code>) → đăng nhập Webcake qua trình duyệt (hoặc dán JWT) → chọn IDE (Claude Desktop / Cursor / Claude Code…).',
-      '<b>Khởi động lại IDE</b> → thấy <code class="inl">webcake-landing</code> trong danh sách MCP là xong.',
+      "<b>Cài Node.js</b> (miễn phí) nếu máy chưa có — tải tại <b>nodejs.org</b>. Đây là phần mềm giúp máy chạy được công cụ ở bước sau.",
+      "<b>Mở Terminal</b> (cửa sổ gõ lệnh — trên Mac tìm “Terminal”, trên Windows tìm “Command Prompt”), dán dòng dưới đây rồi nhấn Enter:<pre>npx -y webcake-landing-mcp install</pre>",
+      '<b>Làm theo hướng dẫn hiện ra:</b> chọn <code class="inl">prod</code> → đăng nhập Webcake bằng trình duyệt → chọn ứng dụng AI bạn đang dùng (Claude, Cursor…).',
+      '<b>Mở lại ứng dụng AI.</b> Thấy chữ <code class="inl">webcake-landing</code> xuất hiện là đã kết nối thành công.',
     ],
-    m1Note: "Muốn cấu hình mọi IDE một phát:",
-    m2Tag: "Cách ② · URL remote — không cần cài gì",
+    m1Note: "Muốn cài cho tất cả ứng dụng cùng lúc, dùng dòng lệnh này:",
+    m2Tag: "Cách ② · Dùng link — không cần cài gì",
     m2Sub:
-      "Hợp khi máy không có Node.js, dùng theo nhóm, hoặc dùng claude.ai trên web.",
+      "Phù hợp khi máy không cài được phần mềm, dùng theo nhóm, hoặc dùng Claude trên web (claude.ai).",
     m2Steps: [
-      '<b>Lấy link cá nhân</b> (đã gắn sẵn token) — mở trang sau rồi bấm <b>Copy</b>:<a class="btn" href="{REMOTE}">Mở {REMOTE_HOST} {ARROW}</a>',
-      '<b>Mở phần thêm connector</b> trong client:<br>• claude.ai: <i>Settings → Connectors → Add custom connector</i><br>• Cursor / Claude Code: mở file <code class="inl">.mcp.json</code>',
-      "<b>Dán link</b> vừa copy (có dạng):<pre>{ENDPOINT}?jwt=&lt;TOKEN&gt;</pre>",
-      "<b>Bấm Add</b> (hoặc lưu file) → đợi kết nối → xong. Icon Webcake xanh hiện lên là chạy được.",
+      '<b>Lấy link riêng của bạn</b> (đã gắn sẵn mã đăng nhập) — mở trang dưới đây rồi bấm <b>Copy</b>:<a class="btn" href="{REMOTE}">Mở {REMOTE_HOST} {ARROW}</a>',
+      '<b>Vào nơi thêm kết nối</b> trong ứng dụng:<br>• claude.ai: <i>Settings → Connectors → Add custom connector</i><br>• Cursor / Claude Code: mở file <code class="inl">.mcp.json</code>',
+      "<b>Dán link</b> bạn vừa copy (trông giống như):<pre>{ENDPOINT}?jwt=&lt;MÃ CỦA BẠN&gt;</pre>",
+      "<b>Bấm Add</b> (hoặc lưu file) rồi chờ một chút. Khi biểu tượng Webcake chuyển xanh là dùng được.",
     ],
     m2Note:
-      "⚠️ Link chứa token cá nhân — coi như mật khẩu, đừng chia sẻ, luôn dùng HTTPS.",
-    afterH2: "Sau khi kết nối, bạn nói được",
+      "⚠️ Link có chứa mã đăng nhập riêng của bạn — hãy coi như mật khẩu, đừng chia sẻ cho ai.",
+    afterH2: "Kết nối xong, bạn chỉ cần nói",
     examples: [
       {
         icon: "wand",
-        t: '"Dựng landing bán khoá học, tông xanh, có form đăng ký + nút Zalo."',
+        t: '"Dựng trang bán khóa học, tông màu xanh, có form đăng ký và nút Zalo."',
       },
       {
         icon: "edit",
-        t: "\"Mở trang <i>sale-hè</i>, đổi tiêu đề thành 'Giảm 50%', nút sang màu đỏ.\"",
+        t: "\"Mở trang <i>sale-hè</i>, đổi tiêu đề thành 'Giảm 50%', đổi nút sang màu đỏ.\"",
       },
       {
         icon: "clock",
-        t: '"Thêm section đếm ngược + 3 testimonial vào cuối trang."',
+        t: '"Thêm phần đếm ngược và 3 lời nhận xét của khách vào cuối trang."',
       },
     ],
     newH2: "Có gì mới",
     newBadge: "MỚI",
-    clMore: "Xem toàn bộ changelog",
+    clMore: "Xem tất cả thay đổi",
     faqH2: "Câu hỏi thường gặp",
-    starH2: "Thấy hữu ích? Thả cho dự án một star",
+    starH2: "Thấy hữu ích? Tặng dự án một ngôi sao nhé",
     starP:
-      "Đây là dự án mã nguồn mở — mỗi star là một liều động viên giữ nó phát triển và giúp người khác tìm thấy nó.",
-    starBtn: "Star trên GitHub",
+      "Đây là dự án miễn phí, mã nguồn mở — mỗi ngôi sao là một lời động viên để dự án tiếp tục phát triển và giúp nhiều người biết đến hơn.",
+    starBtn: "Tặng sao trên GitHub",
     footGuide: "Hướng dẫn",
     switchLabel: "English",
   },
   en: {
-    sub: "Let AI build & edit Webcake landing pages from plain words",
-    running: "Server is running",
+    sub: "Let AI build & edit your Webcake landing pages, just by talking to it",
+    running: "Up and running",
     leadPre:
-      "You type a request, AI (Claude, Cursor…) builds the whole landing page and ",
+      "You type what you want, AI (like Claude or Cursor) builds the whole landing page and ",
     leadGrad: "saves it straight to your Webcake account",
     leadPost:
-      ". No drag-and-drop, no server to host — connect once and you're set.",
+      ". No drag-and-drop, no complicated setup — connect once and you're done.",
     ctaStart: "Get connected",
     ctaStar: "Star on GitHub",
-    flowH2: "How it flows",
+    flowH2: "How it all happens",
     flow: [
       { icon: "bulb", t: "You", s: "your idea" },
-      { icon: "brain", t: "AI assistant", s: "Claude · Codex · Cursor,etc..." },
-      { icon: "server", t: "MCP", s: "webcake-landing" },
-      { icon: "window", t: "WebCake", s: "a real page" },
+      { icon: "brain", t: "AI assistant", s: "Claude · Cursor · Codex…" },
+      { icon: "server", t: "Webcake MCP", s: "the smart bridge" },
+      { icon: "window", t: "Webcake", s: "a real page" },
     ],
     flowCap:
-      "You describe it in words → the AI learns the real model from the MCP → the MCP builds the JSON + validates → it's saved as a real WebCake page. You get a link, open the editor, publish.",
-    howH2: "How it works",
+      "You say your idea → the AI learns how Webcake works → it builds the page and checks it → the page is saved for real in Webcake. You get a link, open it, and publish.",
+    howH2: "Why you don't need to be techy",
     how: [
       {
         icon: "brain",
-        t: "AI learns the real model",
-        d: "Webcake's element catalog, <code class=\"inl\">specials</code>, coordinate system and events — pulled straight from this server's tools.",
+        t: "AI does the building",
+        d: "The AI arranges the text, images, buttons and forms the way Webcake expects. You never have to touch any of it.",
       },
       {
         icon: "check2",
-        t: "The server does the hard part",
-        d: "Builds the source JSON, validates it, then saves the page to the Webcake backend — you never touch the schema.",
+        t: "It checks itself",
+        d: "Every page is built and checked automatically before it's saved, so things rarely break — no technical know-how needed.",
       },
       {
         icon: "edit",
         t: "You just review",
-        d: "Open the page in the Webcake editor, tweak if you like, save to render — done.",
+        d: "Open the page in the Webcake editor, tweak anything you like, hit save and it goes live. That's it.",
       },
     ],
     buildH2: "What you can build",
     uses: [
       {
         icon: "magnet",
-        t: "Lead-gen page",
-        e: '"A SaaS waitlist — hero, 3 benefits, an email-capture form."',
+        t: "Lead-capture page",
+        e: '"A waitlist for an app — a bold header, 3 benefits, an email box."',
       },
       {
         icon: "cart",
-        t: "COD / online store",
-        e: '"A one-product page — gallery, price, variations, an order form with cart."',
+        t: "Sell products (COD / online)",
+        e: '"A one-product page — photos, price, options, an order form."',
       },
       {
         icon: "ticket",
         t: "Event / webinar",
-        e: '"A registration page — countdown, agenda, sign-up form."',
+        e: '"A sign-up page — a countdown, the agenda, a registration form."',
       },
       {
         icon: "mail",
@@ -384,40 +385,41 @@ const T: Record<Lang, Strings> = {
       {
         icon: "phone",
         t: "App promo",
-        e: '"Phone mockups, feature list, App Store + Google Play buttons."',
+        e: '"Phone photos, a feature list, App Store and Google Play buttons."',
       },
       {
         icon: "flame",
         t: "Flash sale",
-        e: '"A big countdown, a discounted product grid, a sticky Buy button."',
+        e: '"A big countdown, a grid of discounted products, a Buy button that follows you."',
       },
     ],
     connectH2: "Connect — pick one of two ways",
-    m1Tag: "Way ① · npx — runs on your machine",
-    m1Sub: "Best for personal use and full control. Needs Node.js 18+.",
+    m1Tag: "Way ① · Install on your computer",
+    m1Sub:
+      "Best when it's just for you and you want full control. Needs Node.js (a free program that runs commands).",
     m1Steps: [
-      '<b>Install Node.js 18+</b> if you don\'t have it. Check with <code class="inl">node -v</code>; otherwise grab it from <b>nodejs.org</b>.',
-      "<b>Open a terminal and run:</b><pre>npx -y webcake-landing-mcp install</pre>",
-      '<b>Follow the prompts:</b> pick an environment (<code class="inl">prod</code>) → sign in to Webcake in the browser (or paste a JWT) → pick your IDE (Claude Desktop / Cursor / Claude Code…).',
-      '<b>Restart your IDE</b> → see <code class="inl">webcake-landing</code> in the MCP list and you\'re done.',
+      "<b>Install Node.js</b> (free) if you don't have it — get it at <b>nodejs.org</b>. It's the program that lets your computer run the tool in the next step.",
+      "<b>Open a terminal</b> (the command window — “Terminal” on Mac, “Command Prompt” on Windows), paste the line below and press Enter:<pre>npx -y webcake-landing-mcp install</pre>",
+      '<b>Follow the prompts:</b> choose <code class="inl">prod</code> → sign in to Webcake in your browser → pick the AI app you use (Claude, Cursor…).',
+      '<b>Reopen your AI app.</b> When you see <code class="inl">webcake-landing</code> listed, you\'re connected.',
     ],
-    m1Note: "Configure every IDE at once:",
-    m2Tag: "Way ② · Remote URL — nothing to install",
+    m1Note: "Set it up for every app at once with this command:",
+    m2Tag: "Way ② · Use a link — nothing to install",
     m2Sub:
-      "Best when you have no Node.js, work in a team, or use claude.ai on the web.",
+      "Best when you can't install software, work in a team, or use Claude on the web (claude.ai).",
     m2Steps: [
-      '<b>Get your personal link</b> (token baked in) — open the page below and hit <b>Copy</b>:<a class="btn" href="{REMOTE}">Open {REMOTE_HOST} {ARROW}</a>',
-      '<b>Open the add-connector area</b> in your client:<br>• claude.ai: <i>Settings → Connectors → Add custom connector</i><br>• Cursor / Claude Code: open <code class="inl">.mcp.json</code>',
-      "<b>Paste the link</b> you copied (looks like):<pre>{ENDPOINT}?jwt=&lt;TOKEN&gt;</pre>",
-      "<b>Hit Add</b> (or save the file) → wait for it to connect → done. A green Webcake icon means it's live.",
+      '<b>Get your personal link</b> (your login is built in) — open the page below and hit <b>Copy</b>:<a class="btn" href="{REMOTE}">Open {REMOTE_HOST} {ARROW}</a>',
+      '<b>Go to where you add a connection</b> in your app:<br>• claude.ai: <i>Settings → Connectors → Add custom connector</i><br>• Cursor / Claude Code: open <code class="inl">.mcp.json</code>',
+      "<b>Paste the link</b> you just copied (it looks like):<pre>{ENDPOINT}?jwt=&lt;YOUR CODE&gt;</pre>",
+      "<b>Hit Add</b> (or save the file) and wait a moment. When the Webcake icon turns green, you're good to go.",
     ],
     m2Note:
-      "⚠️ The link carries your personal token — treat it like a password, never share it, always use HTTPS.",
-    afterH2: "Once connected, you can say",
+      "⚠️ The link contains your personal login code — treat it like a password and never share it.",
+    afterH2: "Once connected, just say",
     examples: [
       {
         icon: "wand",
-        t: '"Build a landing page to sell a course, green theme, a sign-up form + a Zalo button."',
+        t: '"Build a page to sell a course, green theme, with a sign-up form and a Zalo button."',
       },
       {
         icon: "edit",
@@ -425,16 +427,16 @@ const T: Record<Lang, Strings> = {
       },
       {
         icon: "clock",
-        t: '"Add a countdown section + 3 testimonials to the bottom of the page."',
+        t: '"Add a countdown and 3 customer reviews to the bottom of the page."',
       },
     ],
     newH2: "What's new",
     newBadge: "NEW",
-    clMore: "See full changelog",
+    clMore: "See all changes",
     faqH2: "FAQ",
-    starH2: "Find it useful? Drop the project a star",
+    starH2: "Find it useful? Give the project a star",
     starP:
-      "It's an open-source project — every star keeps it moving and helps others discover it.",
+      "It's a free, open-source project — every star is a little encouragement to keep it growing and helps more people find it.",
     starBtn: "Star on GitHub",
     footGuide: "Docs",
     switchLabel: "Tiếng Việt",
@@ -557,7 +559,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
 <html lang="${L}"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<script>(function(){try{var t=localStorage.getItem('wc-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}})();</script>
+<script>(function(){document.documentElement.classList.add('js');try{var t=localStorage.getItem('wc-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if('scrollRestoration' in history)history.scrollRestoration='manual';}catch(e){}})();</script>
 <title>${m.title}</title>
 <meta name="description" content="${m.desc}">
 <meta name="keywords" content="${m.keywords}">
@@ -793,10 +795,14 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     .flow .wire .pkt{display:none}
   }
   @media(prefers-reduced-motion:no-preference){
-    @supports (animation-timeline:view()){
-      .reveal{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 32%}
-      @keyframes rise{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:none}}
-    }
+    /* One-shot reveal: JS adds .in the first time an element scrolls into view and
+       never removes it. Gated on .js so content is always visible without
+       JavaScript. We deliberately DON'T use a scroll-driven (animation-timeline)
+       reveal here — that ties opacity to scroll position and fades content back
+       out when you scroll up, which reads as the page flickering. */
+    .js .reveal{opacity:0;transform:translateY(24px);
+      transition:opacity .6s ease,transform .6s cubic-bezier(.2,.7,.2,1)}
+    .js .reveal.in{opacity:1;transform:none}
     .hero-in{animation:rise2 .8s cubic-bezier(.2,.7,.2,1) both}
     @keyframes rise2{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
   }
@@ -964,6 +970,20 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   function saveScroll(){try{sessionStorage.setItem(SKEY,String(window.scrollY));}catch(e){}}
   window.addEventListener('beforeunload',saveScroll);
   window.addEventListener('pagehide',saveScroll);
+
+  // One-shot reveal-on-scroll. Each .reveal fades in once when it enters the
+  // viewport and then keeps its class forever — replacing the old scroll-driven
+  // CSS reveal that re-ran (and flickered) when scrolling back up. Falls back to
+  // showing everything if IntersectionObserver is missing.
+  var reveals=[].slice.call(document.querySelectorAll('.reveal'));
+  if(window.IntersectionObserver&&reveals.length){
+    var io=new IntersectionObserver(function(entries){
+      entries.forEach(function(en){if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target);}});
+    },{rootMargin:'0px 0px -8% 0px'});
+    reveals.forEach(function(el){io.observe(el);});
+  }else{
+    reveals.forEach(function(el){el.classList.add('in');});
+  }
 
   // Enable smooth scrolling only after the browser has restored scroll position
   // on (re)load — applying it globally animates that restore into a jerky scroll.
