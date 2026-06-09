@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.41] - 2026-06-09
+
+### Changed
+- `get_generation_guide` and server instructions now require the agent to write all page copy in the same language the user is chatting in, with full, correct diacritics and accents — for Vietnamese this means every word must carry its proper dấu (e.g. "Trân Trọng Kính Mời", "Ngày 15 Tháng 08 Năm 2025") and accent-stripped "không dấu" text is explicitly forbidden.
+
 ## [1.0.40] - 2026-06-09
 
 ### Added
