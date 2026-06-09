@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/vuluu2k/webcake-landing-mcp#readme",
-  "version": "1.0.39",
+  "version": "1.0.40",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "webcake-landing-mcp",
-      "version": "1.0.39",
+      "version": "1.0.40",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
@@ -28,7 +28,11 @@
         {
           "name": "WEBCAKE_ENV",
           "description": "Webcake environment preset that fills the API/app/builder base URLs.",
-          "choices": ["local", "staging", "prod"]
+          "choices": [
+            "local",
+            "staging",
+            "prod"
+          ]
         },
         {
           "name": "WEBCAKE_API_BASE",

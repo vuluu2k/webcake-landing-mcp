@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.40] - 2026-06-09
+
+### Added
+- New `ingest_html` tool parses an HTML string into a compact reference AST (~2–5KB) that classifies sections by role (header, hero, features, form, cta, footer, etc.) and extracts headings, CTAs, images, form fields, and brand hints (top colors, fonts), so the agent can anchor to an existing page's layout without reading raw HTML token-by-token.
+- New `ingest_url` tool fetches a public HTTP(S) page (10s timeout, 2MB cap) and runs it through the same `ingest_html` AST pipeline, with a client-rendering warning when `<body>` is essentially empty.
+
+### Changed
+- `get_element` now accepts a `types` array parameter for batch mode — fetch all element types a section needs in a single call (e.g. `types:['section','text-block','image-block','button']`) and receive `{ elements: { [type]: details } }`; the existing single-`type` call shape is unchanged for backward compatibility.
+- `search_images` now accepts a `queries` array parameter for batch mode — run one query per image slot in parallel in a single call, with `pick='best'` (default) returning the top photo per query as a compact drop-in for `specials.src`, and `pick='all'` returning the full result per query; also adds `orientation`, `size`, and `color` filter parameters.
+- `create_page`, `update_page`, `add_section`, and `validate_page` now expand sparse element nodes before validate/persist: the agent may omit boilerplate fields (`properties`, `runtime`, empty `events`/`children`, per-breakpoint `config`) and the server hydrates each node onto its factory seed, reducing the JSON the agent must emit per element by roughly half.
+- `add_section` now ships new section(s) directly to the backend via the dedicated `/api/v1/ai/append_section` endpoint (server-side append — no whole-source get+put), falling back to the legacy get→merge→validate→put path only when that endpoint returns 404 (older backend).
+- `validate_page` now emits an advisory warning when sections have inconsistent left-margin edges diverging by more than 48px on desktop, identifying the offending sections and their edges to flag the #1 page-alignment defect.
+- Server instructions now direct the agent to call `get_element({types:[...]})` and `search_images({queries:[...]})` in batch when a section needs multiple element types or images, and add a REFERENCE INPUT section describing the three input modes: screenshot in chat (analyzed natively), HTML string via `ingest_html`, and URL via `ingest_url`.
+- Server instructions now clarify when to skip the dry-run: call `create_page`/`update_page` with `dry_run=false` directly when the user's intent is clear and `validate_page` has already passed, instead of always previewing first.
+
 ## [1.0.39] - 2026-06-08
 
 ### Internal
