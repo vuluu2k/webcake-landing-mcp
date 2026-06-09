@@ -417,7 +417,7 @@ update_page({ page_id, source, dry_run: false })         # overwrite (dry_run=tr
 # Build a LARGE page incrementally (avoids the giant single create_page payload
 # that can drop the connection): small skeleton first, then one section at a time.
 create_page({ source: smallSkeleton, dry_run: false })   # → page_id
-add_section({ page_id, sections: heroSection, dry_run: false })   # server fetches, appends, validates, saves
+add_section({ page_id, sections: heroSection, dry_run: false })   # backend appends server-side (no whole-source get+put)
 add_section({ page_id, sections: [formSection, footerSection], dry_run: false })
 ```
 

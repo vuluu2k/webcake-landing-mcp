@@ -12,7 +12,8 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 1) Generation guide -------------------------------------------------------
   server.tool(
     "get_generation_guide",
-    "Read this FIRST. Conventions for building a Webcake page source: output shape, the absolute-positioning coordinate system, event vocabulary, and the recommended workflow.",
+    "Returns the page-building conventions reference: output shape, the absolute-positioning coordinate system, event vocabulary, and the recommended workflow.",
+    { title: "Get Generation Guide", readOnlyHint: true, openWorldHint: false },
     async () => text(domain.guide)
   );
 
@@ -20,6 +21,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   server.tool(
     "list_elements",
     "List every supported element type, grouped by category, with a one-line summary and whether it is a container (can hold children).",
+    { title: "List Element Types", readOnlyHint: true, openWorldHint: false },
     async () => {
       const byCategory: Record<string, any[]> = {};
       for (const t of domain.elementTypes) {
@@ -38,8 +40,9 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 3) Get element ------------------------------------------------------------
   server.tool(
     "get_element",
-    "Get detailed usage for one element type: when to use it, its key `specials` fields, a default skeleton node, and (for common types) a filled example. Call before emitting an element of an unfamiliar type.",
+    "Returns detailed usage for one element type: when to use it, its key `specials` fields, a default skeleton node, and (for common types) a filled example.",
     { type: z.string().describe("Element type, e.g. 'section', 'text-block', 'button', 'form', 'input', 'countdown'.") },
+    { title: "Get Element Details", readOnlyHint: true, openWorldHint: false },
     async ({ type }) => {
       const doc = domain.catalog[type];
       if (!doc) {
@@ -64,7 +67,8 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 4) Page schema ------------------------------------------------------------
   server.tool(
     "get_page_schema",
-    "Return the full JSON Schema (Draft 2020-12) of a Webcake page source object { page: [...], settings: {...} }. Use it to understand the exact structure or for your own validation.",
+    "Returns the full JSON Schema (Draft 2020-12) of a Webcake page source object { page: [...], settings: {...} } for structural reference and validation.",
+    { title: "Get Page JSON Schema", readOnlyHint: true, openWorldHint: false },
     async () => text(domain.schema)
   );
 }

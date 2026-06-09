@@ -47,6 +47,7 @@ The code is layered so the landing knowledge can grow into other output types la
 - **`src/core/`** — domain-agnostic primitives:
   - `element.ts` — the `ElementNode` shape, `base()`, the `setStyle/setBox/seedPosition` helpers, `randomId`, `imgPlaceholder`, `defaultAnimation`.
   - `descriptor.ts` — the `ElementDescriptor` model + `createElementFrom`/`buildCatalog`/`deriveContainerTypes`/`deriveFieldTypes`.
+  - `expand.ts` — `expandNode`/`expandSource`: hydrate a SPARSE element node by merging it onto its type's factory default (recursively for children), so the model can omit boilerplate (`properties`/`runtime`/empty `events`+`children`/per-breakpoint `config`) and emit ~half the JSON per element. Exposed as `domain.expand`; `create_page`/`update_page`/`add_section`/`validate_page` run it BEFORE validate/persist. A full node still works (overlaid on the seed).
   - `domain.ts` — the `Domain` interface (the seam the tools depend on) + `ValidationResult`.
 
 The landing element model is the heart of the project. It lives under `src/domains/landing/`:
@@ -75,7 +76,7 @@ The 14 tools fall into four groups: **reference** (`get_generation_guide`, `list
 `get_page_schema` — no env needed), **generation** (`new_element`, `new_page_skeleton`, `validate_page`),
 **media** (`search_images` — Pexels stock photos; needs a Pexels key but no Webcake env), and
 **persistence** (`list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page`, `add_section` — need env).
-`add_section` appends section(s) to an existing page server-side (fetch → append → validate whole tree → save), so the model sends only the new section instead of the whole source — the incremental-build path that avoids the giant single `create_page` payload that can drop the client↔Claude connection on large pages.
+`add_section` appends section(s) to an existing page server-side via the dedicated `/api/v1/ai/append_section` backend endpoint (backend reads stored source → appends → rejects duplicate ids → saves), so the model sends only the new section instead of the whole source AND the MCP skips the whole-source get+put. It validates the new section(s) client-side first; if the endpoint is missing (older backend → 404) it falls back to the legacy get→merge→validate-whole-tree→put path. This is the incremental-build path that avoids the giant single `create_page` payload that can drop the client↔Claude connection on large pages.
 
 ### Page-source model invariants
 

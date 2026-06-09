@@ -37,6 +37,14 @@ export interface Domain {
   validate(input: unknown): ValidationResult;
   /** Accept an object or a JSON string; return the parsed source (throws on bad JSON). */
   coerce(input: unknown): unknown;
+  /**
+   * Hydrate a (possibly sparse) source: merge every element node onto its factory
+   * default so the model can omit boilerplate (properties/runtime/empty
+   * events+children/per-breakpoint config). Backward compatible — a full node is
+   * just overlaid on the seed. Accepts an object or JSON string; tolerant (returns
+   * the input unchanged if it can't be parsed). Run BEFORE validate/persist.
+   */
+  expand(input: unknown): unknown;
   /** The canonical JSON Schema (Draft 2020-12) for this domain's source. */
   schema: object;
 }

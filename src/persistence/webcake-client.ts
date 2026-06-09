@@ -17,6 +17,7 @@ const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
 const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
+const APPEND_ENDPOINT = "/api/v1/ai/append_section";
 
 function authHeaders(config: WebcakeConfig, orgId?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -216,6 +217,75 @@ export function buildUpdateRequestRedacted(config: WebcakeConfig, pageId: string
     url: `${config.base}${UPDATE_ENDPOINT}`,
     headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
     body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
+  };
+}
+
+/** Build (but do not send) the append-section request — for dry-run previews. */
+export function buildAppendRequestRedacted(config: WebcakeConfig, pageId: string, sections: unknown) {
+  const body = JSON.stringify({ page_id: pageId, sections });
+  return {
+    method: "POST",
+    url: `${config.base}${APPEND_ENDPOINT}`,
+    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
+    body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
+  };
+}
+
+/**
+ * Append section(s) to a page server-side via the dedicated append endpoint —
+ * ships ONLY the new section(s) (no whole-source get+put). The backend reads the
+ * stored source, appends, guards duplicate ids, and saves. Returns
+ * `endpoint_missing:true` on a 404 so the caller can fall back to get+merge+put
+ * against an older backend that lacks the route.
+ */
+export async function appendSection(
+  config: WebcakeConfig,
+  pageId: string,
+  sections: unknown
+): Promise<CreateOutcome & { endpoint_missing?: boolean; section_count?: number; sections_added?: number }> {
+  const url = `${config.base}${APPEND_ENDPOINT}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: authHeaders(config),
+      body: JSON.stringify({ page_id: pageId, sections }),
+    });
+  } catch (e: any) {
+    return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+  }
+  // No such route on an older backend → Phoenix 404. Signal a fallback.
+  if (res.status === 404) {
+    return { ok: false, status: 404, endpoint_missing: true, error: "append_section endpoint not found on backend" };
+  }
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* non-JSON */
+  }
+  const data = json?.data ?? json;
+  const pageIdOut = data?.page_id;
+  if (!res.ok || !pageIdOut) {
+    const backendMsg = json?.message ?? json?.reason ?? (json ? undefined : text.slice(0, 200));
+    return {
+      ok: false,
+      status: res.status,
+      raw: json ?? text.slice(0, 600),
+      error: `Backend returned ${res.status}${backendMsg ? `: ${backendMsg}` : ""}`,
+    };
+  }
+  return {
+    ok: true,
+    status: res.status,
+    page_id: pageIdOut,
+    editor_url: toEditorUrl(config, data?.editor_url),
+    preview_url: toEditorUrl(config, data?.preview_url),
+    organization_id: data?.organization_id ?? null,
+    section_count: data?.section_count,
+    sections_added: data?.sections_added,
+    raw: data,
   };
 }
 

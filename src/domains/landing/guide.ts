@@ -24,6 +24,7 @@ ELEMENT NODE (every element)
   "specials": { ...type-specific CONTENT... }, "runtime": {}, "events": [],
   "children": [ ... ] }  // children ONLY on container types
 - Cross-cutting config keys apply to EVERY element via the per-breakpoint config (responsive.<bp>.config): sticky/stickyPosition/stickyTop/stickyBottom/stickyLeft/stickyRight/stickyWidth/stickyHeight/stickyUnpinAtSections…, animation, hide, lock. The full per-element specials reference (every renderer-read key, including the rich select/checkbox-group/radio/survey option-object schema) lives in docs/element-specials-reference.md.
+- COMPACT AUTHORING (emit FEWER tokens): the server hydrates each element from its type's factory defaults, so you may OMIT boilerplate — \`properties\`, \`runtime\`, empty \`events\`/\`children\`, and each breakpoint's \`config\` (the default animation). Emit only id, type, the meaningful responsive.<bp>.styles for BOTH breakpoints, specials, and events when present. e.g. { "type":"text-block","id":"h1","responsive":{"desktop":{"styles":{"top":120,"left":80,"width":500,"height":70,"fontSize":48,"color":"rgba(20,30,25,1)"}},"mobile":{"styles":{"top":100,"left":20,"width":380,"height":60,"fontSize":32}}},"specials":{"text":"…"} } hydrates into the full node. A complete node still works.
 
 COORDINATE SYSTEM (critical)
 - Absolute-positioning canvas (NOT flexbox). Children carry top/left/width/height in px (numbers).

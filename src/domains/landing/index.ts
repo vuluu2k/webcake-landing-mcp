@@ -19,6 +19,7 @@ import { INSTRUCTIONS } from "./instructions.js";
 import { LIBRARY, ELEMENT_TYPES, CONTAINER_TYPES, FIELD_TYPES, createElement } from "./elements/index.js";
 import { createPageSource } from "./page.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
+import { expandSource } from "../../core/expand.js";
 
 /** The payload returned by the get_generation_guide tool. */
 export const guidePayload = {
@@ -44,5 +45,12 @@ export const landingDomain: Domain = {
   createPageSource,
   validate: validatePage,
   coerce: coercePage,
+  expand: (input) => {
+    try {
+      return expandSource(coercePage(input), createElement);
+    } catch {
+      return input; // bad JSON — let validate report it
+    }
+  },
   schema: pageSchema,
 };

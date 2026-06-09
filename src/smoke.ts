@@ -11,6 +11,7 @@ import {
   ELEMENTS,
 } from "./domains/landing/elements/index.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
+import { expandSource } from "./core/expand.js";
 import { readConfig, resolveEnv, ENV_NAMES } from "./persistence/config.js";
 import { toEditorUrl } from "./persistence/webcake-client.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
@@ -147,6 +148,39 @@ check("bad page warns missing field_name", r2.warnings.some((w) => w.includes("f
 console.log("== validate: accepts JSON string input ==");
 const r3 = validatePage(JSON.stringify(good));
 check("string input parsed & valid", r3.valid, r3.errors);
+
+console.log("== expand: hydrates sparse nodes ==");
+const sparse = {
+  page: [
+    {
+      type: "section",
+      id: "s_hero",
+      responsive: { desktop: { styles: { height: 600 } }, mobile: { styles: { height: 520 } } },
+      children: [
+        {
+          type: "text-block",
+          id: "t_h1",
+          responsive: {
+            desktop: { styles: { top: 120, left: 80, width: 500, height: 70, fontSize: 48 } },
+            mobile: { styles: { top: 100, left: 20, width: 380, height: 60, fontSize: 32 } },
+          },
+          specials: { text: "Sparse hero" },
+        },
+      ],
+    },
+  ],
+  settings: { title: "x", description: "d", keywords: "a", lang: "vi" },
+};
+const exp: any = expandSource(sparse, createElement);
+const eSec = exp.page[0];
+const eTxt = eSec.children[0];
+check("expand fills properties (sync default)", eSec.properties?.sync === true, eSec.properties);
+check("expand fills empty runtime/events", typeof eTxt.runtime === "object" && Array.isArray(eTxt.events) && eTxt.events.length === 0, eTxt);
+check("expand fills breakpoint config animation", eTxt.responsive.desktop.config?.animation?.name === "none", eTxt.responsive.desktop.config);
+check("expand preserves provided styles", eTxt.responsive.desktop.styles.fontSize === 48 && eTxt.responsive.desktop.styles.top === 120, eTxt.responsive.desktop.styles);
+check("expand keeps id/type/specials", eTxt.id === "t_h1" && eTxt.type === "text-block" && eTxt.specials.text === "Sparse hero", eTxt);
+check("expanded sparse page validates", validatePage(exp).valid, validatePage(exp).errors);
+check("expand(full good page) still valid", validatePage(expandSource(good, createElement)).valid);
 
 console.log("== library: each example validates as a single element subtree ==");
 for (const [type, doc] of Object.entries(LIBRARY)) {
