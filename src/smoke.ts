@@ -12,6 +12,7 @@ import {
 } from "./domains/landing/elements/index.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
+import { parseHtml } from "./persistence/html-ingest.js";
 import { readConfig, resolveEnv, ENV_NAMES } from "./persistence/config.js";
 import { toEditorUrl } from "./persistence/webcake-client.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
@@ -181,6 +182,55 @@ check("expand preserves provided styles", eTxt.responsive.desktop.styles.fontSiz
 check("expand keeps id/type/specials", eTxt.id === "t_h1" && eTxt.type === "text-block" && eTxt.specials.text === "Sparse hero", eTxt);
 check("expanded sparse page validates", validatePage(exp).valid, validatePage(exp).errors);
 check("expand(full good page) still valid", validatePage(expandSource(good, createElement)).valid);
+
+console.log("== ingest: parseHtml extracts a compact AST ==");
+const sampleHtml = `<!DOCTYPE html><html lang="en"><head>
+  <title>Brew Coffee</title>
+  <meta name="description" content="Best coffee in Hanoi">
+  <meta property="og:image" content="https://example.com/og.jpg">
+</head><body>
+  <header><a href="/">Brew</a><a href="#menu">Menu</a><a href="#order">Order</a></header>
+  <section><h1>Welcome to Brew</h1><p>Fresh coffee since 2020.</p><img src="https://x/hero.jpg"><button>Order Now</button></section>
+  <section><h2>Why us</h2>
+    <div><h3>Premium beans</h3><p>Sourced from Ethiopia.</p></div>
+    <div><h3>Roasted daily</h3><p>Fresh every morning.</p></div>
+    <div><h3>Local delivery</h3><p>Within 30 minutes.</p></div>
+  </section>
+  <section><h2>Order Now</h2>
+    <form>
+      <label for="n">Name</label><input id="n" name="name" required>
+      <label for="e">Email</label><input id="e" name="email" type="email" required>
+      <button type="submit">Place order</button>
+    </form>
+  </section>
+  <footer><a href="/about">About</a><p>(c) 2024 Brew.</p></footer>
+</body></html>`;
+const ast = parseHtml(sampleHtml);
+check("ingest: title extracted", ast.title === "Brew Coffee", ast.title);
+check("ingest: description extracted", ast.description === "Best coffee in Hanoi", ast.description);
+check("ingest: og_image extracted", ast.og_image === "https://example.com/og.jpg", ast.og_image);
+check("ingest: language extracted", ast.language === "en", ast.language);
+check("ingest: at least 4 sections", (ast.sections?.length ?? 0) >= 4, ast.sections?.map((s) => s.role));
+const roles = ast.sections.map((s) => s.role);
+check("ingest: header detected", roles.includes("header"), roles);
+check("ingest: hero detected", roles.includes("hero"), roles);
+check("ingest: features detected", roles.includes("features"), roles);
+check("ingest: form detected", roles.includes("form"), roles);
+check("ingest: footer detected", roles.includes("footer"), roles);
+const hero = ast.sections.find((s) => s.role === "hero");
+check("ingest: hero heading captured", !!hero?.heading?.includes("Welcome to Brew"), hero);
+check("ingest: hero CTA captured", (hero?.ctas?.length ?? 0) > 0, hero?.ctas);
+check("ingest: hero image captured", (hero?.images?.length ?? 0) > 0, hero?.images);
+const form = ast.sections.find((s) => s.role === "form");
+check("ingest: form fields captured", (form?.form_fields?.length ?? 0) >= 2, form?.form_fields);
+check("ingest: form submit CTA captured", !!form?.ctas?.[0]?.text?.includes("Place"), form?.ctas);
+
+console.log("== ingest: tolerates empty/CSR-shell HTML ==");
+const empty = parseHtml("");
+check("ingest: empty input → warning", (empty.warnings?.length ?? 0) > 0, empty.warnings);
+const csr = parseHtml(`<html><head><title>SPA</title></head><body><div id="root"></div></body></html>`);
+check("ingest: CSR shell → warning", (csr.warnings?.[0] ?? "").includes("client-rendered"), csr.warnings);
+check("ingest: CSR shell → title still extracted", csr.title === "SPA", csr.title);
 
 console.log("== library: each example validates as a single element subtree ==");
 for (const [type, doc] of Object.entries(LIBRARY)) {

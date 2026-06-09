@@ -1,6 +1,6 @@
 ---
 name: webcake-landing
-description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 13 tools, intake questions, and the create/edit workflow with organization targeting and dry-run safety.
+description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 16 tools, intake questions, and the create/edit workflow with organization targeting, reference-input ingest, and dry-run safety.
 metadata:
   author: Vũ Lưu
   version: "2026.06.05"
@@ -21,6 +21,9 @@ Reference/validation (no backend/env needed):
 
 Media (works out of the box via a shared proxy; optional own key via `PEXELS_API_KEY` env / `x-pexels-key` header — free at https://www.pexels.com/api/):
 `search_images` — real stock photos for the page; returns hotlinkable URLs (`src.large` hero, `src.medium` card) to drop into an image element's `specials.src`. Only on `ok:false` → fall back to `https://placehold.co/<w>x<h>`.
+
+Reference ingest (no env needed) — turn an EXISTING page into a layout anchor:
+`ingest_html(html, intent?)` / `ingest_url(url, intent?)` — parse HTML or fetch a URL into a compact AST (title, description, sections classified by role — hero/features/form/cta/footer/… — with headings, CTAs, images, form fields, plus top colors + fonts from inline styles). Use as a LAYOUT REFERENCE, not a clone source. Default `intent='adapt'` (rewrite content for user's brand); `intent='clone'` only when the user explicitly asks. For a screenshot/image input, no tool is needed — Claude analyzes it natively.
 
 Backend (need `WEBCAKE_API_BASE` + `WEBCAKE_JWT` env):
 `list_organizations`, `create_page`, `list_pages`, `get_page`, `update_page`, `add_section`.

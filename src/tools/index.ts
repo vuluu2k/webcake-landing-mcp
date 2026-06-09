@@ -7,11 +7,13 @@ import type { Domain } from "../core/domain.js";
 import { registerReferenceTools } from "./reference.js";
 import { registerGenerationTools } from "./generation.js";
 import { registerMediaTools } from "./media.js";
+import { registerIngestTools } from "./ingest.js";
 import { registerPersistenceTools } from "./persistence.js";
 
 export function registerTools(server: McpServer, domain: Domain) {
   registerReferenceTools(server, domain);
   registerGenerationTools(server, domain);
   registerMediaTools(server);
+  registerIngestTools(server);
   registerPersistenceTools(server, domain);
 }

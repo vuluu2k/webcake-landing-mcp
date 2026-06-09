@@ -24,10 +24,18 @@ export function registerMediaTools(server: McpServer) {
   // 13) Search images ---------------------------------------------------------
   server.tool(
     "search_images",
-    "Searches Pexels stock photos (see https://www.pexels.com/api/) by a short English subject query. Returns hotlinkable URLs at several sizes (src.large for heroes/banners, src.medium for cards/thumbs), `avg_color` for matching section backgrounds, plus photographer name and attribution URL. Works out of the box via a shared hosted proxy; set PEXELS_API_KEY env or the x-pexels-key header to use your own Pexels quota.",
+    "Searches Pexels stock photos (see https://www.pexels.com/api/) by short English subject queries. Returns hotlinkable URLs at several sizes (src.large for heroes/banners, src.medium for cards/thumbs), `avg_color` for matching section backgrounds, plus photographer name and attribution URL. BATCH MODE: pass `queries: [...]` to fetch multiple subjects in PARALLEL — e.g. ['fresh coffee cup','barista pouring','interior cafe'] for hero + about + gallery — returns { queries: { [q]: result } } so the caller picks one image per slot in a single round-trip; default `pick='best'` returns only the top photo per query (compact, drop-in for specials.src), `pick='all'` returns the full list. `query` (single) returns the full result like before. Works out of the box via a shared hosted proxy; set PEXELS_API_KEY env or x-pexels-key header to use your own quota.",
     {
-      query: z.string().describe("Short English subject to search for, e.g. 'fresh coffee cup', 'spa massage room'."),
-      per_page: z.number().int().min(1).max(80).optional().describe("How many results to return (default 5)."),
+      query: z.string().optional().describe("Single subject query — backward-compat. Prefer `queries` when the page needs 2+ images."),
+      queries: z
+        .array(z.string())
+        .optional()
+        .describe("Multiple subject queries (one per image slot) to run in parallel — recommended for a page with 2+ images so each only costs ONE round-trip."),
+      per_page: z.number().int().min(1).max(80).optional().describe("Photos per query (default 5)."),
+      pick: z
+        .enum(["best", "all"])
+        .optional()
+        .describe("With `queries`, 'best' (default) returns only the top photo per query (compact, drop-in for specials.src); 'all' returns the full result. Single-query calls always return the full result."),
       orientation: z
         .enum(["landscape", "portrait", "square"])
         .optional()
@@ -37,20 +45,49 @@ export function registerMediaTools(server: McpServer) {
       page: z.number().int().min(1).optional().describe("Result page for pagination (default 1)."),
     },
     { title: "Search Stock Images", readOnlyHint: true, openWorldHint: true },
-    async ({ query, per_page, orientation, size, color, page }, extra) => {
-      const params = { query, perPage: per_page, page, orientation, size, color };
-      const key = resolvePexelsKey(pexelsKeyFromHeaders(extra?.requestInfo?.headers));
-      // With a key → call Pexels directly; without one → the shared hosted proxy.
-      const result = key
-        ? await searchPexels(key, params)
-        : await searchImagesViaProxy(resolvePexelsProxyBase(), params);
-      if (!result.ok) {
-        return text({
-          ...result,
-          hint: "Couldn't fetch images — set PEXELS_API_KEY (env) or the x-pexels-key header for your own Pexels key (free at https://www.pexels.com/api/), or fall back to https://placehold.co/<width>x<height> placeholders.",
-        });
+    async ({ query, queries, per_page, pick, orientation, size, color, page }, extra) => {
+      const list: string[] = queries && queries.length ? queries : query ? [query] : [];
+      if (list.length === 0) {
+        return text({ ok: false, error: "Pass `query` or `queries`." });
       }
-      return text(result);
+      const key = resolvePexelsKey(pexelsKeyFromHeaders(extra?.requestInfo?.headers));
+      const base = resolvePexelsProxyBase();
+      const runOne = (q: string) => {
+        const params = { query: q, perPage: per_page, page, orientation, size, color };
+        return key ? searchPexels(key, params) : searchImagesViaProxy(base, params);
+      };
+      // Dedup + parallelize so two slots asking for the same subject only cost one call.
+      const unique = [...new Set(list)];
+      const results = await Promise.all(unique.map(runOne));
+
+      // Single-query mode → return the result directly (backward-compat shape).
+      if (!queries && query) {
+        const r = results[0];
+        if (!r.ok) {
+          return text({
+            ...r,
+            hint: "Couldn't fetch images — set PEXELS_API_KEY (env) or the x-pexels-key header for your own Pexels key (free at https://www.pexels.com/api/), or fall back to https://placehold.co/<width>x<height> placeholders.",
+          });
+        }
+        return text(r);
+      }
+
+      // Batch mode → { queries: { [q]: best-photo-or-full } }.
+      const mode = pick ?? "best";
+      const out: Record<string, any> = {};
+      for (let i = 0; i < unique.length; i++) {
+        const q = unique[i];
+        const r = results[i];
+        if (!r.ok) {
+          out[q] = { ok: false, error: r.error, status: r.status };
+          continue;
+        }
+        out[q] =
+          mode === "all"
+            ? r
+            : { ok: true, photo: r.photos?.[0] ?? null, total_results: r.total_results };
+      }
+      return text({ queries: out });
     }
   );
 }

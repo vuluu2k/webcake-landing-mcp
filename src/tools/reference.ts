@@ -40,26 +40,48 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 3) Get element ------------------------------------------------------------
   server.tool(
     "get_element",
-    "Returns detailed usage for one element type: when to use it, its key `specials` fields, a default skeleton node, and (for common types) a filled example.",
-    { type: z.string().describe("Element type, e.g. 'section', 'text-block', 'button', 'form', 'input', 'countdown'.") },
+    "Returns detailed usage for one element type — or for many in a single call (BATCH MODE): summary, when to use it, key `specials` fields, a default skeleton node, and (for common types) a filled example. Pass `types: [...]` to fetch a whole section's worth of element types at once (e.g. ['section','text-block','image-block','button']) — returns { elements: { [type]: details } } and saves a round-trip per type. `type` (single) returns the doc directly for backward compatibility.",
+    {
+      type: z.string().optional().describe("Single element type — backward-compat. Prefer `types` when fetching more than one."),
+      types: z
+        .array(z.string())
+        .optional()
+        .describe("Multiple element types to fetch in one call (recommended for a section that needs several types, e.g. ['section','text-block','button','form','input'])."),
+    },
     { title: "Get Element Details", readOnlyHint: true, openWorldHint: false },
-    async ({ type }) => {
-      const doc = domain.catalog[type];
-      if (!doc) {
-        return text({
-          error: `Unknown element type "${type}".`,
-          valid_types: domain.elementTypes,
-        });
+    async ({ type, types }) => {
+      const list: string[] = types && types.length ? types : type ? [type] : [];
+      if (list.length === 0) {
+        return text({ error: "Pass `type` (single) or `types` (non-empty array).", valid_types: domain.elementTypes });
+      }
+      const elements: Record<string, any> = {};
+      const unknown: string[] = [];
+      for (const t of list) {
+        const doc = domain.catalog[t];
+        if (!doc) {
+          unknown.push(t);
+          continue;
+        }
+        elements[t] = {
+          type: doc.type,
+          category: doc.category,
+          container: doc.container,
+          summary: doc.summary,
+          useWhen: doc.useWhen,
+          keySpecials: doc.keySpecials,
+          skeleton: domain.createElement(t),
+          example: doc.example ?? null,
+        };
+      }
+      // Single-`type` mode → return the doc directly (no map wrap), matches the old shape.
+      if (!types && type) {
+        if (unknown.length) return text({ error: `Unknown element type "${unknown[0]}".`, valid_types: domain.elementTypes });
+        return text(elements[type]);
       }
       return text({
-        type: doc.type,
-        category: doc.category,
-        container: doc.container,
-        summary: doc.summary,
-        useWhen: doc.useWhen,
-        keySpecials: doc.keySpecials,
-        skeleton: domain.createElement(type),
-        example: doc.example ?? null,
+        elements,
+        unknown: unknown.length ? unknown : undefined,
+        valid_types: unknown.length ? domain.elementTypes : undefined,
       });
     }
   );
