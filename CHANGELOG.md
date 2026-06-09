@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.42] - 2026-06-09
+
+### Fixed
+- `validate_page` now raises an error when a `countdown` element's `specials.language` is set to a value outside the eight supported word-values (`vietnam`, `english`, `filipino`, `khmer`, `lao`, `indonesian`, `thai`, `malay`, `custom`); locale codes such as `"vi"` or `"en"` would silently crash the renderer by passing an unrecognized key to its internal language table.
+- `get_element` for `countdown` now documents that `specials.language` must be one of the eight supported word-values or `"custom"` (not a locale code like `"vi"`/`"en"`), and that `"custom"` requires `specials.customTranslation` with `day`, `hour`, `minute`, and `second` label strings.
+- The `countdown` element seed now sets `specials.language` to `"english"` by default, so newly created countdown elements are valid without manual language configuration.
+
 ## [1.0.41] - 2026-06-09
 
 ### Changed
