@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.44] - 2026-06-09
+
+### Added
+- New `find_pages` tool searches the account's pages by name, domain (matches `custom_domain` or `default_domain`), and/or page id (filters are AND-combined) via the dedicated `/api/v1/ai/search_pages` backend endpoint; each result includes `id`, `name`, `organization_id`, `custom_domain`, `default_domain`, and `updated_at` so the agent can identify the correct page before editing — falls back to filtering `list_pages` client-side by name/id when the backend endpoint returns 404 (domain filter is noted as unavailable in that fallback path).
+
+### Changed
+- Server instructions now direct the agent to call `find_pages` as the lookup step when a `page_id` is not already known before the get→edit→update cycle, and `find_pages` is added to the tools list.
+
 ## [1.0.43] - 2026-06-09
 
 ### Changed
