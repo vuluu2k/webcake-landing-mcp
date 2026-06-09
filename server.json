@@ -49,5 +49,18 @@
         }
       ]
     }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.toolvn.io.vn/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer <your Webcake JWT>; required only for the persistence tools (create/update/list pages).",
+          "isSecret": true
+        }
+      ]
+    }
   ]
 }
