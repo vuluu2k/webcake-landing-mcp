@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.45] - 2026-06-09
+
+### Changed
+- `get_generation_guide` workflow condensed to four steps: element-type reads and image fetches are now batched into single calls (`get_element({types:[…]})` and `search_images({queries:[…]})`), and the separate `validate_page` pre-pass before `create_page` is removed since the persistence tool validates internally and blocks on errors.
+- Server instructions replace the "always call `validate_page` before persisting" rule with a VALIDATION IS BUILT IN note: `create_page`, `update_page`, and `add_section` all validate the source and block on errors, so a standalone `validate_page` call is only needed when assembling source that will not be persisted in the same turn.
+- Server instructions update the edit-page workflow to place `find_pages` as the first lookup step when a `page_id` is not already known, and direct the agent to call `update_page` with `dry_run=false` directly rather than running a separate `validate_page` round-trip first.
+
 ## [1.0.44] - 2026-06-09
 
 ### Added
