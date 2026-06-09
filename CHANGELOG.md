@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.46] - 2026-06-09
+
+### Changed
+- `validate_page` now emits an advisory warning when no section, button, or text on the page carries a non-neutral color (white, black, or grey), catching pages that would render as a flat, colorless wall because section backgrounds were left unset.
+- `get_generation_guide` section build hints now explicitly require setting `responsive.<bp>.styles.background` on every section at both breakpoints — the section factory default has no background, so an unset section renders transparent/white — and direct the agent to alternate light, tinted, and dark bands from the locked palette so consecutive sections read as visually distinct.
+
 ## [1.0.45] - 2026-06-09
 
 ### Changed
