@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.43] - 2026-06-09
+
+### Changed
+- The `GET /` web guide page has refreshed copy throughout: updated page title and meta description, simplified FAQ answers in both English and Vietnamese, and clearer UI text for the how-it-works section, flow diagram labels, and use-case cards.
+
 ## [1.0.42] - 2026-06-09
 
 ### Fixed
