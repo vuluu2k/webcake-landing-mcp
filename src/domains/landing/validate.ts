@@ -72,6 +72,37 @@ function num(v: unknown): number | undefined {
   return undefined;
 }
 
+/**
+ * True when a CSS color string carries real hue — i.e. NOT white/black/grey/
+ * transparent. Used to flag a page that ships with no color at all (every band
+ * white/neutral, no accent), which renders flat/"colorless". A gradient or image
+ * background counts as color. Neutrals (white/black/grey) have ~0 channel spread.
+ */
+function isVividColor(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  const s = v.trim().toLowerCase();
+  if (!s || s === "transparent" || s === "none" || s === "inherit") return false;
+  if (s.includes("gradient") || s.startsWith("url(")) return true;
+  let r: number, g: number, b: number, a = 1;
+  const rgba = s.match(/rgba?\(([^)]+)\)/);
+  if (rgba) {
+    const parts = rgba[1].split(",").map((x) => parseFloat(x.trim()));
+    [r, g, b] = parts;
+    if (parts.length >= 4 && Number.isFinite(parts[3])) a = parts[3];
+  } else {
+    const hex = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+    if (!hex) return false;
+    let h = hex[1];
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    r = parseInt(h.slice(0, 2), 16);
+    g = parseInt(h.slice(2, 4), 16);
+    b = parseInt(h.slice(4, 6), 16);
+  }
+  if (![r, g, b].every((n) => Number.isFinite(n))) return false;
+  if (a <= 0.05) return false; // fully transparent
+  return Math.max(r, g, b) - Math.min(r, g, b) >= 16; // channel spread ⇒ has hue
+}
+
 /** Accept an object or a JSON string. Returns the parsed page or throws. */
 export function coercePage(input: unknown): any {
   if (typeof input === "string") return JSON.parse(input);
@@ -107,6 +138,9 @@ export function validatePage(input: unknown): ValidationResult {
   // form nodes — used to check field_name uniqueness within each form's scope
   const forms: any[] = [];
   let elementCount = 0;
+  // Whether ANY element (section, button, text…) carries real color on either
+  // breakpoint. A page where this stays false renders flat/colorless (warned once).
+  let anyVividColor = false;
 
   const topList: any[] = Array.isArray(page?.page)
     ? page.page
@@ -135,6 +169,23 @@ export function validatePage(input: unknown): ValidationResult {
     // responsive presence
     if (!node.responsive?.desktop || !node.responsive?.mobile) {
       errors.push(`${path} (${type}): must have responsive.desktop AND responsive.mobile.`);
+    }
+
+    // does this element put any real color on the page? (background / text / border)
+    if (!anyVividColor) {
+      for (const bp of ["desktop", "mobile"] as const) {
+        const st = node.responsive?.[bp]?.styles;
+        if (
+          st &&
+          (isVividColor(st.background) ||
+            isVividColor(st.backgroundColor) ||
+            isVividColor(st.color) ||
+            isVividColor(st.borderColor))
+        ) {
+          anyVividColor = true;
+          break;
+        }
+      }
     }
 
     // children only on containers
@@ -436,6 +487,15 @@ export function validatePage(input: unknown): ValidationResult {
         `Sections start on different left margins (${list}). Put every band's left-anchored content (the header logo included) on ONE shared left axis — e.g. left=${minEdge} desktop — so the page reads aligned, not ragged. This is the #1 header-misalignment defect.`
       );
     }
+  }
+
+  // 3c) Colorless page — nothing on the page carries real color (every band/button/
+  //     heading is white/black/grey). Sections have NO default background, so a page
+  //     that never sets one renders as a flat white wall. Advisory only.
+  if (topList.length >= 2 && elementCount >= 3 && !anyVividColor) {
+    warnings.push(
+      `Page has no color — no section background, button, or text uses a non-neutral color, so it renders as a flat white/grey wall. Set responsive.<bp>.styles.background on each section (alternate light/tinted/dark from the palette) and give the primary CTA an accent background. If a stark black-and-white look is intentional, ignore this.`
+    );
   }
   popups.forEach((p, i) => {
     const ds = p?.responsive?.desktop?.styles ?? {};
