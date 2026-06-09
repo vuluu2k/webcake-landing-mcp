@@ -127,15 +127,12 @@ WORKFLOW (recommended)
 0. INTAKE (never skip — even for a quick/test page): ask the essentials above, WAIT for the answers, restate a short outline (sections + CTA + colors), and get the user's "yes" BEFORE any new_page_skeleton / create_page. Do not generate on the same turn as the request.
 0b. LOCK THE DESIGN SYSTEM (after the customer confirms): commit the exact palette, type scale, spacing scale, and component specs (see DESIGN SYSTEM) — these are your tokens for every element below. Set settings.fontGeneral to the chosen font.
 1. Call get_generation_guide (this) once, then new_page_skeleton for the top-level shape.
-2. For each element type you'll use, call get_element to learn its specials & see an example.
-3. Optionally call new_element to get a correct skeleton, then fill specials + coordinates.
-3b. For every image the page needs (hero, product, about, feature, gallery), call search_images and put a returned URL into specials.src / gallery item.link. Use placehold.co ONLY when search_images returns ok:false.
-4. Assemble { page, popup, settings, options, cartConfigs }.
-5. Call validate_page and fix every error.
-6. To save: call list_organizations, show the orgs to the user and ask which to use (default to is_default). Then create_page (dry_run first, then dry_run:false with the chosen organization_id).
+2. BATCH the reads: call get_element ONCE with every type you'll use ({types:[…]}) to learn their specials + examples, and search_images ONCE with one query per image slot ({queries:[…]}). Don't call them per-type/per-image. (new_element is OPTIONAL — compact authoring (id + type + responsive styles + specials) is enough; skip it unless you want a skeleton.) Use placehold.co ONLY when search_images returns ok:false.
+3. Assemble { page, popup, settings, options, cartConfigs } in one pass.
+4. To save: call list_organizations, show the orgs and ask which to use (default to is_default). Then call create_page directly with dry_run=false (it validates internally and BLOCKS on errors — no separate validate_page round-trip, no dry-run pre-pass). Use dry_run=true / a standalone validate_page only when the request is ambiguous, the user asks to preview, or you assembled a source you are not persisting this turn. Fix every error before the real write.
 
 EDITING an existing page
 - list_pages → let the user pick (or take a page_id from a URL).
 - get_page(page_id) → you get the live { page, popup, settings, ... }. Edit it surgically: change only the elements the user asked for (text/styles/specials/events); keep every other element, its id, and coordinates intact. Never regenerate the whole tree for a small change.
 - To add an element: build it with new_element, give it a unique id, set top/left/width/height inside the right section's children.
-- validate_page → update_page(page_id, source) (dry_run first, then dry_run:false).`;
+- update_page(page_id, source) directly with dry_run=false (it validates + blocks on errors — no separate validate_page or dry-run pre-pass needed). Use dry_run=true only to preview an overwrite of significant existing content.`;
