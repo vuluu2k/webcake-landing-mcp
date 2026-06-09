@@ -49,6 +49,12 @@ const OPTION_NAME_FIELDS = new Set(["select", "radio", "checkbox-group"]);
 // and the whole page fails to render.
 const PLACEHOLDER_REQUIRED_FIELDS = new Set(["select", "country-select", "group-select-item"]);
 
+// countdown's renderer indexes a fixed `lang` table by specials.language and then
+// destructures the result: `const [d,h,m,s] = lang[language]`. Any value outside
+// this set (e.g. a locale code like "vi"/"en") yields undefined → "is not iterable"
+// and the whole page fails to render. 'custom' instead reads specials.customTranslation.
+const COUNTDOWN_LANGUAGES = new Set(["vietnam", "english", "filipino", "khmer", "lao", "indonesian", "thai", "malay", "custom"]);
+
 // Fixed canvas reference (matches vocab CANVAS) used for the layout/bounds check.
 const CANVAS_DESKTOP = 960;
 const CANVAS_MOBILE = 420;
@@ -169,6 +175,16 @@ export function validatePage(input: unknown): ValidationResult {
             errors.push(`${path} (${type}): specials.options[${oi}] needs a non-empty string "name" (the visible option text).${hint}`);
           }
         });
+      }
+    }
+
+    // countdown.language must be a key the renderer's lang table knows (or 'custom');
+    // anything else (e.g. a locale code "vi"/"en") crashes the renderer with
+    // "is not iterable" when it destructures lang[language].
+    if (type === "countdown") {
+      const lang = node.specials?.language;
+      if (typeof lang === "string" && !COUNTDOWN_LANGUAGES.has(lang)) {
+        errors.push(`${path} (countdown): specials.language="${lang}" is not supported and crashes the renderer. Use one of: ${[...COUNTDOWN_LANGUAGES].join(", ")} (use "custom" + specials.customTranslation for other languages).`);
       }
     }
 

@@ -23,8 +23,8 @@ export const MARKETING: ElementDescriptor[] = [
       showDay: "boolean — show the days segment.",
       showSecond: "boolean — show the seconds segment.",
       showText: "boolean — show unit labels (days/hours/minutes/seconds).",
-      language: "locale string for unit labels.",
-      customTranslation: "object — custom unit label overrides.",
+      language: "unit-label locale — MUST be one of: vietnam | english | filipino | khmer | lao | indonesian | thai | malay | custom. NOT a code like 'vi'/'en' (that crashes the renderer). For any other language use 'custom' + customTranslation.",
+      customTranslation: "object {day,hour,minute,second} of label strings — used (and required) when language='custom'. e.g. {day:'Ngày',hour:'Giờ',minute:'Phút',second:'Giây'}.",
     },
     seed: (el) => {
       seedPosition(el);
@@ -32,7 +32,7 @@ export const MARKETING: ElementDescriptor[] = [
       setStyle(el, "color", "rgba(255, 255, 255, 1)");
       setStyle(el, "background", "rgba(0, 0, 0, 1)");
       setStyle(el, "fontSize", 20);
-      el.specials = { type: "minute", duration: "60", showDay: true, showSecond: true, showText: true, repeat: false, customize: false, customMessage: "", dailyStart: "", dailyEnd: "" };
+      el.specials = { type: "minute", duration: "60", language: "english", showDay: true, showSecond: true, showText: true, repeat: false, customize: false, customMessage: "", dailyStart: "", dailyEnd: "" };
     },
   },
   {
