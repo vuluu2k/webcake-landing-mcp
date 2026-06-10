@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.54] - 2026-06-10
+
+### Added
+- The installer (`install` command) now supports five additional IDE/agent targets: Antigravity, Gemini CLI, Cline, Kiro, and OpenCode; pass `--ide antigravity`, `--ide gemini`, `--ide cline`, `--ide kiro`, or `--ide opencode`, pick them from the interactive menu, or use `--ide all` to configure every supported target at once; uninstall covers all five as well.
+
+### Fixed
+- The `login` command no longer hangs after a successful authentication when the browser holds a keep-alive connection open; the loopback server now closes all live connections as well as the listener on success or timeout.
+- The `login` command now surfaces credential-save failures (permission errors, disk full, antivirus file lock, etc.) as a descriptive error message instead of silently crashing inside the request handler.
+- The `login --port` flag now validates that the supplied value is a valid integer and exits with a clear error message when it is not.
+
 ## [1.0.53] - 2026-06-10
 
 ### Fixed
