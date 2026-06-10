@@ -12,6 +12,29 @@
  */
 import type { WebcakeConfig, Organization, CreateOutcome, PageSummary } from "./types.js";
 
+/** Default fetch timeout in ms. Override via WEBCAKE_HTTP_TIMEOUT_MS env. */
+const HTTP_TIMEOUT_MS = (() => {
+  const v = parseInt(process.env.WEBCAKE_HTTP_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+})();
+
+/** Build an AbortSignal that fires after `ms` milliseconds. */
+function timeoutSignal(ms: number): AbortSignal {
+  return AbortSignal.timeout(ms);
+}
+
+/** Wrap a fetch error or AbortError in the standard {ok:false} shape. */
+function timeoutOrNetworkError(url: string, e: any): { ok: false; status: number; error: string } {
+  if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+    return {
+      ok: false,
+      status: 0,
+      error: `request timed out after ${HTTP_TIMEOUT_MS}ms — the backend may still complete it; check before re-creating to avoid duplicates`,
+    };
+  }
+  return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+}
+
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
 const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
@@ -117,9 +140,9 @@ export async function listOrganizations(
   const url = `${config.base}${ORGS_ENDPOINT}`;
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers: authHeaders(config) });
+    res = await fetch(url, { method: "GET", headers: authHeaders(config), signal: timeoutSignal(HTTP_TIMEOUT_MS) });
   } catch (e: any) {
-    return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+    return timeoutOrNetworkError(url, e);
   }
   const text = await res.text();
   let json: any = null;
@@ -152,9 +175,9 @@ export async function createPage(
   const req = buildRequest(config, name, source, orgId);
   let res: Response;
   try {
-    res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body });
+    res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body, signal: timeoutSignal(HTTP_TIMEOUT_MS) });
   } catch (e: any) {
-    return { ok: false, status: 0, error: `Network error calling ${req.url}: ${e?.message ?? e}` };
+    return timeoutOrNetworkError(req.url, e);
   }
   const text = await res.text();
   let json: any = null;
@@ -199,9 +222,10 @@ export async function createPage(
 async function getJson(url: string, config: WebcakeConfig) {
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers: authHeaders(config) });
+    res = await fetch(url, { method: "GET", headers: authHeaders(config), signal: timeoutSignal(HTTP_TIMEOUT_MS) });
   } catch (e: any) {
-    return { ok: false, status: 0, json: null, text: "", error: `Network error calling ${url}: ${e?.message ?? e}` };
+    const e2 = timeoutOrNetworkError(url, e);
+    return { ok: false, status: 0, json: null, text: "", error: e2.error };
   }
   const text = await res.text();
   let json: any = null;
@@ -307,9 +331,10 @@ export async function appendSection(
       method: "POST",
       headers: authHeaders(config),
       body: JSON.stringify({ page_id: pageId, sections }),
+      signal: timeoutSignal(HTTP_TIMEOUT_MS),
     });
   } catch (e: any) {
-    return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+    return timeoutOrNetworkError(url, e);
   }
   // No such route on an older backend → Phoenix 404. Signal a fallback.
   if (res.status === 404) {
@@ -359,9 +384,10 @@ export async function updatePageSource(
       method: "POST",
       headers: authHeaders(config),
       body: JSON.stringify({ page_id: pageId, source }),
+      signal: timeoutSignal(HTTP_TIMEOUT_MS),
     });
   } catch (e: any) {
-    return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+    return timeoutOrNetworkError(url, e);
   }
   const text = await res.text();
   let json: any = null;
@@ -439,7 +465,7 @@ async function postToHost(
 ): Promise<{ status: number; text: string }> {
   const u = new URL(url);
   if (!u.hostname.endsWith(".localhost")) {
-    const res = await fetch(url, { method: "POST", headers, body });
+    const res = await fetch(url, { method: "POST", headers, body, signal: timeoutSignal(HTTP_TIMEOUT_MS) });
     return { status: res.status, text: await res.text() };
   }
   const { request } = await import("node:http");
@@ -458,6 +484,9 @@ async function postToHost(
         res.on("end", () => resolve({ status: res.statusCode ?? 0, text: data }));
       }
     );
+    req.setTimeout(HTTP_TIMEOUT_MS, () => {
+      req.destroy(new Error(`request timed out after ${HTTP_TIMEOUT_MS}ms`));
+    });
     req.on("error", reject);
     req.end(body);
   });
@@ -494,7 +523,8 @@ export async function publishPage(
     // like the browser does — the action still returns JSON.
     ({ status, text } = await postToHost(url, { ...authHeaders(config), Accept: "*/*" }, publishBody(sourceString, opts)));
   } catch (e: any) {
-    return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+    const e2 = timeoutOrNetworkError(url, e);
+    return { ok: false, status: e2.status, error: e2.error };
   }
   let json: any = null;
   try {

@@ -19,6 +19,12 @@
  */
 const PEXELS_SEARCH_ENDPOINT = "https://api.pexels.com/v1/search";
 
+/** Fetch timeout for Pexels/proxy calls — matches the Webcake client default. */
+const PEXELS_TIMEOUT_MS = (() => {
+  const v = parseInt(process.env.WEBCAKE_HTTP_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 60_000;
+})();
+
 /** Default hosted proxy that holds a shared Pexels key (override with PEXELS_PROXY_BASE). */
 export const PEXELS_PROXY_DEFAULT = "https://mcp.toolvn.io.vn";
 
@@ -121,8 +127,11 @@ export async function searchPexels(key: string, params: PexelsSearchParams): Pro
   const url = `${PEXELS_SEARCH_ENDPOINT}?${buildSearchQuery(params).toString()}`;
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers: { Authorization: key } });
+    res = await fetch(url, { method: "GET", headers: { Authorization: key }, signal: AbortSignal.timeout(PEXELS_TIMEOUT_MS) });
   } catch (e: any) {
+    if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+      return { ok: false, status: 0, error: `request timed out after ${PEXELS_TIMEOUT_MS}ms calling Pexels` };
+    }
     return { ok: false, status: 0, error: `Network error calling Pexels: ${e?.message ?? e}` };
   }
   const body = await res.text();
@@ -150,8 +159,11 @@ export async function searchImagesViaProxy(base: string, params: PexelsSearchPar
   const url = `${base.replace(/\/+$/, "")}${PEXELS_PROXY_PATH}?${buildSearchQuery(params).toString()}`;
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers: { Accept: "application/json" } });
+    res = await fetch(url, { method: "GET", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(PEXELS_TIMEOUT_MS) });
   } catch (e: any) {
+    if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+      return { ok: false, status: 0, error: `request timed out after ${PEXELS_TIMEOUT_MS}ms calling image proxy ${base}` };
+    }
     return { ok: false, status: 0, error: `Network error calling image proxy ${base}: ${e?.message ?? e}` };
   }
   const body = await res.text();

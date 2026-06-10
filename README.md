@@ -419,8 +419,9 @@ update_page({ page_id, source, dry_run: false })         # overwrite (dry_run=tr
 # Build a LARGE page incrementally (avoids the giant single create_page payload
 # that can drop the connection): small skeleton first, then one section at a time.
 create_page({ source: smallSkeleton, dry_run: false })   # → page_id
-add_section({ page_id, sections: heroSection, dry_run: false })   # backend appends server-side (no whole-source get+put)
-add_section({ page_id, sections: [formSection, footerSection], dry_run: false })
+add_section({ page_id, sections: heroSection })          # dry_run=true → validates + returns draft_id
+add_section({ page_id, draft_id, dry_run: false })       # re-run with draft_id — no re-send of sections
+add_section({ page_id, sections: [formSection, footerSection], dry_run: false })  # or skip dry-run entirely
 
 # Go LIVE (the preview link works without this — publish to attach a domain / set live status)
 publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", dry_run: false })
@@ -467,11 +468,13 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | Tool | Description |
 |------|-------------|
 | `list_organizations` | List the account's organizations (id, name, is_default). Default = the `is_default` org. |
-| `create_page` | Persist a generated source as a new page (source-only). **Defaults to `dry_run=true`.** |
+| `create_page` | Persist a generated source as a new page (source-only). Validates, caches the source as `draft_id`, then creates. On validation failure, timeout, or network error the draft is kept — retry via `create_page({ draft_id, dry_run:false })` or fix via `patch_page({ draft_id, patches })`. **Defaults to `dry_run=true`.** |
 | `list_pages` | List the account's pages (id, name, organization_id, updated_at) to pick one to edit. |
 | `find_pages` | Search the account's pages by name, domain, and/or page id (AND-combined) to locate one to edit; returns id, name, org, custom/default domain, updated_at. |
 | `get_page` | Fetch an existing page's decoded source tree, COMPACTED to the sparse authoring shape (factory-default boilerplate stripped — far fewer tokens; `compact:false` for the raw tree). Edit and send back as-is. |
-| `update_page` | Overwrite an existing page's source with an edited tree. **Defaults to `dry_run=true`.** |
+| `update_page` | Overwrite an existing page's source with an edited tree. Validates, caches the source as `draft_id`, then saves. On timeout or failure the draft is kept — retry via `update_page({ draft_id, dry_run:false })` or `patch_page({ draft_id, dry_run:false })` (no patches). **Defaults to `dry_run=true`.** |
+| `add_section` | Append section(s) to an existing page without re-sending the whole source (incremental-build path). Always caches the batch as `draft_id`; re-run with `{ page_id, draft_id, dry_run:false }` — no need to re-send sections. Validation failure, timeout, or network error also keeps the draft — fix via `patch_page({ draft_id, patches })` or retry `patch_page({ draft_id, dry_run:false })` with no patches. **Defaults to `dry_run=true`.** |
+| `patch_page` | Edit a page by element id without re-sending the whole source. Targets a live page (`page_id`) OR a cached draft (`draft_id`). Draft kinds: `create_page` (creates page once valid), `add_section` (appends once valid), `update_page`/live-patch (retries updatePageSource). **Empty/omitted patches + `draft_id` = commit-as-is (the universal timeout-retry path).** Live-page path pre-caches the patched source before the network call and returns `draft_id` for recovery. **Defaults to `dry_run=true`.** |
 | `publish_page` | Publish a page (live status, optional custom domain/path). The preview link works WITHOUT publishing — publish only to go live. **Defaults to `dry_run=true`.** |
 
 ---

@@ -17,6 +17,7 @@ import { parseHtml } from "./persistence/html-ingest.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
 import { toEditorUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
+import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -443,6 +444,114 @@ console.log("== pexels: key resolution + photo normalization (offline, no networ
   const q = buildSearchQuery({ query: "coffee cup", perPage: 3, orientation: "landscape" });
   check("buildSearchQuery encodes query + per_page + orientation", q.get("query") === "coffee cup" && q.get("per_page") === "3" && q.get("orientation") === "landscape");
   check("buildSearchQuery clamps per_page to 1..80", buildSearchQuery({ query: "x", perPage: 999 }).get("per_page") === "80" && buildSearchQuery({ query: "x", perPage: 0 }).get("per_page") === "1");
+}
+
+console.log("== draft-cache: page draft round-trip (create_page failure flow) ==");
+{
+  // Simulate the expanded shell that a failed create_page would cache.
+  const pageSource = expandSource(sparse, createElement);
+  const draftId = putDraft({ source: pageSource, name: "Test Page", organization_id: "org_1" });
+  check("page draft: putDraft returns an id", typeof draftId === "string" && draftId.startsWith("draft_"), draftId);
+  const fetched = getDraft(draftId);
+  check("page draft: getDraft returns the entry", fetched != null && fetched.name === "Test Page", fetched);
+  check("page draft: kind is absent (backward compat)", fetched?.kind == null, fetched?.kind);
+  check("page draft: page_id is absent", fetched?.page_id == null, fetched?.page_id);
+
+  // Simulate a patch round: update the cached source.
+  const patched = { ...pageSource, page: [...(pageSource.page ?? []), { id: "extra_sec", type: "section" }] };
+  updateDraft(draftId, patched);
+  const afterPatch = getDraft(draftId);
+  check("page draft: updateDraft refreshes source", afterPatch?.source === patched, afterPatch?.source === patched);
+
+  deleteDraft(draftId);
+  check("page draft: deleteDraft removes entry", getDraft(draftId) === null, getDraft(draftId));
+}
+
+console.log("== draft-cache: sections draft round-trip (add_section dry_run / failure flow) ==");
+{
+  // Build a minimal expandedShell as add_section would — just the sections array.
+  const secShell = expandSource({
+    page: [{
+      id: "new_sec",
+      type: "section",
+      responsive: { desktop: { styles: { height: 400 } }, mobile: { styles: { height: 400 } } },
+      children: [],
+    }],
+    popup: [],
+    dynamic_pages: [],
+    settings: {},
+    options: { mobileOnly: false, versionID: null },
+    cartConfigs: { isActive: false },
+    svariations: [],
+  }, createElement);
+
+  const sid = putDraft({ source: secShell, kind: "sections", page_id: "pg_live_123" });
+  check("sections draft: putDraft returns an id", typeof sid === "string" && sid.startsWith("draft_"), sid);
+
+  const sd = getDraft(sid);
+  check("sections draft: getDraft returns entry with kind='sections'", sd?.kind === "sections", sd?.kind);
+  check("sections draft: page_id stored", sd?.page_id === "pg_live_123", sd?.page_id);
+  check("sections draft: source has page array", Array.isArray(sd?.source?.page), sd?.source?.page);
+
+  // Simulate patch round: fix an element in the shell then update.
+  const fixedShell = { ...secShell, page: secShell.page ?? [] };
+  updateDraft(sid, fixedShell);
+  const afterFix = getDraft(sid);
+  check("sections draft: updateDraft refreshes source", afterFix?.source === fixedShell, afterFix?.source === fixedShell);
+  check("sections draft: kind preserved after update", afterFix?.kind === "sections", afterFix?.kind);
+  check("sections draft: page_id preserved after update", afterFix?.page_id === "pg_live_123", afterFix?.page_id);
+
+  // Validate the shell — it should pass (well-formed section).
+  const shellValid = validatePage(expandSource(secShell, createElement));
+  check("sections draft: expanded shell validates", shellValid.valid, shellValid.errors);
+
+  // Simulate the patch_page sections path: ops would be applied, then append would fire.
+  // We only test the cache mechanics here (no live network in smoke).
+  deleteDraft(sid);
+  check("sections draft: deleteDraft removes entry", getDraft(sid) === null, getDraft(sid));
+
+  // Expired / missing draft returns null.
+  check("sections draft: getDraft on unknown id → null", getDraft("draft_doesnotexist") === null);
+}
+
+console.log("== draft-cache: update draft round-trip (update_page / live-page patch timeout flow) ==");
+{
+  // Simulate the expanded full-page source as update_page or patch_page (live) would cache.
+  const updateSource = expandSource(sparse, createElement);
+
+  // putDraft with kind='update' and an explicit page_id.
+  const uid = putDraft({ source: updateSource, kind: "update", page_id: "pg_existing_456" });
+  check("update draft: putDraft returns an id", typeof uid === "string" && uid.startsWith("draft_"), uid);
+
+  const ud = getDraft(uid);
+  check("update draft: getDraft returns entry with kind='update'", ud?.kind === "update", ud?.kind);
+  check("update draft: page_id stored", ud?.page_id === "pg_existing_456", ud?.page_id);
+  check("update draft: source has page array", Array.isArray(ud?.source?.page), ud?.source?.page);
+  check("update draft: no name (not a new page)", ud?.name == null, ud?.name);
+
+  // Simulate a patch round: getDraft returns a LIVE reference; mutating it is the
+  // retry trap — we verify that updateDraft replaces the reference explicitly.
+  const mutatedSource = { ...updateSource, page: updateSource.page ?? [] };
+  updateDraft(uid, mutatedSource);
+  const afterPatch = getDraft(uid);
+  check("update draft: updateDraft refreshes source", afterPatch?.source === mutatedSource, afterPatch?.source === mutatedSource);
+  check("update draft: kind preserved after update", afterPatch?.kind === "update", afterPatch?.kind);
+  check("update draft: page_id preserved after update", afterPatch?.page_id === "pg_existing_456", afterPatch?.page_id);
+
+  // Commit-as-is semantics: expand + validate the draft source (no ops applied) —
+  // this mirrors what patch_page({ draft_id, dry_run:false }) does with empty patches.
+  const expandedForCommit = expandSource(ud!.source, createElement);
+  const commitValid = validatePage(expandedForCommit);
+  check("update draft: commit-as-is (no ops) expanded source validates", commitValid.valid, commitValid.errors);
+
+  // Verify different draft IDs are independent (no cross-contamination).
+  const uid2 = putDraft({ source: { page: [] }, kind: "update", page_id: "pg_other_789" });
+  check("update draft: second update draft has independent id", uid2 !== uid, { uid, uid2 });
+  check("update draft: second draft has its own page_id", getDraft(uid2)?.page_id === "pg_other_789");
+  deleteDraft(uid2);
+
+  deleteDraft(uid);
+  check("update draft: deleteDraft removes entry", getDraft(uid) === null, getDraft(uid));
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);
