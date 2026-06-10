@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.49] - 2026-06-10
+
+### Changed
+- `get_page` now returns a compacted source by default: factory-default boilerplate (`properties`, `runtime`, empty `events`/`children`, per-breakpoint `config`, and seed-equal style keys) is stripped from every element before returning, leaving the sparse authoring shape; the response includes `compacted:true` and an inline note; pass `compact:false` to receive the raw stored tree.
+- `get_element` skeletons are now in the sparse authoring shape: the `skeleton` field contains only the keys the model should actually emit (`id`, `type`, both breakpoints' `styles`, `specials`, real `events`); a top-level `authoring` note is included in the response to reinforce the pattern.
+- `new_element` now returns the element node in the sparse authoring shape (only meaningful keys — no `properties`, `runtime`, empty `events`/`config`) so the model can copy the result directly without stripping boilerplate.
+- `create_page`, `update_page`, `add_section`, and `patch_page` parameter descriptions now explicitly state that sparse element nodes are accepted and that `properties`/`runtime`/empty `events`+`children`/per-breakpoint `config` should be omitted; the server hydrates them from factory defaults.
+- `get_generation_guide` and server instructions now state that the entire authoring loop is sparse end-to-end: `get_element` skeletons, `new_element` output, and `get_page` sources all arrive in the sparse shape, so the model edits and sends back without re-adding boilerplate.
+- Element descriptor examples for `text-block`, `image-block`, `button`, `input`, `select`, and `popup` are now written in the sparse authoring shape, removing `properties`, `runtime`, empty `events`, and per-breakpoint `config` to reinforce the expected emit format.
+
 ## [1.0.48] - 2026-06-10
 
 ### Added
