@@ -19,6 +19,14 @@ const SEARCH_PAGES_ENDPOINT = "/api/v1/ai/search_pages";
 const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
 const APPEND_ENDPOINT = "/api/v1/ai/append_section";
+// The editor's own publish route (NOT under /api/v1/ai): saves the source as a
+// new version and creates/updates the page_published record (+ optional custom
+// domain/path) so the page goes live. NOTE: this scope is host-constrained to
+// the BUILDER host (router scope `host: "builder."`), so the request goes to
+// config.builderBase, not the API base.
+const publishEndpoint = (pageId: string) => `/api/pages/${encodeURIComponent(pageId)}/edit/publish`;
+const publishUrl = (config: WebcakeConfig, pageId: string) =>
+  `${(config.builderBase ?? config.base).replace(/\/+$/, "")}${publishEndpoint(pageId)}`;
 
 function authHeaders(config: WebcakeConfig, orgId?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -54,6 +62,30 @@ export function toEditorUrl(config: WebcakeConfig, raw: string | undefined): str
   }
   if (!pathQuery.startsWith("/")) pathQuery = `/${pathQuery}`;
   return `${builder.replace(/\/+$/, "")}${pathQuery}`;
+}
+
+/**
+ * Resolve the public preview link (`/preview/<page_id>`) onto the PREVIEW host
+ * (config.previewBase) — NOT the builder subdomain. The /preview/:id route only
+ * exists on the root preview hosts (preview.localhost:5800 local /
+ * staging.webcake.me staging / www.webcake.me prod); the v4 renderer there reads
+ * the stored page_source directly, so the link works without publishing.
+ */
+export function toPreviewUrl(config: WebcakeConfig, raw: string | undefined): string | undefined {
+  if (!raw) return raw;
+  const preview = config.previewBase;
+  if (!preview) return toEditorUrl(config, raw); // legacy fallback
+  let pathQuery = raw;
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      pathQuery = u.pathname + u.search + u.hash;
+    } catch {
+      /* not a parseable URL — use as-is */
+    }
+  }
+  if (!pathQuery.startsWith("/")) pathQuery = `/${pathQuery}`;
+  return `${preview.replace(/\/+$/, "")}${pathQuery}`;
 }
 
 /** Build (but do not send) the create request — used for dry-run previews. */
@@ -154,7 +186,7 @@ export async function createPage(
     status: res.status,
     page_id: pageId,
     editor_url: toEditorUrl(config, editorPath),
-    preview_url: toEditorUrl(config, previewPath),
+    preview_url: toPreviewUrl(config, previewPath),
     organization_id: (orgId ?? config.orgId) ?? null,
     raw: data,
   };
@@ -306,7 +338,7 @@ export async function appendSection(
     status: res.status,
     page_id: pageIdOut,
     editor_url: toEditorUrl(config, data?.editor_url),
-    preview_url: toEditorUrl(config, data?.preview_url),
+    preview_url: toPreviewUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
     section_count: data?.section_count,
     sections_added: data?.sections_added,
@@ -354,8 +386,146 @@ export async function updatePageSource(
     status: res.status,
     page_id: pageIdOut,
     editor_url: toEditorUrl(config, data?.editor_url),
-    preview_url: toEditorUrl(config, data?.preview_url),
+    preview_url: toPreviewUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
+    raw: data,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Publish
+// ---------------------------------------------------------------------------
+
+export type PublishOpts = { customDomain?: string; customPath?: string };
+
+function publishBody(sourceString: string, opts: PublishOpts = {}): string {
+  // The publish action expects `source` as a JSON STRING (it Jason.decode!s it),
+  // plus optional custom_domain/custom_path. is_publish marks the save as a
+  // publish in save_page_with_source.
+  return JSON.stringify({
+    source: sourceString,
+    custom_domain: opts.customDomain ?? "",
+    custom_path: opts.customPath ?? "",
+    is_publish: true,
+  });
+}
+
+/** Build (but do not send) the publish request with the token masked — for dry-run previews. */
+export function buildPublishRequestRedacted(
+  config: WebcakeConfig,
+  pageId: string,
+  sourceString: string,
+  opts: PublishOpts = {}
+) {
+  const body = publishBody(sourceString, opts);
+  return {
+    method: "POST",
+    url: publishUrl(config, pageId),
+    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
+    body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
+  };
+}
+
+/**
+ * POST to a host-scoped route. Node's fetch cannot reach `*.localhost` hosts
+ * (browsers special-case .localhost; Node's DNS does not, and undici forbids a
+ * manual Host header) — so for those we connect to loopback via node:http and
+ * carry the real host in the Host header. Everything else uses plain fetch.
+ */
+async function postToHost(
+  url: string,
+  headers: Record<string, string>,
+  body: string
+): Promise<{ status: number; text: string }> {
+  const u = new URL(url);
+  if (!u.hostname.endsWith(".localhost")) {
+    const res = await fetch(url, { method: "POST", headers, body });
+    return { status: res.status, text: await res.text() };
+  }
+  const { request } = await import("node:http");
+  return new Promise((resolve, reject) => {
+    const req = request(
+      {
+        host: "127.0.0.1",
+        port: u.port || 80,
+        path: u.pathname + u.search,
+        method: "POST",
+        headers: { ...headers, Host: u.host },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => resolve({ status: res.statusCode ?? 0, text: data }));
+      }
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
+}
+
+/**
+ * Publish a page: saves the source as a new version and creates/updates the
+ * page_published record (live status + optional custom domain/path). Returns the
+ * resulting public URL — `https://<domain>/<path>` when a custom domain is
+ * attached, else the preview-host link (`<previewBase>/preview/<page_id>`).
+ */
+export async function publishPage(
+  config: WebcakeConfig,
+  pageId: string,
+  sourceString: string,
+  opts: PublishOpts = {}
+): Promise<{
+  ok: boolean;
+  status: number;
+  page_id?: string;
+  published_url?: string;
+  preview_url?: string;
+  domain?: string | null;
+  path?: string | null;
+  raw?: unknown;
+  error?: string;
+}> {
+  const url = publishUrl(config, pageId);
+  let status: number;
+  let text: string;
+  try {
+    // The builder-host pipeline runs an `accepts ["html"]` plug (it serves the
+    // editor SPA); a literal application/json Accept gets a 406, so send */*
+    // like the browser does — the action still returns JSON.
+    ({ status, text } = await postToHost(url, { ...authHeaders(config), Accept: "*/*" }, publishBody(sourceString, opts)));
+  } catch (e: any) {
+    return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
+  }
+  let json: any = null;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    /* non-JSON */
+  }
+  const resOk = status >= 200 && status < 300;
+  const success = json?.success !== false && resOk;
+  if (!success) {
+    const backendMsg = json?.message ?? json?.reason ?? (json ? undefined : text.slice(0, 200));
+    return {
+      ok: false,
+      status,
+      raw: json ?? text.slice(0, 600),
+      error: `Backend returned ${status}${backendMsg ? `: ${backendMsg}` : ""}`,
+    };
+  }
+  const data = json?.data ?? json;
+  const domain: string | null = data?.domain ?? null;
+  const path: string | null = data?.path ?? null;
+  const previewUrl = toPreviewUrl(config, `/preview/${pageId}`);
+  const publishedUrl = domain ? `https://${domain}${path ? `/${String(path).replace(/^\/+/, "")}` : ""}` : previewUrl;
+  return {
+    ok: true,
+    status,
+    page_id: pageId,
+    published_url: publishedUrl,
+    preview_url: previewUrl,
+    domain,
+    path,
     raw: data,
   };
 }

@@ -18,6 +18,7 @@ import {
   buildRequestRedacted,
   buildUpdateRequestRedacted,
   buildAppendRequestRedacted,
+  buildPublishRequestRedacted,
   createPage,
   listOrganizations,
   listPages,
@@ -25,6 +26,8 @@ import {
   getPageSource,
   updatePageSource,
   appendSection,
+  publishPage,
+  toPreviewUrl,
 } from "../persistence/webcake-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "../persistence/draft-cache.js";
 
@@ -772,6 +775,62 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         status: outcome.status,
         error: outcome.error,
         warnings: result.warnings,
+      });
+    }
+  );
+
+  // 15) Publish page (go live) -------------------------------------------------
+  server.tool(
+    "publish_page",
+    "Publishes an EXISTING page: saves the stored source as a new version and creates/updates its page_published record (live status), optionally attaching a custom domain/path. NOT needed for the preview link — /preview/<page_id> on the preview host renders the stored source directly; publish when the user wants the page LIVE (custom domain, or the public published URL). Note: this publishes source-only (no editor-rendered HTML); pages last published from the editor with custom head/body should be re-published there. DEFAULTS to dry_run=true. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    {
+      page_id: z.string().describe("The page id to publish (must be owned by the account)."),
+      custom_domain: z
+        .string()
+        .optional()
+        .describe("Optional custom domain to serve the page at (e.g. 'shop.example.com' — must already point at Webcake). Omit to publish without a domain (served at the preview-host URL)."),
+      custom_path: z.string().optional().describe("Optional path under the custom domain (e.g. 'sale')."),
+      dry_run: z.boolean().optional().describe("Default TRUE — preview the request without sending. Set false to actually publish."),
+    },
+    { title: "Publish Webcake Page", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    async ({ page_id, custom_domain, custom_path, dry_run }, extra) => {
+      const isDry = dry_run !== false; // default true (safe)
+      const { config, missing } = cfgFor(extra);
+      if (!config) return text({ published: false, reason: "missing_env", missing_env: missing });
+
+      // Publish re-saves the page's CURRENT stored source (the publish endpoint
+      // requires the source in the request), so read it first — even on dry_run,
+      // to show the real payload.
+      const res = await getPageSource(config, page_id);
+      if (!res.ok || res.source == null) {
+        return text({ published: false, reason: "page_not_found", status: res.status, error: res.error ?? "No source on this page." });
+      }
+      const sourceString = JSON.stringify(res.source);
+      const opts = { customDomain: custom_domain, customPath: custom_path };
+
+      if (isDry) {
+        return text({
+          dry_run: true,
+          page_id,
+          name: res.name,
+          would_publish_to: custom_domain
+            ? `https://${custom_domain}${custom_path ? `/${custom_path}` : ""}`
+            : toPreviewUrl(config, `/preview/${page_id}`),
+          request: buildPublishRequestRedacted(config, page_id, sourceString, opts),
+          hint: "Re-run with dry_run=false to actually publish.",
+        });
+      }
+
+      const outcome = await publishPage(config, page_id, sourceString, opts);
+      return text({
+        published: outcome.ok,
+        page_id,
+        url: outcome.published_url,
+        preview_url: outcome.preview_url,
+        domain: outcome.domain,
+        path: outcome.path,
+        status: outcome.status,
+        error: outcome.error,
       });
     }
   );

@@ -11,6 +11,13 @@ export type WebcakeConfig = {
   appBase?: string;
   /** Page-builder host that serves the editor/preview URL (`/editor/v2`) returned after create/update. */
   builderBase?: string;
+  /**
+   * Public preview host that serves `/preview/<page_id>` (the v4 renderer reads the
+   * stored page_source directly — no publish needed). This is NOT the builder
+   * subdomain: preview.localhost:5800 local / staging.webcake.me staging /
+   * www.webcake.me prod.
+   */
+  previewBase?: string;
 };
 
 export type Organization = { id: number | string; name: string; type: number | null; is_default: boolean };

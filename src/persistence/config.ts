@@ -19,8 +19,11 @@
  *   WEBCAKE_JWT       the account JWT               (required to call the backend)
  *   WEBCAKE_ORG_ID    optional default organization id for create_page
  *   WEBCAKE_APP_BASE  optional SPA base (used for the login connect page)
- *   WEBCAKE_BUILDER_BASE  optional builder host for editor/preview URLs in the result
+ *   WEBCAKE_BUILDER_BASE  optional builder host for the editor URLs in the result
  *                     (defaults to the env preset, else derived from the API host)
+ *   WEBCAKE_PREVIEW_BASE  optional public preview host for the /preview/<id> links —
+ *                     NOT the builder subdomain (defaults to the env preset:
+ *                     preview.localhost:5800 / staging.webcake.me / www.webcake.me)
  *   WEBCAKE_CONFIG_DIR  optional dir for the saved auth.json (default ~/.webcake-landing-mcp)
  */
 import { homedir } from "node:os";
@@ -38,9 +41,9 @@ import type { WebcakeConfig } from "./types.js";
  * after create/update (a distinct host — NOT the API and NOT the SPA).
  */
 export const ENVIRONMENTS = {
-  local: { apiBase: "http://localhost:5800", appBase: "http://localhost:5173", builderBase: "http://builder.localhost:5800" },
-  staging: { apiBase: "https://api.staging.webcake.io", appBase: "https://staging.webcake.io", builderBase: "https://builder.staging.webcake.io" },
-  prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io", builderBase: "https://builder.webcake.io" },
+  local: { apiBase: "http://localhost:5800", appBase: "http://localhost:5173", builderBase: "http://builder.localhost:5800", previewBase: "http://preview.localhost:5800" },
+  staging: { apiBase: "https://api.staging.webcake.io", appBase: "https://staging.webcake.io", builderBase: "https://builder.staging.webcake.io", previewBase: "https://staging.webcake.me" },
+  prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io", builderBase: "https://builder.webcake.io", previewBase: "https://www.webcake.me" },
 } as const;
 
 export type EnvName = keyof typeof ENVIRONMENTS;
@@ -52,7 +55,9 @@ export function isEnvName(v: unknown): v is EnvName {
 }
 
 /** The base URLs for a named environment, or undefined when the name is absent/unknown. */
-export function resolveEnv(name: string | undefined): { apiBase: string; appBase: string; builderBase: string } | undefined {
+export function resolveEnv(
+  name: string | undefined
+): { apiBase: string; appBase: string; builderBase: string; previewBase: string } | undefined {
   return isEnvName(name) ? ENVIRONMENTS[name] : undefined;
 }
 
@@ -73,8 +78,8 @@ export function deriveBuilderBase(apiBase: string | undefined): string | undefin
 }
 
 /** Request-scoped overrides for the env config (used by the HTTP transport). */
-export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase" | "builderBase">> & {
-  /** Named environment (local|staging|prod) — fills in base/appBase/builderBase when not given explicitly. */
+export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase" | "builderBase" | "previewBase">> & {
+  /** Named environment (local|staging|prod) — fills in base/appBase/builderBase/previewBase when not given explicitly. */
   env?: string;
 };
 
@@ -99,6 +104,18 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
     saved.builderBase ??
     deriveBuilderBase(cleanBase)
   )?.replace(/\/+$/, "");
+  // The public preview link (/preview/<id>) is served on its OWN root host — NOT
+  // the builder subdomain (preview.localhost:5800 / staging.webcake.me /
+  // www.webcake.me). When nothing matches, default to the backend's own preview
+  // domain (its @preview_domain) so the link still lands on a host that serves
+  // the /preview/:id route.
+  const previewBase = (
+    overrides.previewBase ??
+    process.env.WEBCAKE_PREVIEW_BASE ??
+    preset?.previewBase ??
+    saved.previewBase ??
+    "https://www.webcake.me"
+  ).replace(/\/+$/, "");
   return {
     config: {
       base: cleanBase,
@@ -106,6 +123,7 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
       orgId: overrides.orgId ?? process.env.WEBCAKE_ORG_ID ?? saved.orgId,
       appBase: (overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase)?.replace(/\/+$/, ""),
       builderBase,
+      previewBase,
     },
     missing: [],
   };
@@ -127,7 +145,8 @@ function header(headers: HeaderBag, name: string): string | undefined {
  *   x-webcake-env        named environment (local|staging|prod) for the base URLs
  *   x-webcake-api-base   backend base URL (overrides the env preset)
  *   x-webcake-app-base   SPA base used for the login connect page (overrides the preset)
- *   x-webcake-builder-base  builder host for editor/preview URLs (overrides the preset)
+ *   x-webcake-builder-base  builder host for editor URLs (overrides the preset)
+ *   x-webcake-preview-base  public preview host for /preview/<id> links (overrides the preset)
  * Any header that is absent falls back to the corresponding env var in readConfig.
  */
 export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
@@ -139,6 +158,7 @@ export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
     orgId: header(headers, "x-webcake-org-id"),
     appBase: header(headers, "x-webcake-app-base"),
     builderBase: header(headers, "x-webcake-builder-base"),
+    previewBase: header(headers, "x-webcake-preview-base"),
     env: header(headers, "x-webcake-env"),
   };
 }
@@ -154,6 +174,7 @@ export type SavedConfig = {
   orgId?: string;
   appBase?: string;
   builderBase?: string;
+  previewBase?: string;
   savedAt?: string;
 };
 

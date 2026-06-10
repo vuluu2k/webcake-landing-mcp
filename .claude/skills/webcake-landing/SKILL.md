@@ -13,7 +13,7 @@ metadata:
 > `page_source` from a brief, and to edit existing pages. The same rules are served at
 > runtime via the server `instructions` (src/domains/landing/instructions.ts) — this skill is the long form.
 
-## Tools (14)
+## Tools (19)
 
 Reference/validation (no backend/env needed):
 `get_generation_guide`, `list_elements`, `get_element`, `new_element`,
@@ -26,10 +26,11 @@ Reference ingest (no env needed) — turn an EXISTING page into a layout anchor:
 `ingest_html(html, intent?)` / `ingest_url(url, intent?)` — parse HTML or fetch a URL into a compact AST (title, description, sections classified by role — hero/features/form/cta/footer/… — with headings, CTAs, images, form fields, plus top colors + fonts from inline styles). Use as a LAYOUT REFERENCE, not a clone source. Default `intent='adapt'` (rewrite content for user's brand); `intent='clone'` only when the user explicitly asks. For a screenshot/image input, no tool is needed — Claude analyzes it natively.
 
 Backend (need `WEBCAKE_API_BASE` + `WEBCAKE_JWT` env):
-`list_organizations`, `create_page`, `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page`.
-`create_page` / `update_page` / `add_section` / `patch_page` default to `dry_run=true`.
+`list_organizations`, `create_page`, `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page`, `publish_page`.
+`create_page` / `update_page` / `add_section` / `patch_page` / `publish_page` default to `dry_run=true`.
 `find_pages` searches the account's pages by name, domain, and/or page id (AND-combined) to locate the page to edit when you don't already have a `page_id` — results include both `custom_domain` and `default_domain` to disambiguate by URL.
 `add_section` appends section(s) to an existing page server-side so you send only the new section, not the whole source — use it to build a LARGE page incrementally (`create_page` small skeleton → `add_section` per section) and avoid the giant single payload that can drop the connection.
+`publish_page` makes a page LIVE (saves the stored source as a version + creates/updates `page_published`, optional `custom_domain`/`custom_path`). The PREVIEW link does NOT need it — `preview_url` lives on the preview host (`preview.localhost:5800` local / `staging.webcake.me` staging / `www.webcake.me` prod — NOT the builder subdomain) and renders the stored source immediately; publish only when the user wants the page public/on their domain.
 `patch_page` edits a page by element id without re-sending the whole source — send only per-element ops (`update`/`replace`/`remove`/`add`; `update` can set `type` to fix a wrong element type). Targets EITHER a live page (`page_id`) OR a cached failed-create source (`draft_id`). It's the SMALL-EDIT path AND the fix-after-error path: a failed `create_page` returns a `draft_id` (source cached ~30 min) → `patch_page({ draft_id, patches, dry_run:false })` fixes only the bad elements and creates the page; a failed `update_page`/`add_section` already has a `page_id` → `patch_page({ page_id, patches })`. Never regenerate the whole source to fix a few elements.
 
 Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-element-schema.md),
@@ -65,7 +66,7 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 5. `validate_page` → fix every error.
 6. `list_organizations` → show options, ask which (default = `is_default`).
 7. `create_page` `dry_run:true` (preview) → `dry_run:false` with chosen `organization_id`.
-8. Give the editor/preview URLs. Source-only — re-save in the editor to render.
+8. Give the editor/preview URLs — `preview_url` (on the preview host) renders right away for review. If the user wants the page LIVE / on a domain: `publish_page({ page_id, custom_domain?, custom_path?, dry_run:false })`.
 
 ## Workflow — edit existing page
 

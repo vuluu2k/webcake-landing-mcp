@@ -89,7 +89,7 @@ persists it (source-only — the page opens in the editor where re-saving render
 | **npx (local)** — runs on your machine | Personal daily use, full control | browser `login`, a JWT, or none (reference tools) |
 | **Hosted URL** — use our live server, nothing to install | No Node.js, teams, the claude.ai dialog | your personal `?jwt=` link / `x-webcake-jwt` header |
 
-The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) and the **ingest tools** (`ingest_html`, `ingest_url` — turn an existing HTML or URL into a layout anchor so the AI can recreate or adapt it) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `add_section`, `patch_page`, `list_pages`, `find_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
+The **reference + generation tools** (`get_generation_guide`, `list_elements`, `validate_page`, …) and the **ingest tools** (`ingest_html`, `ingest_url` — turn an existing HTML or URL into a layout anchor so the AI can recreate or adapt it) work with **zero config**; only the **persistence tools** (`create_page`, `update_page`, `add_section`, `patch_page`, `publish_page`, `list_pages`, `find_pages`, `get_page`, `list_organizations`) need a token. Credentials resolve in order: **per-request header → env var → saved `auth.json`** (`login`).
 
 > 🛠️ Prefer a shell-script installer (`install.sh`/`install.ps1`), a cloned local build, or hand-written per-IDE config? See **[docs/manual-install.md](docs/manual-install.md)**.
 
@@ -222,7 +222,8 @@ lands in logs). Any header that's missing falls back to the matching env var:
 | `x-webcake-org-id` | `WEBCAKE_ORG_ID` | default org |
 | `x-webcake-api-base` | `WEBCAKE_API_BASE` | overrides the env preset's API base |
 | `x-webcake-app-base` | `WEBCAKE_APP_BASE` | overrides the env preset's SPA base (login connect page) |
-| `x-webcake-builder-base` | `WEBCAKE_BUILDER_BASE` | overrides the builder host used for editor/preview links |
+| `x-webcake-builder-base` | `WEBCAKE_BUILDER_BASE` | overrides the builder host used for editor links |
+| `x-webcake-preview-base` | `WEBCAKE_PREVIEW_BASE` | overrides the public preview host used for `/preview/<id>` links |
 
 > The reference + generation tools (`get_generation_guide`, `list_elements`, `validate_page`, …) need **no
 > token** — only the persistence tools (`create_page`, `update_page`, …) use it. Without a JWT, those return
@@ -292,7 +293,8 @@ flow can also be done entirely in the SPA, no backend route needed.)
 | `WEBCAKE_JWT` | No* | Account JWT (dashboard auth). Required to persist — expires, refresh when needed. |
 | `WEBCAKE_ORG_ID` | No | Default organization id for `create_page` (overridden by its `organization_id` arg). Omit → personal page. |
 | `WEBCAKE_APP_BASE` | No | Optional SPA base — used for the browser `login` connect page. |
-| `WEBCAKE_BUILDER_BASE` | No | Optional builder host for the editor/preview links in the result. Defaults to the env preset, else derived from the API host (`api.x`→`builder.x`). |
+| `WEBCAKE_BUILDER_BASE` | No | Optional builder host for the editor links in the result. Defaults to the env preset, else derived from the API host (`api.x`→`builder.x`). |
+| `WEBCAKE_PREVIEW_BASE` | No | Optional public preview host for the `/preview/<id>` links — NOT the builder subdomain. Defaults to the env preset (`preview.localhost:5800` local / `staging.webcake.me` staging / `www.webcake.me` prod). |
 | `WEBCAKE_CONFIG_DIR` | No | Dir for the saved `auth.json` written by `login` (default `~/.webcake-landing-mcp`). |
 
 > \* `WEBCAKE_API_BASE` and `WEBCAKE_JWT` are only needed for the persistence tools. The reference and
@@ -419,6 +421,9 @@ update_page({ page_id, source, dry_run: false })         # overwrite (dry_run=tr
 create_page({ source: smallSkeleton, dry_run: false })   # → page_id
 add_section({ page_id, sections: heroSection, dry_run: false })   # backend appends server-side (no whole-source get+put)
 add_section({ page_id, sections: [formSection, footerSection], dry_run: false })
+
+# Go LIVE (the preview link works without this — publish to attach a domain / set live status)
+publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", dry_run: false })
 ```
 
 `create_page` calls **`POST {WEBCAKE_API_BASE}/api/v1/ai/create_page_from_source`** on the backend.
@@ -467,6 +472,7 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | `find_pages` | Search the account's pages by name, domain, and/or page id (AND-combined) to locate one to edit; returns id, name, org, custom/default domain, updated_at. |
 | `get_page` | Fetch an existing page's decoded source tree, COMPACTED to the sparse authoring shape (factory-default boilerplate stripped — far fewer tokens; `compact:false` for the raw tree). Edit and send back as-is. |
 | `update_page` | Overwrite an existing page's source with an edited tree. **Defaults to `dry_run=true`.** |
+| `publish_page` | Publish a page (live status, optional custom domain/path). The preview link works WITHOUT publishing — publish only to go live. **Defaults to `dry_run=true`.** |
 
 ---
 

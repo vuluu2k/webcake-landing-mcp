@@ -14,8 +14,8 @@ import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
 import { parseHtml } from "./persistence/html-ingest.js";
-import { readConfig, resolveEnv, ENV_NAMES } from "./persistence/config.js";
-import { toEditorUrl } from "./persistence/webcake-client.js";
+import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
+import { toEditorUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
 
 let failures = 0;
@@ -361,7 +361,7 @@ check("clean form has no binding warnings", rbg.warnings.length === 0, rbg.warni
 console.log("== config: named environment presets (local/staging/prod) ==");
 {
   // Deterministic: isolate from any ambient WEBCAKE_* and the saved auth.json on the dev box.
-  for (const k of ["WEBCAKE_API_BASE", "WEBCAKE_APP_BASE", "WEBCAKE_BUILDER_BASE", "WEBCAKE_ENV", "WEBCAKE_JWT", "WEBCAKE_ORG_ID"]) delete process.env[k];
+  for (const k of ["WEBCAKE_API_BASE", "WEBCAKE_APP_BASE", "WEBCAKE_BUILDER_BASE", "WEBCAKE_PREVIEW_BASE", "WEBCAKE_ENV", "WEBCAKE_JWT", "WEBCAKE_ORG_ID"]) delete process.env[k];
   process.env.WEBCAKE_CONFIG_DIR = "/nonexistent/webcake-smoke";
   check("env names are local/staging/prod", setEq(new Set<string>(ENV_NAMES), ["local", "staging", "prod"]), ENV_NAMES);
   check(
@@ -391,6 +391,25 @@ console.log("== config: named environment presets (local/staging/prod) ==");
   check("editor url from a path → builder host", toEditorUrl(localCfg, "/editor/v2/abc") === "http://builder.localhost:5800/editor/v2/abc");
   check("editor url from an absolute api url → builder host", toEditorUrl(localCfg, "http://localhost:5800/editor/v2/abc?x=1") === "http://builder.localhost:5800/editor/v2/abc?x=1");
   check("editor url passthrough when empty", toEditorUrl(localCfg, undefined) === undefined);
+
+  // The PREVIEW link lives on its own root host (NOT the builder subdomain):
+  // preview.localhost:5800 / staging.webcake.me / www.webcake.me.
+  check("env presets carry preview bases", resolveEnv("local")?.previewBase === "http://preview.localhost:5800" && resolveEnv("staging")?.previewBase === "https://staging.webcake.me" && resolveEnv("prod")?.previewBase === "https://www.webcake.me");
+  check("readConfig(env=local) sets previewBase", localCfg.previewBase === "http://preview.localhost:5800", localCfg);
+  check("readConfig(env=prod) sets previewBase", readConfig({ env: "prod", jwt: "t" }).config?.previewBase === "https://www.webcake.me");
+  check("previewBase defaults to www.webcake.me without a preset", readConfig({ base: "https://api.example.com", jwt: "t" }).config?.previewBase === "https://www.webcake.me");
+  check("explicit previewBase overrides the preset", readConfig({ env: "prod", previewBase: "https://p.test/", jwt: "t" }).config?.previewBase === "https://p.test");
+  check("x-webcake-preview-base header parsed", configFromHeaders({ "x-webcake-preview-base": "https://p.example" }).previewBase === "https://p.example");
+  check("preview url from a path → preview host (not builder)", toPreviewUrl(localCfg, "/preview/abc") === "http://preview.localhost:5800/preview/abc");
+  check("preview url from an absolute api url → preview host", toPreviewUrl(localCfg, "http://localhost:5800/preview/abc?x=1") === "http://preview.localhost:5800/preview/abc?x=1");
+  check("preview url passthrough when empty", toPreviewUrl(localCfg, undefined) === undefined);
+  check("preview url falls back to builder when previewBase missing", toPreviewUrl({ ...localCfg, previewBase: undefined }, "/preview/abc") === "http://builder.localhost:5800/preview/abc");
+
+  // publish request preview: JWT must be masked everywhere.
+  const pub = buildPublishRequestRedacted({ ...localCfg, jwt: "SECRETJWT" }, "pg1", JSON.stringify({ page: [] }), { customDomain: "shop.example.com", customPath: "sale" });
+  check("publish request hits the editor publish route on the BUILDER host", pub.url === "http://builder.localhost:5800/api/pages/pg1/edit/publish", pub.url);
+  check("publish request masks the JWT", !JSON.stringify(pub).includes("SECRETJWT"), pub);
+  check("publish request carries domain/path + source string", pub.body.includes("shop.example.com") && pub.body.includes("custom_path") && pub.body.includes("is_publish"), pub.body);
 }
 
 console.log("== pexels: key resolution + photo normalization (offline, no network) ==");
