@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.50] - 2026-06-10
+
+### Added
+- New `publish_page` tool makes a page live: reads the page's current stored source, saves it as a new version, and creates or updates the `page_published` record; accepts optional `custom_domain` and `custom_path`; defaults to `dry_run=true` returning a JWT-redacted request preview; on success returns `published_url` (the custom-domain URL when attached, else the preview-host link) and `preview_url`.
+
+### Changed
+- `preview_url` returned by `create_page`, `update_page`, and `add_section` is now re-rooted onto the correct public preview host (preview.localhost:5800 / staging.webcake.me / www.webcake.me) instead of the builder subdomain; a new `WEBCAKE_PREVIEW_BASE` env var and `x-webcake-preview-base` request header override the host, and all three environment presets now carry a `previewBase` field.
+- Server instructions now document the preview-vs-publish distinction: `preview_url` from `create_page`/`update_page`/`add_section` renders the stored source immediately without a publish step; call `publish_page` only when the user wants the page live on a custom domain or at the public published URL.
+- `patch_page` and `add_section` parameter descriptions now explicitly note that element and section nodes may be sparse (server hydrates omitted `properties`/`runtime`/empty `events`+`children`/per-breakpoint `config` from factory defaults).
+
 ## [1.0.49] - 2026-06-10
 
 ### Changed
