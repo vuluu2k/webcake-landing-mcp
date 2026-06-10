@@ -3,7 +3,7 @@
 # Usage Examples
 
 End-to-end walkthroughs of how an AI agent drives the Webcake Landing MCP tools.
-See the [README](../README.md) for setup, and the [Detailed Tool Usage Guide](../README.md#detailed-tool-usage-guide) for a tool-by-tool reference.
+See the [README](../README.md) for setup, and the [Tools reference](./tools.md) for a tool-by-tool guide.
 
 ## Example 1: Build a new landing page from a brief
 

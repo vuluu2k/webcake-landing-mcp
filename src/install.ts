@@ -63,22 +63,21 @@ interface Opts {
 // ── arg parsing ──────────────────────────────────────────────────────────────
 function parseArgs(argv: string[]): Opts {
   const o: Opts = { yes: false, uninstall: false };
-  const val = (a: string, i: number) =>
-    a.includes("=") ? a.slice(a.indexOf("=") + 1) : argv[++i];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    // Match `--flag value` and `--flag=value` (but not `--flagXYZ`).
+    const is = (...names: string[]) => names.some((n) => a === n || a.startsWith(n + "="));
     const next = () => (a.includes("=") ? a.slice(a.indexOf("=") + 1) : argv[++i]);
     if (a === "--uninstall" || a === "uninstall") o.uninstall = true;
     else if (a === "-y" || a === "--yes") o.yes = true;
     else if (a === "--npx") o.npx = true;
     else if (a === "--local") o.local = true;
-    else if (a.startsWith("--ide")) o.ide = next();
-    else if (a.startsWith("--api-base")) o.apiBase = next();
-    else if (a.startsWith("--jwt") || a.startsWith("--token")) o.jwt = next();
-    else if (a.startsWith("--org-id") || a.startsWith("--org")) o.orgId = next();
-    else if (a.startsWith("--app-base")) o.appBase = next();
+    else if (is("--ide")) o.ide = next();
+    else if (is("--api-base")) o.apiBase = next();
+    else if (is("--jwt", "--token")) o.jwt = next();
+    else if (is("--org-id", "--org")) o.orgId = next();
+    else if (is("--app-base")) o.appBase = next();
     else if (a === "--help" || a === "-h") o.ide = "__help__";
-    void val;
   }
   return o;
 }
@@ -131,6 +130,33 @@ function mergeJson(file: string, launch: Launch, env: Env): boolean {
   return true;
 }
 
+// ── OpenCode config (its own shape, not mcpServers) ─────────────────────────
+// { "mcp": { "<name>": { "type": "local", "command": [cmd, ...args], "environment": {…} } } }
+function mergeOpencodeJson(file: string, launch: Launch, env: Env): boolean {
+  mkdirSync(dirname(file), { recursive: true });
+  let cfg: any = {};
+  if (existsSync(file)) {
+    const raw = readFileSync(file, "utf8").trim();
+    if (raw) {
+      try {
+        cfg = JSON.parse(raw);
+      } catch (e: any) {
+        warn(`Skip ${file} (invalid JSON: ${e.message})`);
+        return false;
+      }
+    }
+  }
+  if (typeof cfg.mcp !== "object" || !cfg.mcp) cfg.mcp = {};
+  cfg.mcp[NAME] = {
+    type: "local",
+    command: [launch.command, ...launch.args],
+    enabled: true,
+    ...(Object.keys(env).length ? { environment: env } : {}),
+  };
+  writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
+  return true;
+}
+
 // ── TOML config (Codex) ──────────────────────────────────────────────────────
 function configureCodex(launch: Launch, env: Env) {
   const dir = join(HOME, ".codex");
@@ -158,17 +184,28 @@ function claudeDesktopPath(): string {
   const dir = existsSync(mac) ? mac : join(HOME, ".config", "Claude");
   return join(dir, "claude_desktop_config.json");
 }
-function vscodeUserPath(): string {
-  if (PLAT === "win32") return join(APPDATA, "Code", "User", "mcp.json");
+function vscodeUserDir(): string {
+  if (PLAT === "win32") return join(APPDATA, "Code", "User");
   const mac = join(HOME, "Library", "Application Support", "Code", "User");
-  if (existsSync(mac)) return join(mac, "mcp.json");
+  if (existsSync(mac)) return mac;
   const lin = join(HOME, ".config", "Code", "User");
-  if (existsSync(lin)) return join(lin, "mcp.json");
-  return join(HOME, ".vscode", "mcp.json");
+  if (existsSync(lin)) return lin;
+  return join(HOME, ".vscode");
 }
+const vscodeUserPath = () => join(vscodeUserDir(), "mcp.json");
 const cursorPath = () => join(HOME, ".cursor", "mcp.json");
 const windsurfPath = () => join(HOME, ".codeium", "windsurf", "mcp_config.json");
 const claudeJsonPath = () => join(HOME, ".claude.json");
+// Antigravity (Google) reads ~/.gemini/antigravity/mcp_config.json (Agent Manager
+// → Manage MCP Servers → View raw config); same mcpServers shape as Claude Desktop.
+const antigravityPath = () => join(HOME, ".gemini", "antigravity", "mcp_config.json");
+// Gemini CLI keeps mcpServers inside its general settings file.
+const geminiPath = () => join(HOME, ".gemini", "settings.json");
+const kiroPath = () => join(HOME, ".kiro", "settings", "mcp.json");
+// Cline (VS Code extension) stores MCP config in the extension's globalStorage.
+const clinePath = () =>
+  join(vscodeUserDir(), "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json");
+const opencodePath = () => join(HOME, ".config", "opencode", "opencode.json");
 
 function hasClaudeCli(): boolean {
   const probe = spawnSync(PLAT === "win32" ? "where" : "which", ["claude"], {
@@ -220,6 +257,29 @@ function configureCodexIde(launch: Launch, env: Env) {
   configureCodex(launch, env);
   ok(`Codex configured (${join(HOME, ".codex", "config.toml")}) — restart Codex.`);
 }
+function configureAntigravity(launch: Launch, env: Env) {
+  info("Antigravity…");
+  if (mergeJson(antigravityPath(), launch, env)) {
+    ok(`Antigravity configured (${antigravityPath()})`);
+    warn("In Antigravity: Agent Manager → Manage MCP Servers → Refresh (or restart).");
+  }
+}
+function configureGemini(launch: Launch, env: Env) {
+  info("Gemini CLI…");
+  if (mergeJson(geminiPath(), launch, env)) ok(`Gemini CLI configured (${geminiPath()})`);
+}
+function configureCline(launch: Launch, env: Env) {
+  info("Cline…");
+  if (mergeJson(clinePath(), launch, env)) ok(`Cline configured (${clinePath()})`);
+}
+function configureKiro(launch: Launch, env: Env) {
+  info("Kiro…");
+  if (mergeJson(kiroPath(), launch, env)) ok(`Kiro configured (${kiroPath()})`);
+}
+function configureOpencode(launch: Launch, env: Env) {
+  info("OpenCode…");
+  if (mergeOpencodeJson(opencodePath(), launch, env)) ok(`OpenCode configured (${opencodePath()})`);
+}
 
 const IDE_ALIASES: Record<string, string> = {
   "claude-desktop": "claude-desktop",
@@ -232,27 +292,35 @@ const IDE_ALIASES: Record<string, string> = {
   augment: "augment",
   vscode: "augment",
   codex: "codex",
+  antigravity: "antigravity",
+  gemini: "gemini",
+  "gemini-cli": "gemini",
+  cline: "cline",
+  kiro: "kiro",
+  opencode: "opencode",
   all: "all",
+};
+
+const CONFIGURATORS: Record<string, (launch: Launch, env: Env) => void> = {
+  "claude-desktop": configureClaudeDesktop,
+  "claude-code": configureClaudeCode,
+  cursor: configureCursor,
+  windsurf: configureWindsurf,
+  augment: configureAugment,
+  codex: configureCodexIde,
+  antigravity: configureAntigravity,
+  gemini: configureGemini,
+  cline: configureCline,
+  kiro: configureKiro,
+  opencode: configureOpencode,
 };
 
 function runConfigure(ides: string[], launch: Launch, env: Env) {
   const set = new Set(ides);
-  if (set.has("all")) {
-    configureClaudeDesktop(launch, env);
-    configureClaudeCode(launch, env);
-    configureCursor(launch, env);
-    configureWindsurf(launch, env);
-    configureAugment(launch, env);
-    configureCodexIde(launch, env);
-    return;
-  }
-  for (const id of set) {
-    if (id === "claude-desktop") configureClaudeDesktop(launch, env);
-    else if (id === "claude-code") configureClaudeCode(launch, env);
-    else if (id === "cursor") configureCursor(launch, env);
-    else if (id === "windsurf") configureWindsurf(launch, env);
-    else if (id === "augment") configureAugment(launch, env);
-    else if (id === "codex") configureCodexIde(launch, env);
+  const targets = set.has("all") ? Object.keys(CONFIGURATORS) : [...set];
+  for (const id of targets) {
+    const configure = CONFIGURATORS[id];
+    if (configure) configure(launch, env);
     else warn(`Unknown IDE: ${id}`);
   }
 }
@@ -281,7 +349,25 @@ function uninstall() {
     cursorPath(),
     windsurfPath(),
     vscodeUserPath(),
+    antigravityPath(),
+    geminiPath(),
+    clinePath(),
+    kiroPath(),
   ].forEach(removeFromJson);
+  // OpenCode keeps the server under its own `mcp` key, not `mcpServers`.
+  const oc = opencodePath();
+  if (existsSync(oc)) {
+    try {
+      const cfg = JSON.parse(readFileSync(oc, "utf8"));
+      if (cfg.mcp && cfg.mcp[NAME]) {
+        delete cfg.mcp[NAME];
+        writeFileSync(oc, JSON.stringify(cfg, null, 2) + "\n");
+        ok(`Cleaned ${oc}`);
+      }
+    } catch {
+      /* ignore unparseable files */
+    }
+  }
   const codex = join(HOME, ".codex", "config.toml");
   if (existsSync(codex)) {
     let content = readFileSync(codex, "utf8");
@@ -306,7 +392,8 @@ ${c.bold}Usage${c.reset}
   npx -y ${PKG} uninstall               # remove from every IDE config
 
 ${c.bold}Flags${c.reset}
-  --ide <list>      comma list: claude-desktop, claude-code, cursor, windsurf, augment, codex, all
+  --ide <list>      comma list: claude-desktop, claude-code, cursor, windsurf, augment,
+                    codex, antigravity, gemini, cline, kiro, opencode, all
   --env <name>      WEBCAKE_ENV: local | staging | prod (default prod) — sets the API + app base URLs
   --jwt <token>     WEBCAKE_JWT (account token; optional — or log in via the browser interactively)
   --org-id <id>     WEBCAKE_ORG_ID (optional default organization)
@@ -325,7 +412,7 @@ export async function runInstaller(argv: string[]): Promise<void> {
   if (o.uninstall) return uninstall();
 
   log(`\n${c.cyan}${c.bold}Webcake Landing MCP — installer${c.reset}`);
-  log(`${c.gray}Build & edit Webcake landing pages from a prompt. 12 tools.${c.reset}`);
+  log(`${c.gray}Build & edit Webcake landing pages from a prompt.${c.reset}`);
 
   const interactive = !o.ide && process.stdin.isTTY && process.stdout.isTTY;
 
@@ -399,7 +486,9 @@ export async function runInstaller(argv: string[]): Promise<void> {
     log(`\n${c.bold}4) Which IDE(s) to configure?${c.reset}`);
     log("  1) Claude Desktop   2) Claude Code (CLI)   3) Cursor");
     log("  4) Windsurf         5) Augment (VS Code)   6) Codex");
-    log("  7) All              0) Skip");
+    log("  7) Antigravity      8) Gemini CLI          9) Cline");
+    log("  10) Kiro            11) OpenCode");
+    log("  12) All             0) Skip");
     const pick = await ask("  Select (comma-separated, e.g. 1,2): ");
     const map: Record<string, string> = {
       "1": "claude-desktop",
@@ -408,7 +497,12 @@ export async function runInstaller(argv: string[]): Promise<void> {
       "4": "windsurf",
       "5": "augment",
       "6": "codex",
-      "7": "all",
+      "7": "antigravity",
+      "8": "gemini",
+      "9": "cline",
+      "10": "kiro",
+      "11": "opencode",
+      "12": "all",
     };
     ides = pick
       .split(",")

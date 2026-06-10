@@ -46,6 +46,13 @@ export const ENVIRONMENTS = {
   prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io", builderBase: "https://builder.webcake.io", previewBase: "https://www.webcake.me" },
 } as const;
 
+/** Strip trailing slashes from a base URL (undefined passes through). */
+export function stripTrailingSlash(s: string): string;
+export function stripTrailingSlash(s: string | undefined): string | undefined;
+export function stripTrailingSlash(s: string | undefined): string | undefined {
+  return s?.replace(/\/+$/, "");
+}
+
 export type EnvName = keyof typeof ENVIRONMENTS;
 export const ENV_NAMES = Object.keys(ENVIRONMENTS) as EnvName[];
 
@@ -93,35 +100,35 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
   if (!base) missing.push("WEBCAKE_API_BASE");
   if (!jwt) missing.push("WEBCAKE_JWT");
   if (missing.length) return { config: null, missing };
-  const cleanBase = base!.replace(/\/+$/, "");
+  const cleanBase = stripTrailingSlash(base!);
   // The editor/preview URL lives on the builder host (e.g. builder.localhost:5800),
   // not the API base (5800) nor the SPA (5173). Resolve it explicitly so the link
   // returned to the user opens in the page builder.
-  const builderBase = (
+  const builderBase = stripTrailingSlash(
     overrides.builderBase ??
     process.env.WEBCAKE_BUILDER_BASE ??
     preset?.builderBase ??
     saved.builderBase ??
     deriveBuilderBase(cleanBase)
-  )?.replace(/\/+$/, "");
+  );
   // The public preview link (/preview/<id>) is served on its OWN root host — NOT
   // the builder subdomain (preview.localhost:5800 / staging.webcake.me /
   // www.webcake.me). When nothing matches, default to the backend's own preview
   // domain (its @preview_domain) so the link still lands on a host that serves
   // the /preview/:id route.
-  const previewBase = (
+  const previewBase = stripTrailingSlash(
     overrides.previewBase ??
     process.env.WEBCAKE_PREVIEW_BASE ??
     preset?.previewBase ??
     saved.previewBase ??
     "https://www.webcake.me"
-  ).replace(/\/+$/, "");
+  );
   return {
     config: {
       base: cleanBase,
       jwt: jwt!,
       orgId: overrides.orgId ?? process.env.WEBCAKE_ORG_ID ?? saved.orgId,
-      appBase: (overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase)?.replace(/\/+$/, ""),
+      appBase: stripTrailingSlash(overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase),
       builderBase,
       previewBase,
     },

@@ -12,10 +12,10 @@ All of these configure the same `webcake-landing` MCP server; pick whichever fit
 
 | # | Method | Best for | Auth | Where |
 |---|--------|----------|------|-------|
-| 1 | **npx `install`** — auto-write the IDE config | Most people | `--env` + browser `login` or a JWT | [README](../README.md#install-npx) |
+| 1 | **npx `install`** — auto-write the IDE config | Most people | `--env` + browser `login` or a JWT | [README](../README.md) |
 | 2 | **Local stdio** — add to an IDE via `npx` or a built file | Daily use on your machine | env `WEBCAKE_JWT`, or `login`, or none (reference tools) | [Per-IDE config](#configuration-by-ide--ai-tool) |
-| 3 | **`login`** — grab the token through the browser (no copy-paste) | Avoiding a manual token paste | browser session → saved `auth.json` | [README](../README.md#connect-once--grab-your-token-automatically-login) |
-| 4 | **Remote HTTP (`serve`)** — run as an HTTP server | The remote transport / a hosted connector | per-request `x-webcake-jwt` header, or env | [README](../README.md#run-as-a-remote-connector-streamable-http) |
+| 3 | **`login`** — grab the token through the browser (no copy-paste) | Avoiding a manual token paste | browser session → saved `auth.json` | [Configuration](./configuration.md#connect-once--grab-your-token-automatically-login) |
+| 4 | **Remote HTTP (`serve`)** — run as an HTTP server | The remote transport / a hosted connector | per-request `x-webcake-jwt` header, or env | [Connect guide](./connect-mcp.md) + [headers](./configuration.md#per-request-headers-hosted--remote-server) |
 
 Two **run forms** apply to any method: **`npx -y webcake-landing-mcp …`** (no clone, auto-updates) or
 **`node /abs/path/dist/index.js …`** (a cloned build — run `npm run build` first). The IDE configs below
@@ -47,7 +47,7 @@ curl -fsSL https://raw.githubusercontent.com/vuluu2k/webcake-landing-mcp/main/in
 The installer is interactive: it asks where to install (default `~/.webcake-landing-mcp`), prompts for
 the env vars (`WEBCAKE_API_BASE`, `WEBCAKE_JWT`, `WEBCAKE_ORG_ID` — all optional, Enter to skip), then
 lets you pick which IDE(s) to configure: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment`,
-`codex`, or all.
+`codex`, `antigravity`, `gemini` (Gemini CLI), `cline`, `kiro`, `opencode`, or all.
 
 Uninstall (removes the MCP server entry from every configured IDE):
 ```bash

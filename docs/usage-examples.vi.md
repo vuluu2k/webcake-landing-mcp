@@ -3,7 +3,7 @@
 # Ví dụ sử dụng
 
 Các luồng đầy đủ minh hoạ cách một AI điều khiển bộ tool Webcake Landing MCP.
-Xem [README](../README.vi.md) để cài đặt, và [Hướng dẫn dùng tool chi tiết](../README.vi.md#hướng-dẫn-dùng-tool-chi-tiết) để tra từng tool.
+Xem [README](../README.vi.md) để cài đặt, và [Tham chiếu tool](./tools.vi.md) để tra từng tool.
 
 ## Ví dụ 1: Dựng landing page mới từ một brief
 

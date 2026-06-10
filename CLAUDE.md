@@ -32,7 +32,7 @@ runs `build && smoke`, so a broken smoke test blocks publishing.
 
 1. **Each element is ONE descriptor.** An element's docs + `container`/`field` flags + `defaultName` + factory `seed` + `example` all live in a single object in `src/domains/landing/elements/<category>.ts`. `CONTAINER_TYPES`/`FIELD_TYPES`/the catalog/`createElement` all DERIVE from these — adding or editing a type is a one-file change. Only `src/domains/landing/page-schema.json`'s `elementType` enum must be updated alongside; `smoke` re-checks it against the descriptor keys, so schema drift fails the gate.
 2. **Gate every change:** `npm run build && npm run smoke` — must end with `ALL GOOD`. Editing the schema requires a rebuild (`dist/domains/landing/page-schema.json` is runtime data copied by the build).
-3. **New tools** go in a `src/tools/*.ts` group via `server.tool(...)`, return through the `text()` helper (`src/mcp/response.ts`), and register the name in `src/domains/landing/instructions.ts` + `README.md` + the `webcake-landing` skill. **New HTTP** goes in `src/persistence/webcake-client.ts`.
+3. **New tools** go in a `src/tools/*.ts` group via `server.tool(...)`, return through the `text()` helper (`src/mcp/response.ts`), and register the name in `src/domains/landing/instructions.ts` + `docs/tools.md`(+`.vi`) + the README at-a-glance table + the `webcake-landing` skill. **New HTTP** goes in `src/persistence/webcake-client.ts`.
 4. **Mutating tools default to `dry_run=true`** and return a JWT-redacted request preview; only the network when `dry_run===false`.
 5. **stdout is the MCP channel** — log with `console.error` only. **ESM/Node16** — relative imports end in `.js`. **Secrets** come from `WEBCAKE_JWT` env only; the repo is public.
 
@@ -71,7 +71,7 @@ Surrounding the domain:
 - [src/http.ts](src/http.ts) — remote **Streamable HTTP** transport (stateful sessions) so the server can be a Claude "custom connector" via a URL. Each request's headers carry the caller's own Webcake JWT (multi-user).
 - [src/tools/](src/tools/) — the 19 tools as five group modules (`reference.ts`, `generation.ts`, `media.ts`, `ingest.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain` (media needs no domain). The `text()` helper lives in [src/mcp/response.ts](src/mcp/response.ts). Persistence + media tools resolve credentials per request from `extra.requestInfo.headers` (HTTP), else env.
 - [src/persistence/](src/persistence/) — the Webcake backend: `config.ts` (`readConfig` precedence: per-request overrides → env → the saved `auth.json` written by `login`; `configFromHeaders` for the HTTP `x-webcake-*` / `Authorization: Bearer` headers), `webcake-client.ts` (create/update/list pages, list orgs + JWT-redacted dry-run previews), `pexels-client.ts` (the `search_images` stock-photo client — direct Pexels with a key, else the shared `mcp.toolvn.io.vn` proxy), `types.ts`.
-- [src/install.ts](src/install.ts) — bundled IDE installer; writes the MCP server block into claude-desktop / claude-code / cursor / windsurf / augment / codex config files.
+- [src/install.ts](src/install.ts) — bundled IDE installer; writes the MCP server block into claude-desktop / claude-code / cursor / windsurf / augment / codex / antigravity / gemini (CLI) / cline / kiro / opencode config files.
 
 The 19 tools fall into five groups: **reference** (`get_generation_guide`, `list_elements`, `get_element`,
 `get_page_schema` — no env needed), **generation** (`new_element`, `new_page_skeleton`, `validate_page`),

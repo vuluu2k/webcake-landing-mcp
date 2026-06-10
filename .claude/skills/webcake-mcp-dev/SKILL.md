@@ -46,7 +46,7 @@ server.tool(
 
 - Return values go through the `text()` helper (`import { text } from "../mcp/response.js"`; stringifies objects). Never return raw objects.
 - Persistence tools: gate on `readConfig()` (`../persistence/config.js`) → if `!config` return `{ ok:false, reason:"missing_env", missing_env }`. Mutating tools (create/update) **default to `dry_run=true`** and return a **redacted** request preview (`buildRequestRedacted` from `../persistence/webcake-client.js` masks the JWT) — only hit the network when `dry_run===false`. Validation/coercion go through the injected `domain` (`domain.validate` / `domain.coerce`).
-- A brand-new group must be registered in [src/tools/index.ts](../../../src/tools/index.ts). Mention the new tool name in three spots: the `INSTRUCTIONS` string in `src/domains/landing/instructions.ts` (bottom line lists all tools), the group file's header comment, and `README.md` / the `webcake-landing` skill tool list.
+- A brand-new group must be registered in [src/tools/index.ts](../../../src/tools/index.ts). Mention the new tool name in three spots: the `INSTRUCTIONS` string in `src/domains/landing/instructions.ts` (bottom line lists all tools), the group file's header comment, and `docs/tools.md`(+`.vi`) + the `README.md` at-a-glance table / the `webcake-landing` skill tool list.
 
 ## Recipe: add a new element type
 

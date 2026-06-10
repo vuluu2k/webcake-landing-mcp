@@ -18,6 +18,7 @@ import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persiste
 import { toEditorUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
+import { buildConnectUrl, parseCallback } from "./auth/login.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -411,6 +412,28 @@ console.log("== config: named environment presets (local/staging/prod) ==");
   check("publish request hits the editor publish route on the BUILDER host", pub.url === "http://builder.localhost:5800/api/pages/pg1/edit/publish", pub.url);
   check("publish request masks the JWT", !JSON.stringify(pub).includes("SECRETJWT"), pub);
   check("publish request carries domain/path + source string", pub.body.includes("shop.example.com") && pub.body.includes("custom_path") && pub.body.includes("is_publish"), pub.body);
+}
+
+console.log("== login: connect URL + loopback callback parsing (offline) ==");
+{
+  // The browser round-trip contract: state must survive into the connect URL
+  // (the Windows `cmd start` bug cut the URL at the bare `&`), and the loopback
+  // callback must reject anything without the matching state.
+  const url = buildConnectUrl("https://webcake.io/mcp-connect", "http://127.0.0.1:51234/callback", "abc123");
+  check("connect url keeps the state param", url.endsWith("&state=abc123"), url);
+  check("connect url percent-encodes redirect_uri", url.includes("redirect_uri=http%3A%2F%2F127.0.0.1%3A51234%2Fcallback"), url);
+  check("connect url joins with & when a query already exists", buildConnectUrl("https://x.test/c?a=1", "http://127.0.0.1:1/callback", "s").includes("?a=1&redirect_uri="));
+
+  const okCb = parseCallback("/callback?token=tok&state=abc", "abc");
+  check("callback with token+state accepted", okCb.ok && okCb.token === "tok", okCb);
+  const wrongState = parseCallback("/callback?token=tok&state=other", "abc");
+  check("callback with wrong state rejected (400)", !wrongState.ok && wrongState.status === 400, wrongState);
+  const noState = parseCallback("/callback?token=tok", "abc");
+  check("callback with missing state rejected (400)", !noState.ok && noState.status === 400, noState);
+  const noToken = parseCallback("/callback?state=abc", "abc");
+  check("callback without token rejected (400)", !noToken.ok && noToken.status === 400, noToken);
+  const wrongPath = parseCallback("/favicon.ico", "abc");
+  check("non-callback path → 404", !wrongPath.ok && wrongPath.status === 404, wrongPath);
 }
 
 console.log("== pexels: key resolution + photo normalization (offline, no network) ==");

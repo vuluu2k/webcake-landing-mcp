@@ -32,7 +32,7 @@ server.tool(
 - Always `domain.validate(source)` before a create/update tool persists; bail with the errors if invalid. Use `domain.coerce(source)` to accept object-or-JSON-string.
 - New HTTP endpoints go in `src/persistence/webcake-client.ts` (add the URL constant, an `authHeaders`-based call, and a `build…Redacted` preview), never inline in a tool module.
 - Logging is `console.error` only (stdout is the MCP channel).
-- A brand-new tool group must be registered in `src/tools/index.ts`. Register the tool name in THREE places: the `INSTRUCTIONS` string in `src/domains/landing/instructions.ts` (the closing "Tools:" line), the group file's header comment, and the tool lists in `README.md` + `.claude/skills/webcake-landing/SKILL.md`.
+- A brand-new tool group must be registered in `src/tools/index.ts`. Register the tool name in THREE places: the `INSTRUCTIONS` string in `src/domains/landing/instructions.ts` (the closing "Tools:" line), the group file's header comment, and the tool lists in `docs/tools.md`(+`.vi`) + the `README.md` at-a-glance table + `.claude/skills/webcake-landing/SKILL.md`.
 
 ## Definition of done
 

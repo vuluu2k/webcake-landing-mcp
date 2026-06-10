@@ -19,7 +19,7 @@ commands and quote the output; never claim "passes" without having run it.
    - Relative imports in `src/` end in `.js` (ESM/Node16), not `.ts`.
    - No hard-coded secrets/JWT/tokens or real page data committed (repo is public; JWT must come from `WEBCAKE_JWT`).
    - Mutating tools still default to `dry_run=true` (look for `dry_run !== false`).
-5. **Tool registration drift** — if a tool was added/renamed, confirm its name appears in `INSTRUCTIONS` (`src/domains/landing/instructions.ts`) and the `README.md` tool list.
+5. **Tool registration drift** — if a tool was added/renamed, confirm its name appears in `INSTRUCTIONS` (`src/domains/landing/instructions.ts`), the `docs/tools.md` tool list, and the `README.md` at-a-glance table.
 
 ## Output
 

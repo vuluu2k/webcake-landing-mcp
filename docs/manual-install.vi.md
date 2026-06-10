@@ -11,9 +11,9 @@ Tất cả đều cấu hình cùng một MCP server `webcake-landing`; chọn c
 | # | Cách | Hợp cho | Auth | Xem |
 |---|------|---------|------|-----|
 | 1 | **Local stdio** — gắn vào IDE (Claude Desktop / Cursor / …) qua `npx` hoặc file build | Dùng hằng ngày trên máy | env `WEBCAKE_JWT`, hoặc `login`, hoặc không cần (tool tham chiếu) | [Cấu hình IDE](#cấu-hình-theo-ide--công-cụ-ai) |
-| 2 | **`login`** — tự lấy token qua browser (khỏi copy-paste) | Khỏi dán token tay (stdio / remote 1 người) | session browser → file `auth.json` | [README](../README.vi.md#kết-nối-một-lần--tự-lấy-token-login) |
-| 3 | **Remote HTTP (`serve`)** — chạy như HTTP server, test bằng MCP Inspector / `mcp-remote` / curl | Thử transport remote ở local | header `x-webcake-jwt` mỗi request, hoặc env | [README](../README.vi.md#chạy-như-remote-connector-streamable-http) |
-| 4 | **VPS + claude.ai connector** — deploy HTTPS public, thêm làm custom connector | Chia sẻ 1 server hosted | single-account (token env); per-user cần OAuth (chưa có) | [README](../README.vi.md#deploy-lên-vps) |
+| 2 | **`login`** — tự lấy token qua browser (khỏi copy-paste) | Khỏi dán token tay (stdio / remote 1 người) | session browser → file `auth.json` | [Cấu hình](./configuration.vi.md#kết-nối-một-lần--tự-lấy-token-login) |
+| 3 | **Remote HTTP (`serve`)** — chạy như HTTP server, test bằng MCP Inspector / `mcp-remote` / curl | Thử transport remote ở local | header `x-webcake-jwt` mỗi request, hoặc env | [Hướng dẫn kết nối](./ket-noi-mcp.md) + [header](./configuration.vi.md#header-mỗi-request-server-hosted--remote) |
+| 4 | **VPS + claude.ai connector** — deploy HTTPS public, thêm làm custom connector | Chia sẻ 1 server hosted | single-account (token env); per-user cần OAuth (chưa có) | [Hướng dẫn kết nối](./ket-noi-mcp.md) |
 
 Hai **dạng chạy** áp dụng cho mọi cách: **`npx -y webcake-landing-mcp …`** (không clone, tự cập nhật) hoặc **`node /abs/path/dist/index.js …`** (bản đã clone & build — chạy `npm run build` trước). Cấu hình IDE bên dưới dùng dạng local; đổi `command`/`args` sang dạng npx để dùng CDN.
 
@@ -37,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/vuluu2k/webcake-landing-mcp/main/in
 
 Trình cài tương tác: hỏi nơi cài (mặc định `~/.webcake-landing-mcp`), hỏi các biến môi trường
 (`WEBCAKE_API_BASE`, `WEBCAKE_JWT`, `WEBCAKE_ORG_ID` — đều tuỳ chọn, Enter để bỏ qua), rồi cho bạn chọn
-IDE cần cấu hình: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment`, `codex`, hoặc tất cả.
+IDE cần cấu hình: `claude-desktop`, `claude-code`, `cursor`, `windsurf`, `augment`, `codex`, `antigravity`, `gemini` (Gemini CLI), `cline`, `kiro`, `opencode`, hoặc tất cả.
 
 Gỡ cài (xoá entry MCP server khỏi mọi IDE đã cấu hình):
 ```bash

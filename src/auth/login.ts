@@ -19,7 +19,7 @@
 import { createServer } from "node:http";
 import { randomBytes } from "node:crypto";
 import { spawn, execFile } from "node:child_process";
-import { saveSavedConfig, resolveEnv, ENVIRONMENTS } from "../persistence/config.js";
+import { saveSavedConfig, resolveEnv, ENVIRONMENTS, stripTrailingSlash } from "../persistence/config.js";
 
 // Base URLs come from the named environment (the global --env flag / WEBCAKE_ENV),
 // defaulting to prod so zero-config `login` still connects via webcake.io. Override
@@ -150,11 +150,40 @@ const SUCCESS_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8"
 function resolveConnectUrl(opts: LoginOpts, appBase: string): string {
   if (opts.connectUrl) return opts.connectUrl; // explicit --connect-url override
   // The connect page is on the SPA (appBase, from the env preset), NOT the API base.
-  return `${appBase.replace(/\/+$/, "")}/mcp-connect`;
+  return `${stripTrailingSlash(appBase)}/mcp-connect`;
+}
+
+/**
+ * The full browser URL for the connect page. The redirect_uri is percent-encoded;
+ * `state` rides as a separate query param — if a shell mangles the URL (see
+ * openBrowser's Windows note) the state is what goes missing, and parseCallback
+ * rejects the round-trip. Pure + exported so smoke can pin the contract.
+ */
+export function buildConnectUrl(connectUrl: string, redirectUri: string, state: string): string {
+  const sep = connectUrl.includes("?") ? "&" : "?";
+  return `${connectUrl}${sep}redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+}
+
+export type CallbackResult =
+  | { ok: true; token: string }
+  | { ok: false; status: 400 | 404; reason: string };
+
+/** Decide what a loopback request means. Pure + exported so smoke can test it. */
+export function parseCallback(reqUrl: string | undefined, expectedState: string): CallbackResult {
+  const url = new URL(reqUrl || "/", "http://127.0.0.1");
+  if (url.pathname !== "/callback") return { ok: false, status: 404, reason: "Not found" };
+  const token = url.searchParams.get("token");
+  if (!token) return { ok: false, status: 400, reason: "no token in the callback — re-run the command" };
+  if (url.searchParams.get("state") !== expectedState)
+    return { ok: false, status: 400, reason: "state mismatch (login link truncated or expired) — re-run the command" };
+  return { ok: true, token };
 }
 
 export async function runLogin(argv: string[]): Promise<void> {
   const opts = parseArgs(argv);
+  if (opts.port !== undefined && !Number.isInteger(opts.port)) {
+    throw new Error(`--port must be a number, got "${argv[argv.indexOf("--port") + 1]}"`);
+  }
   // Named environment (set by the global --env flag / WEBCAKE_ENV); prod is the
   // zero-config default. Explicit --api-base / WEBCAKE_APP_BASE still win per field.
   const preset = resolveEnv(process.env.WEBCAKE_ENV) ?? ENVIRONMENTS.prod;
@@ -167,29 +196,41 @@ export async function runLogin(argv: string[]): Promise<void> {
   const terminalApp = await captureFrontmostApp();
 
   await new Promise<void>((resolve, reject) => {
+    // `close()` only stops NEW connections; a browser keep-alive socket would
+    // keep the event loop (and the CLI) alive, so drop the live ones too.
+    const shutdown = () => {
+      server.close();
+      server.closeAllConnections();
+    };
+
     const server = createServer((req, res) => {
-      const url = new URL(req.url || "/", "http://127.0.0.1");
-      if (url.pathname !== "/callback") {
-        res.writeHead(404).end("Not found");
+      const cb = parseCallback(req.url, state);
+      if (!cb.ok) {
+        res.writeHead(cb.status, { "content-type": "text/html" }).end(`<p>${cb.reason}</p>`);
+        return; // keep listening — the user can retry until the timeout
+      }
+      let path: string;
+      try {
+        path = saveSavedConfig({
+          jwt: cb.token,
+          base: stripTrailingSlash(apiBase),
+          appBase: stripTrailingSlash(appBase),
+          ...(opts.orgId ? { orgId: opts.orgId } : {}),
+          savedAt: new Date().toISOString(),
+        });
+      } catch (e: any) {
+        // Surface the real write error (EPERM/ENOSPC/AV lock…) instead of
+        // crashing the process from inside the request handler.
+        res.writeHead(500, { "content-type": "text/html" }).end("<p>Login succeeded but saving credentials failed — check the terminal.</p>");
+        shutdown();
+        reject(new Error(`could not save credentials to ${process.env.WEBCAKE_CONFIG_DIR || "~/.webcake-landing-mcp"}/auth.json: ${e?.message ?? e}`));
         return;
       }
-      const token = url.searchParams.get("token");
-      if (!token || url.searchParams.get("state") !== state) {
-        res.writeHead(400, { "content-type": "text/html" }).end("<p>Invalid or expired login — re-run the command.</p>");
-        return;
-      }
-      const path = saveSavedConfig({
-        jwt: token,
-        base: apiBase.replace(/\/+$/, ""),
-        appBase: appBase.replace(/\/+$/, ""),
-        ...(opts.orgId ? { orgId: opts.orgId } : {}),
-        savedAt: new Date().toISOString(),
-      });
       res.writeHead(200, { "content-type": "text/html" }).end(SUCCESS_HTML);
       console.error(`\n✓ Connected. Token saved to ${path} (api ${apiBase}).`);
       // Pull the terminal back to the front (best-effort; no-op off macOS).
       activateApp(terminalApp);
-      server.close();
+      shutdown();
       resolve();
     });
 
@@ -198,16 +239,14 @@ export async function runLogin(argv: string[]): Promise<void> {
     server.listen(opts.port ?? 0, "127.0.0.1", () => {
       const addr = server.address();
       const port = typeof addr === "object" && addr ? addr.port : opts.port;
-      const redirectUri = `http://127.0.0.1:${port}/callback`;
-      const sep = connectUrl.includes("?") ? "&" : "?";
-      const full = `${connectUrl}${sep}redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
+      const full = buildConnectUrl(connectUrl, `http://127.0.0.1:${port}/callback`, state);
       console.error("Opening your browser to connect to Webcake (log in there if prompted):");
       console.error("  " + full + "\n");
       if (opts.open) openBrowser(full);
     });
 
     setTimeout(() => {
-      server.close();
+      shutdown();
       reject(new Error("login timed out after 180s."));
     }, 180_000).unref();
   });
