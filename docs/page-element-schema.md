@@ -124,7 +124,7 @@ Quy tắc:
 | | `borderColor` | String | `rgba(...)` |
 | | `borderRadius` | String/Number | vd `"13px"` hoặc `8` |
 | | `boxShadow` | String | vd `"4px 4px 9px 0px rgba(0,0,0,.2)"` |
-| Hiệu ứng | `opacity` | Number | 0–1 |
+| Hiệu ứng | `opacity` | Number | 0–1. **Cảnh báo:** giá trị < 1 render element và toàn bộ nội dung bên trong mờ vĩnh viễn (exportCss.js emit `opacity:<v>` thẳng ra CSS). Để làm màu nhạt hơn, dùng alpha trong `rgba()` của `color`/`background` thay vì `opacity`. `validate_page` sẽ cảnh báo khi phát hiện `opacity < 1`. |
 | | `mixBlendMode`, `transform` | String | |
 | | `padding`, `margin` | Number/String | |
 

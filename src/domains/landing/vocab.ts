@@ -7,6 +7,49 @@
 
 export const CANVAS = { desktopWidth: 960, mobileWidth: 420, defaultSectionHeight: 800 };
 
+/**
+ * Element types the runtime animator handles.
+ * Source: landing_page_build/render/build/animate.js — the switch statement
+ * that emits the animation CSS class only covers these 9 types. Any other type
+ * with config.animation.name != 'none' produces a broken CSS selector and the
+ * element stays in the pre-animation (dim/hidden) state permanently.
+ */
+export const ANIMATABLE_TYPES = new Set([
+  "group", "image-block", "text-block", "rectangle", "button",
+  "countdown", "line", "list-paragraph", "notify",
+]);
+
+/**
+ * Valid animation name values accepted by the editor and the renderer.
+ * Source: landing_page_backend/assets/editor/main/traits/TraitAnimation.vue
+ * (the animate.css-backed option list). Any name outside this set produces
+ * an unknown keyframe — the animation never runs and the element may render stuck.
+ */
+export const ANIMATION_NAMES = new Set([
+  "none",
+  "bounce", "flash", "pulse", "rubberBand", "shakeX", "shakeY", "headShake",
+  "swing", "swingCenter", "tada", "wobble", "jello", "heartBeat",
+  "backInDown", "backInLeft", "backInRight", "backInUp",
+  "backOutDown", "backOutLeft", "backOutRight", "backOutUp",
+  "bounceIn", "bounceInDown", "bounceInLeft", "bounceInRight", "bounceInUp",
+  "bounceOut", "bounceOutDown", "bounceOutLeft", "bounceOutRight", "bounceOutUp",
+  "fadeIn", "fadeInDown", "fadeInDownBig", "fadeInLeft", "fadeInLeftBig",
+  "fadeInRight", "fadeInRightBig", "fadeInUp", "fadeInUpBig",
+  "fadeInTopLeft", "fadeInTopRight", "fadeInBottomLeft", "fadeInBottomRight",
+  "fadeOut", "fadeOutDown", "fadeOutDownBig", "fadeOutLeft", "fadeOutLeftBig",
+  "fadeOutRight", "fadeOutRightBig", "fadeOutUp", "fadeOutUpBig",
+  "fadeOutTopLeft", "fadeOutTopRight", "fadeOutBottomRight", "fadeOutBottomLeft",
+  "flip", "flipInX", "flipInY", "flipOutX", "flipOutY",
+  "lightSpeedInRight", "lightSpeedInLeft", "lightSpeedOutRight", "lightSpeedOutLeft",
+  "rotateIn", "rotateInDownLeft", "rotateInDownRight", "rotateInUpLeft", "rotateInUpRight",
+  "rotateOut", "rotateOutDownLeft", "rotateOutDownRight", "rotateOutUpLeft", "rotateOutUpRight",
+  "hinge", "jackInTheBox", "rollIn", "rollOut",
+  "zoomIn", "zoomInDown", "zoomInLeft", "zoomInRight", "zoomInUp",
+  "zoomOut", "zoomOutDown", "zoomOutLeft", "zoomOutRight", "zoomOutUp",
+  "slideInDown", "slideInLeft", "slideInRight", "slideInUp",
+  "slideOutDown", "slideOutLeft", "slideOutRight", "slideOutUp",
+]);
+
 export const EVENT_TRIGGERS = ["click", "hover", "success", "error", "unset", "delay"] as const;
 
 // Click-trigger actions. "Extra:" lists the action-specific event-object fields

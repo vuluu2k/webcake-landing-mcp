@@ -554,5 +554,127 @@ console.log("== draft-cache: update draft round-trip (update_page / live-page pa
   check("update draft: deleteDraft removes entry", getDraft(uid) === null, getDraft(uid));
 }
 
+console.log("== validate: animation contract checks ==");
+{
+  const mkSec = (children: any[]) => ({
+    id: "anim_sec",
+    type: "section",
+    properties: { name: "S", movable: false, sync: true },
+    responsive: {
+      desktop: { config: {}, styles: { position: "relative", height: 800, background: "rgba(255,255,255,1)" } },
+      mobile:  { config: {}, styles: { position: "relative", height: 800, background: "rgba(255,255,255,1)" } },
+    },
+    specials: {}, runtime: {}, events: [],
+    children,
+  });
+  const mkEl = (id: string, type: string, animName: string, bp: "desktop" | "mobile" | "both" = "both") => ({
+    id,
+    type,
+    properties: { name: "el", movable: true, sync: true },
+    responsive: {
+      desktop: {
+        config: bp === "mobile" ? {} : { animation: { name: animName, delay: 0, duration: 3, repeat: null } },
+        styles: { top: 10, left: 10, width: 100, height: 40 },
+      },
+      mobile: {
+        config: bp === "desktop" ? {} : { animation: { name: animName, delay: 0, duration: 3, repeat: null } },
+        styles: { top: 10, left: 10, width: 100, height: 40 },
+      },
+    },
+    specials: type === "button" ? { text: "X" } : type === "text-block" ? { text: "X" } : {},
+    runtime: {}, events: [],
+  });
+
+  // 1) non-animatable type (form) with a real animation name → ERROR
+  const rForm = validatePage({
+    page: [mkSec([mkEl("f1", "form", "fadeInUp")])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("anim: non-animatable type (form) fadeInUp → error", rForm.errors.some((e) => e.includes("cannot animate") && e.includes("form")), rForm.errors);
+
+  // 2) bogus animation name on a text-block → ERROR
+  const rBogus = validatePage({
+    page: [mkSec([mkEl("t1", "text-block", "fade-in-up")])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("anim: bogus name 'fade-in-up' on text-block → error", rBogus.errors.some((e) => e.includes('"fade-in-up"') && e.includes("not in the editor")), rBogus.errors);
+
+  // 3) non-animatable type (html-box) with bogus name → BOTH errors
+  const rHtmlBad = validatePage({
+    page: [mkSec([mkEl("h1", "html-box", "fade-in-up")])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("anim: html-box + bogus name → type error present", rHtmlBad.errors.some((e) => e.includes("cannot animate") && e.includes("html-box")), rHtmlBad.errors);
+  check("anim: html-box + bogus name → name error present", rHtmlBad.errors.some((e) => e.includes('"fade-in-up"')), rHtmlBad.errors);
+
+  // 4) valid name on animatable type → NO animation error
+  const rGood = validatePage({
+    page: [mkSec([mkEl("t2", "text-block", "fadeInUp")])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("anim: valid 'fadeInUp' on text-block → no animation error", !rGood.errors.some((e) => e.includes("animate") || e.includes("keyframe")), rGood.errors);
+
+  // 5) name 'none' on any type → no error at all
+  const rNone = validatePage({
+    page: [mkSec([mkEl("f2", "form", "none")])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("anim: name='none' on form → no animation error", !rNone.errors.some((e) => e.includes("animate")), rNone.errors);
+
+  // 6) absent animation object → no error
+  const rNoAnim = validatePage({
+    page: [mkSec([{
+      id: "f3", type: "form",
+      properties: { name: "el", movable: true, sync: true },
+      responsive: {
+        desktop: { config: {}, styles: { top: 10, left: 10, width: 100, height: 40 } },
+        mobile:  { config: {}, styles: { top: 10, left: 10, width: 100, height: 40 } },
+      },
+      specials: {}, runtime: {}, events: [], children: [],
+    }])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("anim: absent animation config on form → no animation error", !rNoAnim.errors.some((e) => e.includes("animate")), rNoAnim.errors);
+
+  // 7) styles.opacity 0.4 (number) → WARNING
+  const mkOpacity = (id: string, type: string, opacity: unknown) => ({
+    id,
+    type,
+    properties: { name: "el", movable: true, sync: true },
+    responsive: {
+      desktop: { config: {}, styles: { top: 10, left: 10, width: 100, height: 40, opacity } },
+      mobile:  { config: {}, styles: { top: 10, left: 10, width: 100, height: 40 } },
+    },
+    specials: type === "button" ? { text: "X" } : {},
+    runtime: {}, events: [],
+  });
+  const rOp04 = validatePage({
+    page: [mkSec([mkOpacity("b1", "button", 0.4)])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("opacity: 0.4 number → warning present", rOp04.warnings.some((w) => w.includes("opacity=0.4") && w.includes("permanently faded")), rOp04.warnings);
+
+  // 8) styles.opacity "0.4" (numeric string) → WARNING
+  const rOpStr = validatePage({
+    page: [mkSec([mkOpacity("b2", "button", "0.4")])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("opacity: '0.4' string → warning present", rOpStr.warnings.some((w) => w.includes("opacity=0.4") && w.includes("permanently faded")), rOpStr.warnings);
+
+  // 9) styles.opacity 1 → NO warning
+  const rOp1 = validatePage({
+    page: [mkSec([mkOpacity("b3", "button", 1)])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("opacity: 1 → no opacity warning", !rOp1.warnings.some((w) => w.includes("permanently faded")), rOp1.warnings);
+
+  // 10) non-numeric opacity (e.g. "inherit") → NO warning (schema territory)
+  const rOpStr2 = validatePage({
+    page: [mkSec([mkOpacity("b4", "button", "inherit")])],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check("opacity: 'inherit' string → no opacity warning", !rOpStr2.warnings.some((w) => w.includes("permanently faded")), rOpStr2.warnings);
+}
+
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);

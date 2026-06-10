@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import Ajv2020Module from "ajv/dist/2020.js";
 import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
+import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
 import type { ValidationResult } from "../../core/domain.js";
 
 export type { ValidationResult };
@@ -226,6 +227,51 @@ export function validatePage(input: unknown): ValidationResult {
             errors.push(`${path} (${type}): specials.options[${oi}] needs a non-empty string "name" (the visible option text).${hint}`);
           }
         });
+      }
+    }
+
+    // animation contract — checked per breakpoint
+    // Source: landing_page_build/render/build/animate.js (animatable type list)
+    //         landing_page_backend/assets/editor/main/traits/TraitAnimation.vue (name set)
+    for (const bp of ["desktop", "mobile"] as const) {
+      const anim = node.responsive?.[bp]?.config?.animation;
+      if (!anim || typeof anim !== "object") continue;
+      const animName: unknown = anim.name;
+      if (typeof animName !== "string" || animName === "none") continue;
+      // name is present and not 'none' — check type animatability first
+      if (type && !ANIMATABLE_TYPES.has(type)) {
+        errors.push(
+          `${path} (${type}) [${bp}]: the renderer cannot animate type "${type}" — ` +
+          `the element will render stuck/dim in its pre-animation state. ` +
+          `Fix: patch_page setting config:{${bp}:{animation:{name:'none',delay:0,duration:3,repeat:null}}} ` +
+          `or move the animation onto an animatable wrapper (e.g. type "group").`
+        );
+      }
+      // name must be in the known animate.css set
+      if (!ANIMATION_NAMES.has(animName)) {
+        errors.push(
+          `${path} (${type ?? "?"}) [${bp}]: animation name "${animName}" is not in the editor's ` +
+          `animate.css set — the keyframe is unknown and the animation never runs. ` +
+          `Valid examples: fadeInUp, slideInLeft, zoomIn, bounceIn, backInDown, flipInX, lightSpeedInLeft, rotateIn, rollIn, jackInTheBox.`
+        );
+      }
+    }
+
+    // styles.opacity < 1 renders the element permanently faded (exportCss.js emits opacity:<v>)
+    for (const bp of ["desktop", "mobile"] as const) {
+      const styles = node.responsive?.[bp]?.styles;
+      if (!styles || typeof styles !== "object") continue;
+      const raw = (styles as any).opacity;
+      if (raw === undefined || raw === null) continue;
+      const v = typeof raw === "number" ? raw : typeof raw === "string" ? parseFloat(raw) : NaN;
+      if (!Number.isFinite(v)) continue; // non-numeric garbage → schema territory, skip
+      if (v < 1) {
+        warnings.push(
+          `${path} (${type ?? "?"}) [${bp}]: styles.opacity=${v} — ` +
+          `the element will render permanently faded. ` +
+          `If unintended, fix via patch_page({op:'update',id:'${node.id ?? "?"}',styles:{${bp}:{opacity:1}}}); ` +
+          `for a muted color use rgba() alpha on the color/background property instead.`
+        );
       }
     }
 

@@ -94,7 +94,13 @@ These keys live in `responsive[display].config` and apply to **every** element t
 
 | Config key | Type | Meaning |
 |---|---|---|
-| `animation` | object | Entrance animation. Shape: `{ name: string, delay: number, duration: number, repeat: null \| number }`. `name` values include `"none"`, `"fadeIn"`, `"slideInLeft"`, etc. |
+| `animation` | object | Entrance animation. Shape: `{ name: string, delay: number, duration: number, repeat: null \| number }`. Default: `{ name: "none", delay: 0, duration: 3, repeat: null }`. |
+
+**Animation renderer contract (enforced by `validate_page`):**
+
+- Animations only run on these 9 element types: `group`, `image-block`, `text-block`, `rectangle`, `button`, `countdown`, `line`, `list-paragraph`, `notify`. Source: `landing_page_build/render/build/animate.js`. Any other type with `name != "none"` produces a broken CSS selector — the element renders stuck in its pre-animation (dim/hidden) state permanently.
+- `name` must be a value from the editor's animate.css set (see `landing_page_backend/assets/editor/main/traits/TraitAnimation.vue`). Common entrance families: `fadeIn*`, `slideIn*`, `zoomIn*`, `bounceIn*`, `backIn*`, `flipIn*`, `lightSpeedIn*`, `rotateIn*`, `rollIn`, `jackInTheBox`; attention seekers: `bounce`, `pulse`, `tada`, `wobble`, `jello`, `heartBeat`. An unknown name means the keyframe never runs; `validate_page` reports an error.
+- **`styles.opacity`** — do NOT use `opacity < 1` for a "muted" or "subtle" look. `exportCss.js` emits `opacity:<v>` as a permanent CSS rule; the element AND all its content render faded forever. Use `rgba()` alpha on the `color` or `background` property instead. `validate_page` warns when `opacity < 1`.
 
 **Notification / floating badge:**
 
