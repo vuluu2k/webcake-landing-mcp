@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.48] - 2026-06-10
+
+### Added
+- `create_page` now caches the expanded source in an in-memory draft store when validation fails and returns a `draft_id` alongside the validation errors, so the agent can fix only the listed invalid elements without rebuilding and re-shipping the whole source.
+- `patch_page` now accepts `draft_id` (returned by a failed `create_page`) as an alternative to `page_id`: it applies per-element ops to the cached draft, re-validates the whole merged tree, preserves partial fixes across multiple patch rounds until the tree is valid, then creates the page; drafts expire after approximately 30 minutes (max 50 entries in memory).
+
+### Changed
+- `get_generation_guide` editing workflow and server instructions now document the `draft_id` fix-after-error path: when `create_page` fails validation, use the returned `draft_id` with `patch_page({ draft_id, patches, dry_run:false })` to repair only the offending elements and complete the page creation without rebuilding the source.
+
 ## [1.0.47] - 2026-06-10
 
 ### Added
