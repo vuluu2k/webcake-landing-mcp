@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.47] - 2026-06-10
+
+### Added
+- New `patch_page` tool edits an existing page by element id without re-sending the whole source: the agent sends per-element ops (`update`, `replace`, `remove`, `add` keyed by id), the MCP fetches the live source, applies the ops, validates the whole merged tree (blocking on errors), and saves; defaults to `dry_run=true`; credentials are required even on dry run because the live source must be fetched.
+
+### Changed
+- `get_generation_guide` workflow expands from four steps back to six: `get_element` is called per element type in step 2, images are fetched per slot in step 3b, `validate_page` is restored as a required step 5 before persisting, and `create_page` in step 6 recommends a `dry_run=true` preview before the final write.
+- `get_generation_guide` editing workflow and server instructions now direct the agent to prefer `patch_page` for small edits (send only the changed element ids with their ops rather than the whole source) and add a fix-after-error path: when `create_page`, `update_page`, or `add_section` reports validation errors, correct only the offending element ids with `patch_page` instead of rebuilding the source.
+- Server instructions reinstate the explicit requirement to call `validate_page` and fix every error before `create_page` or `update_page`, reversing the "VALIDATION IS BUILT IN" rule from v1.0.45 that removed this separate step.
+- Server instructions update `dry_run` guidance: the pre-write dry-run round-trip may be skipped only when `validate_page` has already passed with no errors.
+
 ## [1.0.46] - 2026-06-09
 
 ### Changed
