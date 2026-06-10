@@ -44,10 +44,22 @@ function parseArgs(argv: string[]): LoginOpts {
 
 function openBrowser(url: string) {
   const platform = process.platform;
-  const cmd = platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
-  const args = platform === "win32" ? ["/c", "start", "", url] : [url];
   try {
-    spawn(cmd, args, { stdio: "ignore", detached: true }).unref();
+    if (platform === "win32") {
+      // `cmd /c start` parses an unquoted `&` as a command separator, which cuts
+      // the connect URL right before `&state=...` (the login then bounces back to
+      // the loopback without state and is rejected). Pass the args verbatim with
+      // the URL double-quoted so cmd hands `start` the full URL. The first quoted
+      // arg ("") is `start`'s window title.
+      spawn("cmd", ["/c", "start", '""', `"${url}"`], {
+        stdio: "ignore",
+        detached: true,
+        windowsVerbatimArguments: true,
+      }).unref();
+      return;
+    }
+    const cmd = platform === "darwin" ? "open" : "xdg-open";
+    spawn(cmd, [url], { stdio: "ignore", detached: true }).unref();
   } catch {
     /* ignore — the URL is also printed */
   }
