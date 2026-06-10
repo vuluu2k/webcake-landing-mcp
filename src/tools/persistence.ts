@@ -440,4 +440,245 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       });
     }
   );
+
+  // 14) Patch page (surgical element edit / fix-after-error) -------------------
+  // Why this exists: update_page takes the ENTIRE source as one tool argument, so
+  // fixing one bad element — or making a small edit — forces the model to re-emit
+  // the whole (often huge) page JSON, the same large payload that can drop the
+  // client↔Claude connection. patch_page lets the model send ONLY the diff: a list
+  // of per-element ops keyed by element id. The MCP fetches the live source, applies
+  // the ops, validates the WHOLE merged tree, and PUTs — the big merge lives on the
+  // robust MCP↔backend link, never in a tool argument the model has to stream.
+  //
+  // This is the fix-after-error path: when create_page/add_section/update_page
+  // returns validation errors, the model corrects ONLY the offending element ids via
+  // patch_page instead of rebuilding the source. It is also the everyday surgical-edit
+  // path (change one element's text/color/position without resending the tree).
+  //
+  // Ops (each keyed by element id, found anywhere in page or popup):
+  //   { op:"update", id, specials?, styles?:{desktop?,mobile?}, config?:{desktop?,mobile?}, events?, properties? }
+  //        — shallow-merge the given fields into the existing element (op defaults to "update").
+  //   { op:"replace", id, element }     — swap the whole node in place (compact authoring ok; keeps the id).
+  //   { op:"remove",  id }              — delete the element and its subtree.
+  //   { op:"add", parent_id, element }  — append a new child element to the parent container.
+  // Unlike create_page's env-less preview, patch_page MUST read the live page, so it
+  // needs creds even on dry_run; dry_run only gates the final write.
+  const asArray = (input: any): any[] => {
+    let v = input;
+    if (typeof v === "string") {
+      try {
+        v = JSON.parse(v);
+      } catch {
+        /* not JSON — wrap as single */
+      }
+    }
+    return Array.isArray(v) ? v : [v];
+  };
+  // Find a node by id within the real array refs (so remove/add mutate the live tree),
+  // recursing into children; returns the node, its parent array, and index.
+  const findById = (
+    arr: any[],
+    id: string
+  ): { node: any; parentArr: any[]; index: number } | null => {
+    for (let i = 0; i < arr.length; i++) {
+      const n = arr[i];
+      if (!n || typeof n !== "object") continue;
+      if (n.id === id) return { node: n, parentArr: arr, index: i };
+      if (Array.isArray(n.children)) {
+        const found = findById(n.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+  const mergeStyleMap = (node: any, kind: "styles" | "config", byBp: any): string[] => {
+    const touched: string[] = [];
+    for (const bp of ["desktop", "mobile"] as const) {
+      const patch = byBp?.[bp];
+      if (!patch || typeof patch !== "object") continue;
+      node.responsive = node.responsive ?? {};
+      node.responsive[bp] = node.responsive[bp] ?? { config: {}, styles: {} };
+      node.responsive[bp][kind] = { ...(node.responsive[bp][kind] ?? {}), ...patch };
+      touched.push(`${bp}.${kind}`);
+    }
+    return touched;
+  };
+
+  server.tool(
+    "patch_page",
+    "Edits an EXISTING page by element id WITHOUT re-sending the whole source — the surgical-edit and fix-after-error path. Send only a list of per-element ops; the MCP fetches the live source, applies them, validates the WHOLE merged tree (blocks on errors), and saves. Ops: {op:'update',id,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} (shallow-merges; op defaults to 'update'), {op:'replace',id,element}, {op:'remove',id}, {op:'add',parent_id,element}. Use this to fix the elements a failed create_page/update_page/add_section reported, or to change one element's text/color/position — instead of rebuilding the page. DEFAULTS to dry_run=true (reads + merges + validates + previews, no write); dry_run=false to save. Needs WEBCAKE_API_BASE + WEBCAKE_JWT (it reads the live page, so creds are required even on dry_run).",
+    {
+      page_id: z.string().describe("The page id to edit (from create_page, list_pages, or find_pages; must be owned by the account)."),
+      patches: z
+        .any()
+        .describe(
+          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container."
+        ),
+      dry_run: z
+        .boolean()
+        .optional()
+        .describe("Default TRUE — read, merge, validate and preview the resulting save WITHOUT writing. Set false to actually save."),
+    },
+    { title: "Patch Webcake Page (by element id)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
+    async ({ page_id, patches, dry_run }, extra) => {
+      const isDry = dry_run !== false; // default true (safe)
+      const ops = asArray(patches).filter((p) => p != null && typeof p === "object");
+      if (ops.length === 0) {
+        return text({ patched: false, reason: "no_patches", hint: "Pass an op object or a non-empty array of { op, id, … } ops." });
+      }
+
+      // patch_page always reads the live tree (even on dry_run) — needs creds.
+      const { config, missing } = cfgFor(extra);
+      if (!config) {
+        return text({
+          patched: false,
+          reason: "missing_env",
+          missing_env: missing,
+          hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT (env), or send the x-webcake-jwt header (remote), then retry.",
+        });
+      }
+
+      const current = await getPageSource(config, page_id);
+      if (!current.ok || current.source == null) {
+        return text({
+          patched: false,
+          reason: "fetch_failed",
+          status: current.status,
+          error: current.error ?? "Page source not found.",
+          hint: "Check the page_id (find_pages/list_pages) and that the account owns it.",
+        });
+      }
+      let base: any = current.source;
+      if (typeof base === "string") {
+        try {
+          base = JSON.parse(base);
+        } catch {
+          return text({ patched: false, reason: "bad_source", hint: "The stored page source could not be parsed." });
+        }
+      }
+      const treeRoots = [base.page, base.popup].filter((a) => Array.isArray(a)) as any[][];
+      const locate = (id: string) => {
+        for (const r of treeRoots) {
+          const hit = findById(r, id);
+          if (hit) return hit;
+        }
+        return null;
+      };
+
+      // Apply every op against the live tree. A missing target aborts the whole
+      // patch (we never write a partial edit).
+      const applied: any[] = [];
+      const notFound: { op: string; id: string }[] = [];
+      const badOps: string[] = [];
+      for (const p of ops) {
+        const op = p.op ?? "update";
+        if (op === "add") {
+          const pid = p.parent_id ?? p.id;
+          if (typeof pid !== "string" || p.element == null) {
+            badOps.push(`add needs parent_id + element`);
+            continue;
+          }
+          const hit = locate(pid);
+          if (!hit) {
+            notFound.push({ op, id: pid });
+            continue;
+          }
+          hit.node.children = Array.isArray(hit.node.children) ? hit.node.children : [];
+          hit.node.children.push(p.element);
+          applied.push({ op, parent_id: pid, added_id: p.element?.id });
+          continue;
+        }
+        if (typeof p.id !== "string") {
+          badOps.push(`${op} needs a string id`);
+          continue;
+        }
+        const hit = locate(p.id);
+        if (!hit) {
+          notFound.push({ op, id: p.id });
+          continue;
+        }
+        if (op === "remove") {
+          hit.parentArr.splice(hit.index, 1);
+          applied.push({ op, id: p.id });
+        } else if (op === "replace") {
+          if (p.element == null) {
+            badOps.push(`replace ${p.id} needs element`);
+            continue;
+          }
+          const repl = p.element;
+          if (repl && typeof repl === "object" && repl.id == null) repl.id = p.id;
+          hit.parentArr[hit.index] = repl;
+          applied.push({ op, id: p.id });
+        } else {
+          // update (default)
+          const changed: string[] = [];
+          if (p.specials && typeof p.specials === "object") {
+            hit.node.specials = { ...(hit.node.specials ?? {}), ...p.specials };
+            changed.push("specials");
+          }
+          changed.push(...mergeStyleMap(hit.node, "styles", p.styles));
+          changed.push(...mergeStyleMap(hit.node, "config", p.config));
+          if (Array.isArray(p.events)) {
+            hit.node.events = p.events;
+            changed.push("events");
+          }
+          if (p.properties && typeof p.properties === "object") {
+            hit.node.properties = { ...(hit.node.properties ?? {}), ...p.properties };
+            changed.push("properties");
+          }
+          applied.push({ op: "update", id: p.id, changed });
+        }
+      }
+
+      if (badOps.length > 0) {
+        return text({ patched: false, reason: "bad_ops", bad_ops: badOps, hint: "Each op needs id (or parent_id for add) and an element where required." });
+      }
+      if (notFound.length > 0) {
+        return text({
+          patched: false,
+          reason: "target_not_found",
+          not_found: notFound,
+          hint: "No element with that id exists on the live page. Run get_page to see the current ids; ids are case-sensitive.",
+        });
+      }
+
+      // Validate the WHOLE merged tree (hydrate sparse replaced/added nodes first).
+      const expanded = domain.expand(base);
+      const result = domain.validate(expanded);
+      if (!result.valid) {
+        return text({
+          patched: false,
+          reason: "validation_failed",
+          errors: result.errors,
+          warnings: result.warnings,
+          patches_applied: applied,
+          hint: "The edit produced an invalid tree — fix the listed errors in your ops, then retry.",
+        });
+      }
+      const parsed = domain.coerce(expanded);
+
+      if (isDry) {
+        return text({
+          dry_run: true,
+          page_id,
+          patches_applied: applied,
+          validation: { valid: true, warnings: result.warnings, stats: result.stats },
+          request: buildUpdateRequestRedacted(config, page_id, parsed),
+          hint: "Re-run with dry_run=false to actually save the edit.",
+        });
+      }
+
+      const outcome = await updatePageSource(config, page_id, parsed);
+      return text({
+        patched: outcome.ok,
+        patches_applied: applied,
+        page_id: outcome.page_id,
+        editor_url: outcome.editor_url,
+        preview_url: outcome.preview_url,
+        status: outcome.status,
+        error: outcome.error,
+        warnings: result.warnings,
+      });
+    }
+  );
 }

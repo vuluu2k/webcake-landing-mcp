@@ -135,7 +135,9 @@ WORKFLOW (recommended)
 6. To save: call list_organizations, show the orgs to the user and ask which to use (default to is_default). Then create_page (dry_run first, then dry_run:false with the chosen organization_id).
 
 EDITING an existing page
-- list_pages → let the user pick (or take a page_id from a URL).
+- find_pages / list_pages → let the user pick (or take a page_id from a URL).
 - get_page(page_id) → you get the live { page, popup, settings, ... }. Edit it surgically: change only the elements the user asked for (text/styles/specials/events); keep every other element, its id, and coordinates intact. Never regenerate the whole tree for a small change.
-- To add an element: build it with new_element, give it a unique id, set top/left/width/height inside the right section's children.
-- validate_page → update_page(page_id, source) (dry_run first, then dry_run:false).`;
+- SMALL edit → PREFER patch_page(page_id, patches): send ONLY the changed elements by id, not the whole source. Ops — {op:'update',id,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} (shallow-merge; op defaults to 'update'), {op:'replace',id,element}, {op:'remove',id}, {op:'add',parent_id,element}. The MCP fetches the live source, applies the ops, validates the whole tree, and saves. Reserve update_page(page_id, full source) for when you're rewriting most of the page.
+- To add an element: give it a unique id + top/left/width/height, then patch_page({op:'add', parent_id:<section id>, element:<node>}).
+- FIX-AFTER-ERROR: when create_page/update_page/add_section reports validation errors, fix ONLY the offending element ids with patch_page — do not rebuild and re-send the whole source. (If a create failed before any save, create_page a small valid skeleton first to get a page_id, then patch_page/add_section.)
+- patch_page/update_page default to dry_run=true (preview); pass dry_run:false to save.`;

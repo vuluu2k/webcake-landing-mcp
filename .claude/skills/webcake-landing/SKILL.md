@@ -26,10 +26,11 @@ Reference ingest (no env needed) — turn an EXISTING page into a layout anchor:
 `ingest_html(html, intent?)` / `ingest_url(url, intent?)` — parse HTML or fetch a URL into a compact AST (title, description, sections classified by role — hero/features/form/cta/footer/… — with headings, CTAs, images, form fields, plus top colors + fonts from inline styles). Use as a LAYOUT REFERENCE, not a clone source. Default `intent='adapt'` (rewrite content for user's brand); `intent='clone'` only when the user explicitly asks. For a screenshot/image input, no tool is needed — Claude analyzes it natively.
 
 Backend (need `WEBCAKE_API_BASE` + `WEBCAKE_JWT` env):
-`list_organizations`, `create_page`, `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`.
-`create_page` / `update_page` / `add_section` default to `dry_run=true`.
+`list_organizations`, `create_page`, `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page`.
+`create_page` / `update_page` / `add_section` / `patch_page` default to `dry_run=true`.
 `find_pages` searches the account's pages by name, domain, and/or page id (AND-combined) to locate the page to edit when you don't already have a `page_id` — results include both `custom_domain` and `default_domain` to disambiguate by URL.
 `add_section` appends section(s) to an existing page server-side so you send only the new section, not the whole source — use it to build a LARGE page incrementally (`create_page` small skeleton → `add_section` per section) and avoid the giant single payload that can drop the connection.
+`patch_page` edits an existing page by element id without re-sending the whole source — send only per-element ops (`update`/`replace`/`remove`/`add`); the MCP fetches the live source, merges, validates the whole tree, and saves. It's the SMALL-EDIT path AND the fix-after-error path: when a `create_page`/`update_page`/`add_section` reports validation errors, correct only the offending element ids via `patch_page` instead of rebuilding the source.
 
 Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-element-schema.md),
 [src/domains/landing/page-schema.json](../../../src/domains/landing/page-schema.json).
