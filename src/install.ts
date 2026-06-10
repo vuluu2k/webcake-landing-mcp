@@ -16,7 +16,7 @@
  * `node <abs path>/dist/index.js` when run from a local clone. Override with
  * --npx / --local.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +30,7 @@ const PKG = "webcake-landing-mcp";
 const HOME = homedir();
 const PLAT = platform(); // 'darwin' | 'linux' | 'win32'
 const APPDATA = process.env.APPDATA || join(HOME, "AppData", "Roaming");
+const LOCALAPPDATA = process.env.LOCALAPPDATA || join(HOME, "AppData", "Local");
 
 const c = {
   reset: "\x1b[0m",
@@ -179,7 +180,24 @@ function configureCodex(launch: Launch, env: Env) {
 
 // ── IDE config-file locations ────────────────────────────────────────────────
 function claudeDesktopPath(): string {
-  if (PLAT === "win32") return join(APPDATA, "Claude", "claude_desktop_config.json");
+  if (PLAT === "win32") {
+    // Microsoft Store build is MSIX-sandboxed: it reads/writes config inside
+    // its package container, NOT %APPDATA%\Claude. Detect that container first
+    // (the package name is Claude_<publisher-hash>, e.g. Claude_pzs8sxrjxfjjc)
+    // so installs land in the file the Store app actually loads.
+    const packages = join(LOCALAPPDATA, "Packages");
+    if (existsSync(packages)) {
+      try {
+        const pkg = readdirSync(packages).find((n) => /^Claude_/i.test(n));
+        if (pkg) {
+          return join(packages, pkg, "LocalCache", "Roaming", "Claude", "claude_desktop_config.json");
+        }
+      } catch {
+        /* fall through to the Win32 default */
+      }
+    }
+    return join(APPDATA, "Claude", "claude_desktop_config.json");
+  }
   const mac = join(HOME, "Library", "Application Support", "Claude");
   const dir = existsSync(mac) ? mac : join(HOME, ".config", "Claude");
   return join(dir, "claude_desktop_config.json");
