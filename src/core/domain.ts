@@ -45,6 +45,16 @@ export interface Domain {
    * the input unchanged if it can't be parsed). Run BEFORE validate/persist.
    */
   expand(input: unknown): unknown;
+  /**
+   * The inverse of `expand`: strip from a FULL source everything the factory
+   * seed re-creates identically (boilerplate properties/runtime/empty
+   * events+children/per-breakpoint config + seed-equal style keys), leaving the
+   * sparse authoring shape. Invariant: expand(compact(x)) persists the same
+   * tree as expand(x). Tolerant — returns the input unchanged on bad JSON or
+   * unknown types. Used by get_page so the model READS sources in the same
+   * sparse shape it is asked to WRITE.
+   */
+  compact(input: unknown): unknown;
   /** The canonical JSON Schema (Draft 2020-12) for this domain's source. */
   schema: object;
 }

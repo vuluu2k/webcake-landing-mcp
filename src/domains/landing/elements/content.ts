@@ -28,15 +28,15 @@ export const CONTENT: ElementDescriptor[] = [
       el.specials.text = "hello world";
       el.specials.tag = "p";
     },
+    // Examples are in the SPARSE authoring shape — the server hydrates
+    // properties/runtime/events/config from factory defaults on validate/persist.
     example: {
       id: "headline1", type: "text-block",
-      properties: { name: "Headline", movable: true, sync: true },
       responsive: {
-        desktop: { config: {}, styles: { top: 80, left: 180, width: 600, fontSize: 44, fontWeight: "bold", color: "rgba(26,32,44,1)", textAlign: "center" } },
-        mobile: { config: {}, styles: { top: 60, left: 20, width: 380, fontSize: 28, fontWeight: "bold", color: "rgba(26,32,44,1)", textAlign: "center" } },
+        desktop: { styles: { top: 80, left: 180, width: 600, fontSize: 44, fontWeight: "bold", color: "rgba(26,32,44,1)", textAlign: "center" } },
+        mobile: { styles: { top: 60, left: 20, width: 380, fontSize: 28, fontWeight: "bold", color: "rgba(26,32,44,1)", textAlign: "center" } },
       },
       specials: { text: "Bán hàng dễ hơn với Webcake", tag: "h1" },
-      runtime: {}, events: [],
     },
   },
   {
@@ -73,13 +73,11 @@ export const CONTENT: ElementDescriptor[] = [
     },
     example: {
       id: "hero_img", type: "image-block",
-      properties: { name: "Image Block", movable: true, sync: true },
       responsive: {
-        desktop: { config: {}, styles: { top: 40, left: 540, width: 360, height: 300, position: "absolute" } },
-        mobile: { config: {}, styles: { top: 260, left: 60, width: 300, height: 240, position: "absolute" } },
+        desktop: { styles: { top: 40, left: 540, width: 360, height: 300, position: "absolute" } },
+        mobile: { styles: { top: 260, left: 60, width: 300, height: 240, position: "absolute" } },
       },
       specials: { src: "https://placehold.co/360x300?text=Product", imageCompression: true },
-      runtime: {}, events: [],
     },
   },
   {
@@ -123,12 +121,11 @@ export const CONTENT: ElementDescriptor[] = [
     },
     example: {
       id: "cta_main", type: "button",
-      properties: { name: "CTA", movable: true, sync: true },
       responsive: {
-        desktop: { config: {}, styles: { top: 300, left: 405, width: 150, height: 44, background: "rgba(246,4,87,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center", fontWeight: "bold" } },
-        mobile: { config: {}, styles: { top: 200, left: 135, width: 150, height: 44, background: "rgba(246,4,87,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center", fontWeight: "bold" } },
+        desktop: { styles: { top: 300, left: 405, width: 150, height: 44, background: "rgba(246,4,87,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center", fontWeight: "bold" } },
+        mobile: { styles: { top: 200, left: 135, width: 150, height: 44, background: "rgba(246,4,87,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center", fontWeight: "bold" } },
       },
-      specials: { text: "Đăng ký ngay" }, runtime: {},
+      specials: { text: "Đăng ký ngay" },
       events: [{ id: "ev_cta", type: "click", action: "scroll_to", target: "form_section" }],
     },
   },

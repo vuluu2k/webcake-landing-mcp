@@ -85,15 +85,15 @@ export const FORM: ElementDescriptor[] = [
       setBox(el, 150, 36);
       el.specials.field_name = `input_${el.id}`;
     },
+    // Examples are in the SPARSE authoring shape — the server hydrates
+    // properties/runtime/events/config from factory defaults on validate/persist.
     example: {
       id: "in_phone", type: "input",
-      properties: { name: "Input", movable: true, sync: true },
       responsive: {
-        desktop: { config: {}, styles: { top: 60, left: 20, width: 360, height: 40 } },
-        mobile: { config: {}, styles: { top: 60, left: 20, width: 360, height: 40 } },
+        desktop: { styles: { top: 60, left: 20, width: 360, height: 40 } },
+        mobile: { styles: { top: 60, left: 20, width: 360, height: 40 } },
       },
       specials: { field_name: "phone", field_placeholder: "Số điện thoại", field_type: "phone", required: true },
-      runtime: {}, events: [],
     },
   },
   {
@@ -135,10 +135,9 @@ export const FORM: ElementDescriptor[] = [
     },
     example: {
       id: "sel_attend", type: "select",
-      properties: { name: "Select", movable: true, sync: true },
       responsive: {
-        desktop: { config: {}, styles: { top: 0, left: 0, width: 300, height: 44 } },
-        mobile: { config: {}, styles: { top: 0, left: 0, width: 280, height: 44 } },
+        desktop: { styles: { top: 0, left: 0, width: 300, height: 44 } },
+        mobile: { styles: { top: 0, left: 0, width: 280, height: 44 } },
       },
       // options use {id, name} — NOT {label, value}. field_placeholder is required.
       specials: {
@@ -150,7 +149,6 @@ export const FORM: ElementDescriptor[] = [
           { id: "opt_no", name: "Rất tiếc, tôi không thể đến" },
         ],
       },
-      runtime: {}, events: [],
     },
   },
   {

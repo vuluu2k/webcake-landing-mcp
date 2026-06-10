@@ -6,7 +6,11 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
+import { sparseTemplate } from "../core/compact.js";
 import { text } from "../mcp/response.js";
+
+const SPARSE_NOTE =
+  "Skeletons and examples are in the SPARSE authoring shape — emit elements exactly like this (id, type, BOTH breakpoints' styles, specials, real events). OMIT properties/runtime/empty events+children/config: the server hydrates them from factory defaults on validate/persist.";
 
 export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 1) Generation guide -------------------------------------------------------
@@ -40,7 +44,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 3) Get element ------------------------------------------------------------
   server.tool(
     "get_element",
-    "Returns detailed usage for one element type — or for many in a single call (BATCH MODE): summary, when to use it, key `specials` fields, a default skeleton node, and (for common types) a filled example. Pass `types: [...]` to fetch a whole section's worth of element types at once (e.g. ['section','text-block','image-block','button']) — returns { elements: { [type]: details } } and saves a round-trip per type. `type` (single) returns the doc directly for backward compatibility.",
+    "Returns detailed usage for one element type — or for many in a single call (BATCH MODE): summary, when to use it, key `specials` fields, a SPARSE skeleton node (the exact shape to emit — the server hydrates omitted boilerplate), and (for common types) a filled example. Pass `types: [...]` to fetch a whole section's worth of element types at once (e.g. ['section','text-block','image-block','button']) — returns { elements: { [type]: details } } and saves a round-trip per type. `type` (single) returns the doc directly for backward compatibility.",
     {
       type: z.string().optional().describe("Single element type — backward-compat. Prefer `types` when fetching more than one."),
       types: z
@@ -69,16 +73,17 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
           summary: doc.summary,
           useWhen: doc.useWhen,
           keySpecials: doc.keySpecials,
-          skeleton: domain.createElement(t),
+          skeleton: sparseTemplate(domain.createElement(t)),
           example: doc.example ?? null,
         };
       }
       // Single-`type` mode → return the doc directly (no map wrap), matches the old shape.
       if (!types && type) {
         if (unknown.length) return text({ error: `Unknown element type "${unknown[0]}".`, valid_types: domain.elementTypes });
-        return text(elements[type]);
+        return text({ ...elements[type], authoring: SPARSE_NOTE });
       }
       return text({
+        authoring: SPARSE_NOTE,
         elements,
         unknown: unknown.length ? unknown : undefined,
         valid_types: unknown.length ? domain.elementTypes : undefined,

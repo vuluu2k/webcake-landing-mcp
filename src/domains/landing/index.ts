@@ -20,6 +20,7 @@ import { LIBRARY, ELEMENT_TYPES, CONTAINER_TYPES, FIELD_TYPES, createElement } f
 import { createPageSource } from "./page.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
 import { expandSource } from "../../core/expand.js";
+import { compactSource } from "../../core/compact.js";
 
 /** The payload returned by the get_generation_guide tool. */
 export const guidePayload = {
@@ -50,6 +51,13 @@ export const landingDomain: Domain = {
       return expandSource(coercePage(input), createElement);
     } catch {
       return input; // bad JSON — let validate report it
+    }
+  },
+  compact: (input) => {
+    try {
+      return compactSource(coercePage(input), createElement);
+    } catch {
+      return input; // bad JSON — return as-is
     }
   },
   schema: pageSchema,

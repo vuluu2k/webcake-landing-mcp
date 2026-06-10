@@ -443,13 +443,13 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 |------|-------------|
 | `get_generation_guide` | **Read FIRST.** Output shape, coordinate system, event vocabulary, workflow. |
 | `list_elements` | All element types by category (summary + when-to-use + container?). |
-| `get_element` | One type: hints, key `specials`, default skeleton, filled example. |
+| `get_element` | One type (or many at once): hints, key `specials`, a SPARSE skeleton (the exact shape to emit — the server hydrates omitted boilerplate), filled example. |
 | `get_page_schema` | Full JSON Schema (Draft 2020-12) of a page source. |
 
 ### Generation
 | Tool | Description |
 |------|-------------|
-| `new_element` | A structurally-valid default node for a type (fresh id). |
+| `new_element` | A default node for a type (fresh id) in the SPARSE authoring shape — copy it as-is; omitted boilerplate is hydrated server-side. |
 | `new_page_skeleton` | An empty but complete top-level source `{ page, popup, settings, options, cartConfigs }`. |
 | `validate_page` | Structural + semantic validation (ids, event targets, containers, `field_name`). |
 
@@ -465,7 +465,7 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | `create_page` | Persist a generated source as a new page (source-only). **Defaults to `dry_run=true`.** |
 | `list_pages` | List the account's pages (id, name, organization_id, updated_at) to pick one to edit. |
 | `find_pages` | Search the account's pages by name, domain, and/or page id (AND-combined) to locate one to edit; returns id, name, org, custom/default domain, updated_at. |
-| `get_page` | Fetch an existing page's decoded source tree so you can edit it. |
+| `get_page` | Fetch an existing page's decoded source tree, COMPACTED to the sparse authoring shape (factory-default boilerplate stripped — far fewer tokens; `compact:false` for the raw tree). Edit and send back as-is. |
 | `update_page` | Overwrite an existing page's source with an edited tree. **Defaults to `dry_run=true`.** |
 
 ---

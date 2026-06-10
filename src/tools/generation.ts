@@ -6,13 +6,14 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
+import { sparseTemplate } from "../core/compact.js";
 import { text } from "../mcp/response.js";
 
 export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 5) New element ------------------------------------------------------------
   server.tool(
     "new_element",
-    "Returns a structurally-valid default element node for a type (correct properties/responsive/specials/sizes), with a fresh id. The caller fills in specials + top/left coordinates.",
+    "Returns a default element node for a type in the SPARSE authoring shape (fresh id, both breakpoints' seeded styles, seeded specials). Emit elements exactly like this — fill in specials + top/left coordinates; OMIT properties/runtime/empty events/config (the server hydrates them from factory defaults on validate/persist).",
     {
       type: z.string().describe("Element type to create."),
       name: z.string().optional().describe("Optional properties.name override (layer label)."),
@@ -22,7 +23,9 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
       if (!domain.catalog[type]) {
         return text({ error: `Unknown element type "${type}".`, valid_types: domain.elementTypes });
       }
-      return text(domain.createElement(type, name ? { name } : {}));
+      const el = sparseTemplate(domain.createElement(type));
+      if (name) el.properties = { name };
+      return text(el);
     }
   );
 

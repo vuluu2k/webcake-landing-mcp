@@ -43,6 +43,15 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 ```
 - `page` = sections stacked vertically; `popup` is a SEPARATE top-level array (NOT inside `page`).
 - Element: `{ id, type, properties:{name,movable,sync}, responsive:{desktop,mobile:{config,styles}}, specials, children, runtime, events }`.
+- **SPARSE AUTHORING (default — ~half the tokens per element):** the server hydrates every
+  element from its type's factory defaults, so emit ONLY `id`, `type`,
+  `responsive.desktop.styles` + `responsive.mobile.styles` (BOTH breakpoints), `specials`, and
+  `events` when the element really has them. OMIT `properties`/`runtime`/empty
+  `events`+`children`/per-breakpoint `config`. The whole loop is sparse: `get_element`
+  skeletons/examples and `new_element` come in this shape (copy as-is), `get_page` returns the
+  source COMPACTED the same way (edit + send back without re-adding boilerplate), and
+  `create_page`/`update_page`/`add_section`/`patch_page`/`validate_page` all hydrate before
+  validating/persisting. A full node still works.
 - Absolute canvas: children carry numeric `top/left/width/height` (px) per breakpoint (desktop≈960, mobile≈420); sections own a `height`, no top/left.
 - Content lives in `specials` (`text`, `src`, `field_name`…), NEVER in `styles`. Colors as `rgba(...)`.
 - Animation in `config.animation = {name,delay,duration,repeat}`. Event: `{id,type,action,target,appTarget,hoverColor}`.
@@ -51,8 +60,8 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 
 1. **INTAKE — every time, even a quick/test page** (ask first, offer defaults, don't assume, and do NOT jump straight to building): page purpose/goal · brand/page name · what they sell + price (sales/ads pages) · primary color + logo/branding · sections & layout in order · primary CTA + destination · form fields · desktop+mobile or mobile-only · which organization. Then RESTATE a short outline (sections + CTA + colors) and wait for the user's confirmation before generating. Don't generate + persist on the same turn as the request.
 2. `get_generation_guide`, then `new_page_skeleton`.
-3. `get_element` per type (specials + example); `new_element` for valid skeletons.
-4. Assemble `{ page, popup, settings, options, cartConfigs }`; fill `specials`, set coordinates (no overlaps).
+3. `get_element` per type (specials + sparse example); `new_element` for sparse skeletons.
+4. Assemble `{ page, popup, settings, options, cartConfigs }` from SPARSE nodes; fill `specials`, set coordinates (no overlaps).
 5. `validate_page` → fix every error.
 6. `list_organizations` → show options, ask which (default = `is_default`).
 7. `create_page` `dry_run:true` (preview) → `dry_run:false` with chosen `organization_id`.
@@ -61,8 +70,8 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 ## Workflow — edit existing page
 
 1. `find_pages({ name?, domain?, page_id? })` to locate the page by name/domain/id (or `list_pages` to browse; or take a `page_id` straight from a URL).
-2. `get_page(page_id)` → the live `{ page, popup, settings, ... }`.
-3. **Edit surgically**: change only what was asked; keep every other element, its `id`, and coordinates. To add: `new_element`, unique id, place in the right section's `children`.
+2. `get_page(page_id)` → the live `{ page, popup, settings, ... }`, COMPACTED to the sparse shape (pass `compact:false` only if you need the raw stored tree).
+3. **Edit surgically**: change only what was asked; keep every other element, its `id`, and coordinates; send the compacted tree back as-is (no boilerplate). To add: `new_element`, unique id, place in the right section's `children`.
 4. `validate_page` → `update_page(page_id, source)` (`dry_run:true` then `dry_run:false`).
 
 ## Rules
@@ -73,7 +82,8 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 - Edit surgically; preserve ids + coordinates.
 - Owner-scoped endpoints; default org = `is_default` (pass `organization_id` or set `WEBCAKE_ORG_ID`).
 - Popups are top-level; form inputs need unique `specials.field_name` (canonical keys for auto-typing).
-- Numbers for `top/left/width/height/fontSize`; colors `rgba()`; `runtime` always `{}`; only containers have `children`.
+- Numbers for `top/left/width/height/fontSize`; colors `rgba()`; only containers have `children`.
+- Author SPARSE (omit `properties`/`runtime`/empty `events`+`children`/`config` — the server hydrates them); when you DO send `runtime`, it is `{}`.
 
 ## Setup
 

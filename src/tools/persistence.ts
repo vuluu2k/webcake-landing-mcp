@@ -59,7 +59,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     {
       source: z
         .any()
-        .describe("Full page source { page, popup, settings, options, cartConfigs } (object or JSON string)."),
+        .describe("Page source { page, popup, settings, options, cartConfigs } (object or JSON string). Author elements SPARSE — only id, type, responsive.<bp>.styles for BOTH breakpoints, specials, and real events; OMIT properties/runtime/empty events+children/per-breakpoint config — the server hydrates them from factory defaults (a full node also works)."),
       name: z.string().optional().describe("Page name (default 'AI Page')."),
       organization_id: z
         .union([z.string(), z.number()])
@@ -208,13 +208,26 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 11) Get page (read source) ------------------------------------------------
   server.tool(
     "get_page",
-    "Fetches an existing page's decoded source tree { page, popup, settings, options, cartConfigs } plus name and organization_id. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
-    { page_id: z.string().describe("The page id (from list_pages or a URL).") },
+    "Fetches an existing page's decoded source tree { page, popup, settings, options, cartConfigs } plus name and organization_id. By DEFAULT the source is COMPACTED: boilerplate every element shares (properties/runtime/empty events+children/per-breakpoint config + factory-default style keys) is stripped, leaving the sparse authoring shape — edit it and send it back as-is; update_page/patch_page re-hydrate from factory defaults. Pass compact:false for the raw stored tree. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    {
+      page_id: z.string().describe("The page id (from list_pages or a URL)."),
+      compact: z
+        .boolean()
+        .optional()
+        .describe("Default TRUE — strip factory-default boilerplate from every element (sparse shape, far fewer tokens). false returns the raw stored tree."),
+    },
     { title: "Get Webcake Page Source", readOnlyHint: true, openWorldHint: true },
-    async ({ page_id }, extra) => {
+    async ({ page_id, compact }, extra) => {
       const { config, missing } = cfgFor(extra);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
-      return text(await getPageSource(config, page_id));
+      const res = await getPageSource(config, page_id);
+      if (!res.ok || compact === false || res.source == null) return text(res);
+      return text({
+        ...res,
+        source: domain.compact(res.source),
+        compacted: true,
+        note: "Source is COMPACTED (factory-default boilerplate stripped). Edit elements in this same sparse shape — keep ids — and send the edited tree back to update_page (or use patch_page for small edits); the server re-hydrates omitted boilerplate.",
+      });
     }
   );
 
@@ -226,7 +239,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       page_id: z.string().describe("The page id to update (must be owned by the account)."),
       source: z
         .any()
-        .describe("The full edited page source { page, popup, settings, options, cartConfigs } (object or JSON string)."),
+        .describe("The edited page source { page, popup, settings, options, cartConfigs } (object or JSON string). The compacted tree from get_page can be edited and sent back AS-IS — sparse nodes are re-hydrated from factory defaults (a full tree also works)."),
       dry_run: z.boolean().optional().describe("Default TRUE — preview without sending. Set false to actually save."),
     },
     { title: "Update Webcake Page (Overwrite)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -308,7 +321,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       sections: z
         .any()
         .describe(
-          "One section node, or an array of section nodes, to append to the END of `page` (object/array or JSON string). Each is a normal section element { id, type:'section', responsive, children, … } with a UNIQUE id; they stack vertically after the existing sections."
+          "One section node, or an array of section nodes, to append to the END of `page` (object/array or JSON string). Each is a normal section element { id, type:'section', responsive, children, … } with a UNIQUE id; they stack vertically after the existing sections. Author SPARSE nodes — omit properties/runtime/empty events+children/per-breakpoint config; the server hydrates them from factory defaults."
         ),
       dry_run: z
         .boolean()
@@ -520,7 +533,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       patches: z
         .any()
         .describe(
-          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container."
+          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container. `element` may be a SPARSE node (id/type/styles/specials/events only) — the server hydrates omitted boilerplate from factory defaults."
         ),
       dry_run: z
         .boolean()

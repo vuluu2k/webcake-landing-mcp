@@ -12,6 +12,7 @@ import {
 } from "./domains/landing/elements/index.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
+import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
 import { parseHtml } from "./persistence/html-ingest.js";
 import { readConfig, resolveEnv, ENV_NAMES } from "./persistence/config.js";
 import { toEditorUrl } from "./persistence/webcake-client.js";
@@ -183,6 +184,43 @@ check("expand keeps id/type/specials", eTxt.id === "t_h1" && eTxt.type === "text
 check("expanded sparse page validates", validatePage(exp).valid, validatePage(exp).errors);
 check("expand(full good page) still valid", validatePage(expandSource(good, createElement)).valid);
 
+console.log("== compact: the inverse of expand (round-trip persists the same tree) ==");
+{
+  const cGood: any = compactSource(good, createElement);
+  const cBtn = cGood.page[0].children[0];
+  check("compact strips runtime + breakpoint config boilerplate", cBtn.runtime === undefined && cBtn.responsive.desktop.config === undefined, cBtn);
+  check("compact keeps real events", Array.isArray(cBtn.events) && cBtn.events.length === 1, cBtn.events);
+  check("compact keeps only non-default properties (custom name)", deepEq(cBtn.properties, { name: "CTA" }), cBtn.properties);
+  check("compact drops empty popup events/children/specials", cGood.page[1].events === undefined && cGood.page[1].children === undefined && cGood.page[1].specials === undefined, cGood.page[1]);
+  check(
+    "round-trip: expand(compact(x)) deep-equals expand(x)",
+    deepEq(expandSource(cGood, createElement), expandSource(good, createElement))
+  );
+  const cmpSparse: any = compactSource(exp, createElement); // compact(expand(sparse))
+  check(
+    "round-trip from sparse: expand(compact(expand(s))) == expand(s)",
+    deepEq(expandSource(cmpSparse, createElement), expandSource(sparse, createElement))
+  );
+  check("compact tolerates unknown types (pass-through)", compactSource({ page: [{ id: "x", type: "nope" }] }, createElement).page[0].id === "x");
+}
+
+console.log("== sparseTemplate: the authoring shape get_element/new_element hand out ==");
+{
+  const tplText = sparseTemplate(createElement("text-block"));
+  check("template strips properties/runtime/empty events", tplText.properties === undefined && tplText.runtime === undefined && tplText.events === undefined, tplText);
+  check("template keeps seeded styles + specials on BOTH breakpoints", tplText.responsive.desktop.styles.width === 200 && tplText.responsive.mobile.styles.width === 200 && tplText.specials.text === "hello world", tplText);
+  check("template drops base config (notloaded/animation)", tplText.responsive.desktop.config === undefined, tplText.responsive.desktop);
+  const tplList = sparseTemplate(createElement("list-paragraph"));
+  check("template keeps non-default seeded config (list icons)", tplList.responsive.desktop.config?.iconSize === 12, tplList.responsive.desktop.config);
+  check("template keeps container children", Array.isArray(sparseTemplate(createElement("form")).children));
+  const wrapped = {
+    page: [{ id: "tsec", type: "section", responsive: { desktop: { styles: { height: 800 } }, mobile: { styles: { height: 800 } } }, children: [{ ...tplText, id: "ttext" }] }],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  };
+  const tr = validatePage(expandSource(wrapped, createElement));
+  check("template node expands to a valid page", tr.valid, tr.errors);
+}
+
 console.log("== ingest: parseHtml extracts a compact AST ==");
 const sampleHtml = `<!DOCTYPE html><html lang="en"><head>
   <title>Brew Coffee</title>
@@ -232,9 +270,11 @@ const csr = parseHtml(`<html><head><title>SPA</title></head><body><div id="root"
 check("ingest: CSR shell → warning", (csr.warnings?.[0] ?? "").includes("client-rendered"), csr.warnings);
 check("ingest: CSR shell → title still extracted", csr.title === "SPA", csr.title);
 
-console.log("== library: each example validates as a single element subtree ==");
+console.log("== library: each (sparse) example expands to a valid element subtree ==");
 for (const [type, doc] of Object.entries(LIBRARY)) {
   if (!doc.example) continue;
+  // Examples are authored SPARSE (the shape the model should emit), so they go
+  // through expand first — the same path validate_page/create_page take.
   const wrapped = {
     page: [
       {
@@ -249,7 +289,7 @@ for (const [type, doc] of Object.entries(LIBRARY)) {
       },
     ],
   };
-  const rr = validatePage(wrapped);
+  const rr = validatePage(expandSource(wrapped, createElement));
   check(`example ${type} valid`, rr.valid, rr.errors);
 }
 

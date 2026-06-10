@@ -141,22 +141,22 @@ export const LAYOUT: ElementDescriptor[] = [
       el.properties.movable = false;
       setBox(el, 400, 250);
     },
+    // Example is in the SPARSE authoring shape — the server hydrates
+    // properties/runtime/events/config from factory defaults on validate/persist.
     example: {
       id: "popthanks", type: "popup",
-      properties: { name: "Thank you", movable: false, sync: true },
+      properties: { name: "Thank you" },
       responsive: {
-        desktop: { config: {}, styles: { width: 420, height: 220, background: "rgba(255,255,255,1)", borderRadius: "12px" } },
-        mobile: { config: {}, styles: { width: 360, height: 220, background: "rgba(255,255,255,1)", borderRadius: "12px" } },
+        desktop: { styles: { width: 420, height: 220, background: "rgba(255,255,255,1)", borderRadius: "12px" } },
+        mobile: { styles: { width: 360, height: 220, background: "rgba(255,255,255,1)", borderRadius: "12px" } },
       },
-      specials: {}, runtime: {}, events: [],
       children: [
         { id: "popclose", type: "button",
-          properties: { name: "Close", movable: true, sync: true },
           responsive: {
-            desktop: { config: {}, styles: { top: 150, left: 160, width: 100, height: 40, background: "rgba(76,175,80,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center" } },
-            mobile: { config: {}, styles: { top: 150, left: 130, width: 100, height: 40, background: "rgba(76,175,80,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center" } },
+            desktop: { styles: { top: 150, left: 160, width: 100, height: 40, background: "rgba(76,175,80,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center" } },
+            mobile: { styles: { top: 150, left: 130, width: 100, height: 40, background: "rgba(76,175,80,1)", color: "rgba(255,255,255,1)", borderRadius: "8px", textAlign: "center" } },
           },
-          specials: { text: "Đóng" }, runtime: {},
+          specials: { text: "Đóng" },
           events: [{ id: "ev1", type: "click", action: "close_popup", target: "popthanks" }] },
       ],
     },
