@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.53] - 2026-06-10
+
+### Fixed
+- The `login` command on Windows now opens the connect URL correctly: `cmd /c start` previously split the URL at the first `&` character (treating it as a command separator), causing the OAuth callback to arrive without the `state` parameter and be rejected; the URL is now passed with `windowsVerbatimArguments: true` and double-quoted so the full URL reaches the browser intact.
+
 ## [1.0.52] - 2026-06-10
 
 ### Added
