@@ -26,6 +26,7 @@ import {
   updatePageSource,
   appendSection,
 } from "../persistence/webcake-client.js";
+import { putDraft, getDraft, updateDraft, deleteDraft } from "../persistence/draft-cache.js";
 
 export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // Resolve config from THIS request's headers (remote per-user JWT) first, then env.
@@ -80,12 +81,18 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const expanded = domain.expand(source);
       const result = domain.validate(expanded);
       if (!result.valid) {
+        // Cache the failed source so the model can fix ONLY the broken elements via
+        // patch_page({ draft_id }) instead of regenerating + re-shipping the whole
+        // source (there is no page_id yet, so patch_page can't target a live page).
+        const draft_id = putDraft({ source: expanded, name: pageName, organization_id: orgId });
         return text({
           created: false,
           reason: "validation_failed",
           errors: result.errors,
           warnings: result.warnings,
-          hint: "Fix the errors (run validate_page) before creating.",
+          draft_id,
+          hint:
+            "Do NOT rebuild the whole source — it is cached as draft_id. Fix ONLY the listed elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged tree and creates the page. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' } (run list_elements/get_element if unsure of the exact type name). The draft expires in ~30 min.",
         });
       }
       const parsed = domain.coerce(expanded);
@@ -506,54 +513,71 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
   server.tool(
     "patch_page",
-    "Edits an EXISTING page by element id WITHOUT re-sending the whole source — the surgical-edit and fix-after-error path. Send only a list of per-element ops; the MCP fetches the live source, applies them, validates the WHOLE merged tree (blocks on errors), and saves. Ops: {op:'update',id,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} (shallow-merges; op defaults to 'update'), {op:'replace',id,element}, {op:'remove',id}, {op:'add',parent_id,element}. Use this to fix the elements a failed create_page/update_page/add_section reported, or to change one element's text/color/position — instead of rebuilding the page. DEFAULTS to dry_run=true (reads + merges + validates + previews, no write); dry_run=false to save. Needs WEBCAKE_API_BASE + WEBCAKE_JWT (it reads the live page, so creds are required even on dry_run).",
+    "Edits a page by element id WITHOUT re-sending the whole source — the surgical-edit and fix-after-error path. Targets EITHER a live page (page_id) OR a cached failed-create source (draft_id, returned by a create_page that failed validation). Send only a list of per-element ops; the MCP loads the source, applies them, validates the WHOLE merged tree (blocks on errors), and saves (update for page_id; create for draft_id). Ops: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} (shallow-merges; op defaults to 'update'; `type` fixes a wrong element type), {op:'replace',id,element}, {op:'remove',id}, {op:'add',parent_id,element}. Use this to fix the elements a failed create_page/update_page/add_section reported (e.g. a bad type → {op:'update',id,type:'button'}) instead of rebuilding the page. DEFAULTS to dry_run=true (loads + merges + validates + previews, no write); dry_run=false to save. Needs WEBCAKE_API_BASE + WEBCAKE_JWT (a draft_id patch only needs creds to actually create; a page_id patch reads the live page so needs creds even on dry_run).",
     {
-      page_id: z.string().describe("The page id to edit (from create_page, list_pages, or find_pages; must be owned by the account)."),
+      page_id: z.string().optional().describe("Edit a LIVE page by id (from create_page, list_pages, or find_pages; must be owned by the account). Provide page_id OR draft_id."),
+      draft_id: z.string().optional().describe("Fix a CACHED source from a create_page that failed validation (the create_page error returns draft_id). The patched tree is created as a new page once valid. Provide page_id OR draft_id."),
       patches: z
         .any()
         .describe(
-          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container."
+          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container."
         ),
       dry_run: z
         .boolean()
         .optional()
-        .describe("Default TRUE — read, merge, validate and preview the resulting save WITHOUT writing. Set false to actually save."),
+        .describe("Default TRUE — load, merge, validate and preview the resulting save WITHOUT writing. Set false to actually save."),
     },
     { title: "Patch Webcake Page (by element id)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ page_id, patches, dry_run }, extra) => {
+    async ({ page_id, draft_id, patches, dry_run }, extra) => {
       const isDry = dry_run !== false; // default true (safe)
       const ops = asArray(patches).filter((p) => p != null && typeof p === "object");
       if (ops.length === 0) {
         return text({ patched: false, reason: "no_patches", hint: "Pass an op object or a non-empty array of { op, id, … } ops." });
       }
+      if (!page_id && !draft_id) {
+        return text({ patched: false, reason: "no_target", hint: "Pass page_id (a live page) or draft_id (the cached source from a failed create_page)." });
+      }
 
-      // patch_page always reads the live tree (even on dry_run) — needs creds.
       const { config, missing } = cfgFor(extra);
-      if (!config) {
-        return text({
-          patched: false,
-          reason: "missing_env",
-          missing_env: missing,
-          hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT (env), or send the x-webcake-jwt header (remote), then retry.",
-        });
-      }
 
-      const current = await getPageSource(config, page_id);
-      if (!current.ok || current.source == null) {
-        return text({
-          patched: false,
-          reason: "fetch_failed",
-          status: current.status,
-          error: current.error ?? "Page source not found.",
-          hint: "Check the page_id (find_pages/list_pages) and that the account owns it.",
-        });
-      }
-      let base: any = current.source;
-      if (typeof base === "string") {
-        try {
-          base = JSON.parse(base);
-        } catch {
-          return text({ patched: false, reason: "bad_source", hint: "The stored page source could not be parsed." });
+      // Resolve the base source: a cached draft (create-before-save), else a live page.
+      let base: any;
+      const draft = draft_id ? getDraft(draft_id) : null;
+      if (draft_id) {
+        if (!draft) {
+          return text({
+            patched: false,
+            reason: "draft_expired",
+            hint: "The cached draft is gone (expired after ~30 min or evicted). Re-send the full source via create_page.",
+          });
+        }
+        base = draft.source; // already an expanded full tree
+      } else {
+        if (!config) {
+          return text({
+            patched: false,
+            reason: "missing_env",
+            missing_env: missing,
+            hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT (env), or send the x-webcake-jwt header (remote), then retry.",
+          });
+        }
+        const current = await getPageSource(config, page_id!);
+        if (!current.ok || current.source == null) {
+          return text({
+            patched: false,
+            reason: "fetch_failed",
+            status: current.status,
+            error: current.error ?? "Page source not found.",
+            hint: "Check the page_id (find_pages/list_pages) and that the account owns it.",
+          });
+        }
+        base = current.source;
+        if (typeof base === "string") {
+          try {
+            base = JSON.parse(base);
+          } catch {
+            return text({ patched: false, reason: "bad_source", hint: "The stored page source could not be parsed." });
+          }
         }
       }
       const treeRoots = [base.page, base.popup].filter((a) => Array.isArray(a)) as any[][];
@@ -612,6 +636,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         } else {
           // update (default)
           const changed: string[] = [];
+          if (typeof p.type === "string" && p.type.trim() !== "") {
+            hit.node.type = p.type;
+            changed.push("type");
+          }
           if (p.specials && typeof p.specials === "object") {
             hit.node.specials = { ...(hit.node.specials ?? {}), ...p.specials };
             changed.push("specials");
@@ -645,6 +673,59 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // Validate the WHOLE merged tree (hydrate sparse replaced/added nodes first).
       const expanded = domain.expand(base);
       const result = domain.validate(expanded);
+
+      // DRAFT path: the source came from a failed create_page. Keep the applied fixes
+      // cached between rounds; once valid, CREATE the page (no page_id yet).
+      if (draft_id && draft) {
+        if (!result.valid) {
+          updateDraft(draft_id, base); // persist the partial fixes for the next patch round
+          return text({
+            patched: false,
+            reason: "validation_failed",
+            errors: result.errors,
+            warnings: result.warnings,
+            patches_applied: applied,
+            draft_id,
+            hint: "Still invalid — fix the remaining errors with another patch_page({ draft_id, … }). Your applied fixes are kept in the draft.",
+          });
+        }
+        const parsed = domain.coerce(expanded);
+        if (isDry) {
+          updateDraft(draft_id, base);
+          return text({
+            dry_run: true,
+            draft_id,
+            patches_applied: applied,
+            validation: { valid: true, warnings: result.warnings, stats: result.stats },
+            env_ready: missing.length === 0,
+            missing_env: missing,
+            request: config
+              ? buildRequestRedacted(config, draft.name ?? "AI Page", parsed, draft.organization_id)
+              : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable creation." },
+            hint: "Draft is now valid. Re-run with dry_run=false to create the page from it.",
+          });
+        }
+        if (!config) {
+          updateDraft(draft_id, base); // keep the now-valid draft so a creds-ready retry can persist it
+          return text({ patched: false, reason: "missing_env", missing_env: missing, hint: "Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id, dry_run:false })." });
+        }
+        const outcome = await createPage(config, draft.name ?? "AI Page", parsed, draft.organization_id);
+        if (outcome.ok) deleteDraft(draft_id); // created — drop the draft
+        return text({
+          patched: outcome.ok,
+          created: outcome.ok,
+          from_draft: draft_id,
+          patches_applied: applied,
+          page_id: outcome.page_id,
+          editor_url: outcome.editor_url,
+          preview_url: outcome.preview_url,
+          status: outcome.status,
+          error: outcome.error,
+          warnings: result.warnings,
+        });
+      }
+
+      // LIVE-PAGE path: edit an existing page (page_id) and update it in place.
       if (!result.valid) {
         return text({
           patched: false,
@@ -663,12 +744,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           page_id,
           patches_applied: applied,
           validation: { valid: true, warnings: result.warnings, stats: result.stats },
-          request: buildUpdateRequestRedacted(config, page_id, parsed),
+          request: buildUpdateRequestRedacted(config!, page_id!, parsed),
           hint: "Re-run with dry_run=false to actually save the edit.",
         });
       }
 
-      const outcome = await updatePageSource(config, page_id, parsed);
+      const outcome = await updatePageSource(config!, page_id!, parsed);
       return text({
         patched: outcome.ok,
         patches_applied: applied,
