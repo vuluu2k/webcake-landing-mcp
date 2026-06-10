@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.52] - 2026-06-10
+
+### Added
+- `validate_page` now errors when an element type that the renderer cannot animate (any type other than `group`, `image-block`, `text-block`, `rectangle`, `button`, `countdown`, `line`, `list-paragraph`, and `notify`) carries a non-`none` `config.animation.name`; the element would render stuck in its pre-animation state, and the error message includes a `patch_page` fix hint.
+- `validate_page` now errors when `config.animation.name` is set to a value not in the editor's animate.css set; an unknown keyframe never runs and the element may render stuck or dim.
+- `validate_page` now warns when `styles.opacity` is less than 1 at any breakpoint, because CSS opacity is permanent and renders the element and all its children faded forever; the warning recommends using rgba() alpha on the `color` or `background` property instead, or correcting the value via `patch_page`.
+
+### Changed
+- `get_generation_guide` animation rule now documents the 9 animatable element types, enumerates common animate.css entrance animation families (`fadeIn*`, `slideIn*`, `zoomIn*`, `bounceIn*`, `backIn*`, `flipIn*`, `lightSpeedIn*`, `rotateIn*`, `rollIn`, `jackInTheBox`), and explicitly prohibits setting `styles.opacity` below 1 for visual effects, directing authors to rgba() alpha instead.
+
 ## [1.0.51] - 2026-06-10
 
 ### Added
