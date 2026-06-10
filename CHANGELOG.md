@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.55] - 2026-06-10
+
+### Fixed
+- The `install` command now correctly locates `claude_desktop_config.json` on Windows when Claude Desktop was installed from the Microsoft Store: the Store build is MSIX-sandboxed and reads its config from `%LOCALAPPDATA%\Packages\Claude_<hash>\LocalCache\Roaming\Claude\` instead of `%APPDATA%\Claude`; the installer detects the package directory first and falls back to the legacy path when the Store package is absent.
+
 ## [1.0.54] - 2026-06-10
 
 ### Added
