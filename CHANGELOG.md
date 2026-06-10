@@ -6,6 +6,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.51] - 2026-06-10
+
+### Added
+- `create_page`, `update_page`, and `add_section` dry-run responses now include a `draft_id`, and all three tools now accept `draft_id` as an input parameter: pass the returned `draft_id` with `dry_run:false` (or to a subsequent `patch_page` call) to commit, retry, or fix the cached payload without re-sending the full source JSON.
+- All backend HTTP calls and `search_images` (Pexels direct and proxy) now enforce a request timeout (default 60 s, overridable via `WEBCAKE_HTTP_TIMEOUT_MS`); timed-out calls return a descriptive error noting the backend may still complete the operation.
+
+### Changed
+- `create_page`, `update_page`, and `add_section` now write the validated payload to the draft cache before making the network call, so any timeout or network failure always returns a `draft_id` that can be used to retry or fix without rebuilding the source.
+- `update_page` validation failures now return a `draft_id` alongside the errors, matching the `create_page` behavior and allowing `patch_page({ draft_id, patches })` to fix only the offending elements.
+- `patch_page` now handles all three draft kinds: `page` (create-failure — creates a new page), `sections` (cached `add_section` payload — appends to the stored page), and `update` (cached `update_page` or live-page patch source — overwrites the live page); an empty or omitted `patches` list with a `draft_id` commits the cached source as-is (skips apply, re-validates, honors `dry_run`) — the universal retry path after any timed-out write.
+- `patch_page` in `page_id` (live-page) mode now caches the merged patched source before saving; a timeout or network failure returns a `draft_id` for retry with no patches.
+- Server instructions updated with a `RETRY-AFTER-TIMEOUT` rule covering all mutating tools and a `DRY-RUN CACHE` rule: every mutating tool caches its payload before the network call and returns a `draft_id` on failure, and dry-run responses from `create_page`, `update_page`, and `add_section` include a `draft_id` for commit without re-sending.
+
 ## [1.0.50] - 2026-06-10
 
 ### Added
