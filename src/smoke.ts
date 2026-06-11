@@ -266,6 +266,29 @@ const form = ast.sections.find((s) => s.role === "form");
 check("ingest: form fields captured", (form?.form_fields?.length ?? 0) >= 2, form?.form_fields);
 check("ingest: form submit CTA captured", !!form?.ctas?.[0]?.text?.includes("Place"), form?.ctas);
 
+console.log("== ingest: size_hint (desktop section heights) ==");
+check("ingest: every section has a size_hint", ast.sections.every((s) => (s.size_hint?.height ?? 0) > 0), ast.sections.map((s) => s.size_hint));
+const headerHint = ast.sections.find((s) => s.role === "header")?.size_hint;
+check("ingest: header size_hint is a slim bar", !!headerHint && headerHint.height <= 120, headerHint);
+const heroHint = ast.sections.find((s) => s.role === "hero")?.size_hint;
+check("ingest: hero size_hint is a tall band", !!heroHint && heroHint.height >= 400, heroHint);
+const footerHint = ast.sections.find((s) => s.role === "footer")?.size_hint;
+check("ingest: footer size_hint shorter than hero", !!footerHint && !!heroHint && footerHint.height < heroHint.height, { footerHint, heroHint });
+const cssHintHtml = `<!DOCTYPE html><html><head><style>
+  .hero { min-height: 100vh; }
+  #promo { height: 560px; }
+</style></head><body>
+  <section class="hero"><h1>Big hero</h1><p>Tagline goes here for the hero band.</p><button>Go</button></section>
+  <section id="promo"><h2>Promo</h2><p>Limited time offer on all plans this week.</p><button>Claim</button></section>
+  <section style="min-height: 75vh"><h2>Inline</h2><p>Inline-styled band with its own height.</p></section>
+</body></html>`;
+const cssAst = parseHtml(cssHintHtml);
+const cssHints = cssAst.sections.map((s) => s.size_hint);
+check("ingest: 100vh class rule → css basis ~800px", cssHints[0]?.basis === "css" && cssHints[0]?.height === 800 && cssHints[0]?.css === "100vh", cssHints[0]);
+check("ingest: explicit px height by #id → css basis exact", cssHints[1]?.basis === "css" && cssHints[1]?.height === 560, cssHints[1]);
+check("ingest: inline min-height vh → css basis", cssHints[2]?.basis === "css" && cssHints[2]?.height === 600, cssHints[2]);
+check("ingest: .hero rule does not leak into #promo", cssHints[1]?.css !== "100vh", cssHints[1]);
+
 console.log("== ingest: tolerates empty/CSR-shell HTML ==");
 const empty = parseHtml("");
 check("ingest: empty input → warning", (empty.warnings?.length ?? 0) > 0, empty.warnings);
@@ -329,6 +352,28 @@ check("ingest: compact has no blocks", compactAst.sections.every((s) => s.blocks
 check("ingest: compact has no gradients", compactAst.gradients === undefined, compactAst.gradients);
 check("ingest: compact images are plain strings", compactAst.sections.every((s) => !s.images || s.images.every((i) => typeof i === "string")), compactAst.sections.map((s) => s.images));
 check("ingest: default (no detail arg) is compact-compatible", parseHtml(sampleHtml).sections.every((s) => s.blocks === undefined));
+
+console.log("== ingest: full mode — composite widget extraction (html-box source) ==");
+const widgetHtml = `<!DOCTYPE html><html><head><style>
+  .phone-mockup { width: 320px; border-radius: 24px; background: #111; }
+  .chat-bubble { padding: 8px 12px; border-radius: 12px; background: #f1f1f1; }
+  .chat-bubble.right { background: #0A7C6E; color: #fff; }
+</style></head><body>
+  <section><h1>Talk to us</h1><p>Our assistant answers around the clock for you.</p><button>Start chat</button>
+    <div class="phone-mockup"><div class="screen"><div class="chat-bubble left">Xin chào!</div><div class="chat-bubble right">Chào bạn</div><div class="chat-input">Type a message…</div></div><script>track()</script></div>
+  </section>
+  <section><h2>About</h2><p>Plain prose section with no composite widget at all.</p></section>
+</body></html>`;
+const widgetAst = parseHtml(widgetHtml, "full");
+const wSec = widgetAst.sections[0];
+check("widgets: detected on the mockup section", (wSec?.widgets?.length ?? 0) === 1, wSec?.widgets?.map((w) => w.hint));
+const w0 = wSec?.widgets?.[0];
+check("widgets: hint from class keyword", w0?.hint === "phone" || w0?.hint === "mockup", w0?.hint);
+check("widgets: html keeps inner structure", !!w0?.html.includes("chat-bubble"), w0?.html);
+check("widgets: scripts stripped from html", !(w0?.html ?? "").includes("<script"), w0?.html);
+check("widgets: matching css rules attached", !!w0?.css?.includes(".phone-mockup") && !!w0?.css?.includes(".chat-bubble"), w0?.css);
+check("widgets: none on plain sections", widgetAst.sections[1]?.widgets === undefined, widgetAst.sections[1]);
+check("widgets: compact mode emits none", parseHtml(widgetHtml, "compact").sections.every((s) => s.widgets === undefined));
 
 console.log("== ingest: nested-grid block detection (depth > 1) ==");
 // section > .grid-wrapper > .card  — blocks must be found even though cards are not direct children

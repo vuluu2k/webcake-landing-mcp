@@ -23,6 +23,23 @@ const FULL_SIZE_CAP = 25_000; // ~25 KB serialized cap for full mode
 export type IngestedCta = { text: string; href?: string };
 export type IngestedFormField = { label?: string; type: string; name?: string; required?: boolean };
 
+/**
+ * Desktop section-height hint (px on the 960px canvas) so the rebuilt page's
+ * vertical rhythm tracks the source instead of defaulting every band to 800.
+ * basis:'css' — an explicit height/min-height was found for the section
+ * (inline style or a stylesheet rule matching its id/class); `css` keeps the
+ * raw value (e.g. "100vh"). basis:'estimate' — content-volume math.
+ */
+export type IngestedSizeHint = { height: number; basis: "css" | "estimate"; css?: string };
+
+/**
+ * full mode only: a composite-widget candidate (phone/device mockup, chat
+ * thread, mini dashboard, browser frame…) — its raw HTML plus the stylesheet
+ * rules that style it, so the model can rebuild it FAITHFULLY as ONE html-box
+ * (inline the css into the html) instead of re-imagining it from a summary.
+ */
+export type IngestedWidget = { hint: string; html: string; css?: string };
+
 /** A repeating card-like block detected in full mode. */
 export type IngestedBlock = {
   icon?: string;   // emoji or short badge text from an icon slot (maps to a Webcake svg-mask rectangle)
@@ -58,6 +75,10 @@ export type IngestedSection = {
   blocks?: IngestedBlock[];
   /** full mode only */
   lists?: string[];
+  /** full mode only: composite widgets to rebuild as ONE html-box each */
+  widgets?: IngestedWidget[];
+  /** both modes: desktop height hint for the rebuilt Webcake section */
+  size_hint?: IngestedSizeHint;
 };
 
 export type IngestedAst = {
@@ -234,7 +255,15 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact"):
   }
 
   const sectionEls = findSections(body);
-  const sections = sectionEls.map((el) => classifySection(el, detail));
+  const sections = sectionEls.map((el) => {
+    const sec = classifySection(el, detail);
+    sec.size_hint = computeSizeHint(el, sec, styleBlocks);
+    if (detail === "full") {
+      const widgets = detectWidgets(el, styleBlocks);
+      if (widgets.length) sec.widgets = widgets;
+    }
+    return sec;
+  });
 
   // Brand hints from inline styles (both modes).
   const styleAttrs: string[] = [];
@@ -281,21 +310,25 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact"):
     gradients: gradients.length ? gradients : undefined,
   };
 
-  // Size-cap: drop blocks[].body first, then truncate lists.
-  const serialized = JSON.stringify(result);
-  if (serialized.length > FULL_SIZE_CAP) {
-    // Strip block bodies.
+  // Size-cap shedding order: blocks[].body → widgets[].css → lists → widgets
+  // (widget html goes last — it's the clone-fidelity payload of full mode).
+  if (JSON.stringify(result).length > FULL_SIZE_CAP) {
     for (const sec of result.sections) {
-      if (sec.blocks) {
-        for (const blk of sec.blocks) delete blk.body;
+      if (sec.blocks) for (const blk of sec.blocks) delete blk.body;
+    }
+    if (JSON.stringify(result).length > FULL_SIZE_CAP) {
+      for (const sec of result.sections) {
+        if (sec.widgets) for (const w of sec.widgets) delete w.css;
       }
     }
-    const s2 = JSON.stringify(result);
-    if (s2.length > FULL_SIZE_CAP) {
-      // Truncate lists.
+    if (JSON.stringify(result).length > FULL_SIZE_CAP) {
       for (const sec of result.sections) {
         if (sec.lists && sec.lists.length > 5) sec.lists = sec.lists.slice(0, 5);
       }
+      result.truncated = true;
+    }
+    if (JSON.stringify(result).length > FULL_SIZE_CAP) {
+      for (const sec of result.sections) delete sec.widgets;
       result.truncated = true;
     }
   }
@@ -709,6 +742,200 @@ function pickLists(el: HTMLElement, _blocks: IngestedBlock[]): string[] {
     .map((li) => li.text.trim())
     .filter((t) => t.length > 3 && t.length < 200)
     .slice(0, 15);
+}
+
+// ─── size hint (desktop section height) ──────────────────────────────────────
+
+const SIZE_DECL_RE = /(?:^|[;{\s])(min-height|height)\s*:\s*([\d.]+)(px|vh|rem|em)\b/gi;
+const VH_PX = 8; // 1vh ≈ 8px (~800px viewport), so a 100vh hero lands near the editor's 800px default band
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/** lines ≈ ceil(chars × fontSize × glyphFactor / width) — same model as the generation guide's text math. */
+function textLines(chars: number, fontSize: number, width: number, factor = 0.55): number {
+  if (chars <= 0) return 0;
+  return Math.max(1, Math.ceil((chars * fontSize * factor) / width));
+}
+
+type SizeDecl = { kind: "height" | "min-height"; px: number; raw: string };
+
+/** Parse height/min-height declarations out of a CSS declaration string. */
+function sizeDecls(decl: string): SizeDecl[] {
+  const out: SizeDecl[] = [];
+  SIZE_DECL_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = SIZE_DECL_RE.exec(decl)) !== null) {
+    const kind = m[1].toLowerCase() as SizeDecl["kind"];
+    const v = parseFloat(m[2]);
+    const unit = m[3].toLowerCase();
+    const px = unit === "px" ? v : unit === "vh" ? v * VH_PX : v * 16; // rem/em ≈ 16px
+    if (px >= 40 && px <= 2400) out.push({ kind, px: Math.round(px), raw: `${m[2]}${unit}` });
+  }
+  return out;
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Explicit height/min-height for a section element: its inline style, plus any
+ * stylesheet rule whose selector mentions the element's #id or one of its
+ * classes (whole-token match — `.hero` doesn't match `.hero-card`). Regex-level
+ * on purpose; full selector matching needs a renderer.
+ */
+function cssSizeDecls(el: HTMLElement, styleBlocks: string[]): SizeDecl[] {
+  const out: SizeDecl[] = [];
+  const inline = el.getAttribute("style");
+  if (inline) out.push(...sizeDecls(inline));
+
+  const id = el.getAttribute("id");
+  const classes = (el.getAttribute("class") ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 4);
+  const tokens = [...(id ? ["#" + id] : []), ...classes.map((c) => "." + c)];
+  if (tokens.length) {
+    const matchers = tokens.map((t) => new RegExp(escapeRe(t) + "(?![\\w-])"));
+    const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
+    for (const css of styleBlocks) {
+      ruleRe.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = ruleRe.exec(css)) !== null) {
+        if (matchers.some((re) => re.test(m![1]))) out.push(...sizeDecls(m![2]));
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Content-volume estimate of the section's desktop height (960px canvas,
+ * ~800px content column) so the rebuilt band is proportional to the source
+ * instead of a flat 800px default.
+ */
+function estimateSectionHeight(el: HTMLElement, sec: IngestedSection): number {
+  const role = sec.role;
+  if (role === "header") return 72;
+  if (role === "footer") {
+    const linkRows = Math.ceil((sec.links?.length ?? 0) / 4);
+    return clamp(120 + linkRows * 32 + (sec.paragraphs?.length ?? 0) * 24, 140, 480);
+  }
+
+  let h = 140; // band padding (top + bottom)
+  if (sec.heading) {
+    const fs = role === "hero" ? 48 : 36;
+    h += textLines(sec.heading.length, fs, 800, 0.6) * Math.round(fs * 1.2) + 20;
+  }
+  if (sec.subheading) h += textLines(sec.subheading.length, 18, 640) * 27 + 16;
+  for (const p of sec.paragraphs ?? []) h += textLines(p.length, 16, 640) * 24 + 12;
+  if (sec.ctas?.length) h += 76;
+  if (sec.form_fields?.length) h += sec.form_fields.length * 64 + 24;
+
+  // Card/tile rows: full mode carries blocks; compact recounts from the DOM.
+  let cards = sec.blocks?.length ?? 0;
+  if (!cards && (role === "features" || role === "pricing" || role === "testimonials")) {
+    cards = Math.min(countFeatureBlocks(el), 12);
+  }
+  if (cards) h += Math.ceil(cards / 3) * (role === "pricing" ? 420 : 260) + 24;
+  else if (sec.lists?.length) h += sec.lists.length * 30;
+
+  const imgCount = sec.images?.length ?? 0;
+  if (role === "gallery") h += Math.ceil(imgCount / 3) * 260;
+  else if (role === "hero") h = Math.max(h, imgCount ? 560 : 480);
+  else if (imgCount) h += 320; // a content image alongside/below the text
+
+  return clamp(Math.round(h / 10) * 10, 160, 1600);
+}
+
+function computeSizeHint(el: HTMLElement, sec: IngestedSection, styleBlocks: string[]): IngestedSizeHint {
+  const estimate = estimateSectionHeight(el, sec);
+  const decls = cssSizeDecls(el, styleBlocks);
+  const fixed = decls.filter((d) => d.kind === "height").sort((a, b) => b.px - a.px)[0];
+  // An explicit height pins the band; min-height grows with content, so take the larger.
+  if (fixed) return { height: fixed.px, basis: "css", css: fixed.raw };
+  const min = decls.filter((d) => d.kind === "min-height").sort((a, b) => b.px - a.px)[0];
+  if (min) return { height: Math.max(min.px, estimate), basis: "css", css: min.raw };
+  return { height: estimate, basis: "estimate" };
+}
+
+// ─── full-mode: composite-widget extraction (html-box source) ────────────────
+
+// Class/id keywords that mark a composite visual the guide rebuilds as ONE
+// html-box. Conservative on purpose — generic words (card, window, slider)
+// over-match ordinary content.
+const WIDGET_HINT_RE = /\b(mockup|phone|device|browser|terminal|console|dashboard|chat|inbox|player)\b/i;
+const WIDGET_HTML_CAP = 8000;
+const WIDGET_CSS_CAP = 4000;
+const MAX_WIDGETS_PER_SECTION = 2;
+
+/** outerHTML cleaned for html-box reuse: scripts/styles stripped, whitespace collapsed. */
+function cleanWidgetHtml(el: HTMLElement): string {
+  // Re-parse a copy so removals don't mutate the tree other pickers read.
+  const frag = parse(el.toString(), { lowerCaseTagName: true });
+  frag.querySelectorAll("script, style, noscript").forEach((n) => n.remove());
+  return frag
+    .toString()
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/>\s+</g, "><")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** Stylesheet rules whose selector mentions a class/id used inside the widget HTML. */
+function widgetCss(html: string, styleBlocks: string[]): string | undefined {
+  const tokens = new Set<string>();
+  for (const m of html.matchAll(/class="([^"]+)"/g)) {
+    for (const c of m[1].trim().split(/\s+/)) if (c) tokens.add("." + c);
+  }
+  for (const m of html.matchAll(/id="([^"]+)"/g)) {
+    if (m[1].trim()) tokens.add("#" + m[1].trim());
+  }
+  if (!tokens.size) return undefined;
+  const matchers = [...tokens].map((t) => new RegExp(escapeRe(t) + "(?![\\w-])"));
+  const parts: string[] = [];
+  let total = 0;
+  const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
+  for (const css of styleBlocks) {
+    ruleRe.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = ruleRe.exec(css)) !== null) {
+      const sel = m[1].trim();
+      if (!matchers.some((re) => re.test(sel))) continue;
+      const rule = `${sel.replace(/\s+/g, " ")}{${m[2].trim().replace(/\s+/g, " ")}}`;
+      if (total + rule.length > WIDGET_CSS_CAP) return parts.join("");
+      parts.push(rule);
+      total += rule.length;
+    }
+  }
+  return parts.length ? parts.join("") : undefined;
+}
+
+/**
+ * Find composite-widget candidates inside a section: OUTERMOST descendants
+ * whose class/id matches WIDGET_HINT_RE and that have real internal structure
+ * (≥3 descendant elements). Emits the cleaned HTML + matching CSS so the
+ * model's html-box reproduces the source instead of approximating it.
+ */
+function detectWidgets(el: HTMLElement, styleBlocks: string[]): IngestedWidget[] {
+  const out: IngestedWidget[] = [];
+  const walk = (node: HTMLElement) => {
+    for (const k of elementChildren(node)) {
+      if (out.length >= MAX_WIDGETS_PER_SECTION) return;
+      const idCls = (k.getAttribute("id") ?? "") + " " + (k.getAttribute("class") ?? "");
+      const m = idCls.match(WIDGET_HINT_RE);
+      if (m && k.querySelectorAll("*").length >= 3) {
+        const html = cleanWidgetHtml(k);
+        if (html && html.length <= WIDGET_HTML_CAP) {
+          const css = widgetCss(html, styleBlocks);
+          out.push(css ? { hint: m[1].toLowerCase(), html, css } : { hint: m[1].toLowerCase(), html });
+          continue; // outermost only — don't descend into an emitted widget
+        }
+      }
+      walk(k);
+    }
+  };
+  walk(el);
+  return out;
 }
 
 // ─── color / font helpers ────────────────────────────────────────────────────
