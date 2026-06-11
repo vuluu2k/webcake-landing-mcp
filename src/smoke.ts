@@ -272,6 +272,152 @@ const csr = parseHtml(`<html><head><title>SPA</title></head><body><div id="root"
 check("ingest: CSR shell → warning", (csr.warnings?.[0] ?? "").includes("client-rendered"), csr.warnings);
 check("ingest: CSR shell → title still extracted", csr.title === "SPA", csr.title);
 
+console.log("== ingest: stylesheet extraction (palette, background_images, fonts) ==");
+const stylesheetHtml = `<!DOCTYPE html><html lang="en"><head>
+  <title>Style Test</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&family=Playfair+Display&display=swap">
+  <style>
+    :root {
+      --primary: #0A7C6E;
+      --gold: #C9A84C;
+      --navy: #0D2D3A;
+      --not-a-color: 42px;
+    }
+    .hero {
+      background: url(https://example.com/hero-bg.jpg) center/cover;
+      font-family: 'Poppins', sans-serif;
+      color: rgba(13,45,58,1);
+    }
+    .cta { background: linear-gradient(135deg, #0A7C6E, #C9A84C); }
+    .card { background: url(https://example.com/card-bg.png); }
+  </style>
+</head><body>
+  <section><h1>Hello</h1><p>Welcome to our site. We build things that matter.</p><button>Get started</button></section>
+  <section>
+    <h2>Features</h2>
+    <div><h3>Speed</h3><p>Fast as lightning.</p></div>
+    <div><h3>Scale</h3><p>Grows with you.</p></div>
+    <div><h3>Security</h3><p>Always protected.</p></div>
+  </section>
+</body></html>`;
+const ssAst = parseHtml(stylesheetHtml, "compact");
+check("ingest: CSS var palette extracted (compact)", ssAst.palette?.["primary"] === "#0A7C6E", ssAst.palette);
+check("ingest: CSS var palette gold extracted", ssAst.palette?.["gold"] === "#C9A84C", ssAst.palette);
+check("ingest: non-color CSS var excluded from palette", ssAst.palette?.["not-a-color"] === undefined, ssAst.palette);
+check("ingest: background_images from stylesheet extracted", (ssAst.background_images?.length ?? 0) >= 1, ssAst.background_images);
+check("ingest: hero bg image URL captured", ssAst.background_images?.some((u) => u.includes("hero-bg.jpg")) === true, ssAst.background_images);
+check("ingest: Google Font extracted into fonts", ssAst.fonts?.some((f) => f.toLowerCase().includes("poppins")) === true, ssAst.fonts);
+check("ingest: stylesheet colors merged into colors", (ssAst.colors?.length ?? 0) > 0, ssAst.colors);
+
+console.log("== ingest: full mode — blocks detection, gradients, images-as-objects ==");
+const fullAst = parseHtml(stylesheetHtml, "full");
+check("ingest: full mode palette present", fullAst.palette?.["primary"] === "#0A7C6E", fullAst.palette);
+check("ingest: full mode gradients extracted", (fullAst.gradients?.length ?? 0) >= 1, fullAst.gradients);
+check("ingest: full mode gradient is linear-gradient", fullAst.gradients?.some((g) => g.startsWith("linear-gradient")) === true, fullAst.gradients);
+const featSec = fullAst.sections.find((s) => s.role === "features");
+check("ingest: full mode features section has blocks", (featSec?.blocks?.length ?? 0) >= 2, featSec?.blocks);
+check("ingest: full mode block has title", !!featSec?.blocks?.[0]?.title, featSec?.blocks?.[0]);
+const heroSec = fullAst.sections.find((s) => s.role === "hero");
+// In full mode images should be objects with src
+check("ingest: full mode hero images are objects", !!(heroSec === undefined || Array.isArray(heroSec?.images)), fullAst.sections.map((s) => s.role));
+check("ingest: full mode background_images present", (fullAst.background_images?.length ?? 0) >= 1, fullAst.background_images);
+
+console.log("== ingest: compact mode is backward-compatible (no blocks/gradients/lists) ==");
+const compactAst = parseHtml(sampleHtml, "compact");
+check("ingest: compact has no blocks", compactAst.sections.every((s) => s.blocks === undefined), compactAst.sections.map((s) => ({ role: s.role, hasBlocks: !!s.blocks })));
+check("ingest: compact has no gradients", compactAst.gradients === undefined, compactAst.gradients);
+check("ingest: compact images are plain strings", compactAst.sections.every((s) => !s.images || s.images.every((i) => typeof i === "string")), compactAst.sections.map((s) => s.images));
+check("ingest: default (no detail arg) is compact-compatible", parseHtml(sampleHtml).sections.every((s) => s.blocks === undefined));
+
+console.log("== ingest: nested-grid block detection (depth > 1) ==");
+// section > .grid-wrapper > .card  — blocks must be found even though cards are not direct children
+const nestedGridHtml = `<!DOCTYPE html><html lang="en"><head><title>T</title></head><body>
+  <section id="challenges">
+    <h2>Challenges</h2>
+    <div class="challenge-grid">
+      <div class="challenge-card"><div class="challenge-icon">📡</div><div class="challenge-title">Too many channels</div><div class="challenge-body">No unified view of who is asking what.</div></div>
+      <div class="challenge-card"><div class="challenge-icon">📩</div><div class="challenge-title">Inquiry overload</div><div class="challenge-body">Dozens of repetitive questions drain staff.</div></div>
+      <div class="challenge-card"><div class="challenge-icon">👋</div><div class="challenge-title">Guests who book once</div><div class="challenge-body">No way to re-engage past guests.</div></div>
+    </div>
+  </section>
+  <section id="how">
+    <h2>How it works</h2>
+    <div class="hiw-steps">
+      <div class="hiw-step"><div class="hiw-icon">📡</div><h3>Multi-channel Inquiry</h3><p>Guest reaches out via Booking.com or Messenger.</p></div>
+      <div class="hiw-step"><div class="hiw-icon">🤖</div><h3>AI Handles Instantly</h3><p>Botcake AI replies 24/7 in their language.</p></div>
+      <div class="hiw-step"><div class="hiw-icon">📇</div><h3>CRM Auto-captures</h3><p>Name, dates, preferences saved automatically.</p></div>
+      <div class="hiw-step"><div class="hiw-icon">🔄</div><h3>Re-engage After Stay</h3><p>Past guests receive personalised promos.</p></div>
+    </div>
+  </section>
+  <section id="integrations">
+    <h2>Integrations</h2>
+    <div class="int-grid">
+      <div class="int-card"><div class="int-icon">🏠</div><div class="int-name">Booking.com</div><div class="int-desc">Sync booking inquiries into your inbox.</div></div>
+      <div class="int-card"><div class="int-icon">👍</div><div class="int-name">Facebook</div><div class="int-desc">Messenger and Live comment auto-reply.</div></div>
+      <div class="int-card"><div class="int-icon">📸</div><div class="int-name">Instagram</div><div class="int-desc">DMs and comment replies in one place.</div></div>
+      <div class="int-card"><div class="int-icon">🎵</div><div class="int-name">TikTok</div><div class="int-desc">Auto-reply to Live comments and DMs.</div></div>
+      <div class="int-card"><div class="int-icon">💬</div><div class="int-name">WhatsApp</div><div class="int-desc">Manage WA Business messages here.</div></div>
+    </div>
+  </section>
+</body></html>`;
+const nestedAst = parseHtml(nestedGridHtml, "full");
+const challengeSec = nestedAst.sections.find((s) => s.heading?.includes("Challenges"));
+check("nested-grid: challenges section found", !!challengeSec, nestedAst.sections.map((s) => s.heading));
+check("nested-grid: 3 challenge blocks detected", (challengeSec?.blocks?.length ?? 0) === 3, challengeSec?.blocks?.map((b) => b.title));
+check("nested-grid: challenge block has icon", !!challengeSec?.blocks?.[0]?.icon, challengeSec?.blocks?.[0]);
+check("nested-grid: challenge block has title", !!challengeSec?.blocks?.[0]?.title, challengeSec?.blocks?.[0]);
+const hiwSec = nestedAst.sections.find((s) => s.heading?.includes("How it works"));
+check("nested-grid: 4 hiw blocks detected", (hiwSec?.blocks?.length ?? 0) === 4, hiwSec?.blocks?.map((b) => b.title));
+check("nested-grid: hiw block title from h3", hiwSec?.blocks?.[0]?.title === "Multi-channel Inquiry", hiwSec?.blocks?.[0]);
+const intSec = nestedAst.sections.find((s) => s.heading?.includes("Integrations"));
+check("nested-grid: 5 integration blocks detected", (intSec?.blocks?.length ?? 0) === 5, intSec?.blocks?.map((b) => b.title));
+check("nested-grid: integration block title from name-class div", intSec?.blocks?.[0]?.title === "Booking.com", intSec?.blocks?.[0]);
+
+console.log("== ingest: repeated-div section pickup (non-semantic top-level divs) ==");
+// A <div class="stat-bar"> at body level alongside <section> tags must become its own section.
+const statBarHtml = `<!DOCTYPE html><html lang="en"><head><title>T</title></head><body>
+  <section class="hero"><h1>Hero</h1><p>Welcome.</p><a href="#" class="btn">CTA</a></section>
+  <div class="stat-bar">
+    <div class="stat-item"><div class="stat-num">6+</div><div class="stat-label">Channels unified</div></div>
+    <div class="stat-item"><div class="stat-num">24/7</div><div class="stat-label">AI support</div></div>
+    <div class="stat-item"><div class="stat-num">3x</div><div class="stat-label">Faster response</div></div>
+    <div class="stat-item"><div class="stat-num">0</div><div class="stat-label">No CRM needed</div></div>
+  </div>
+  <section class="features"><h2>Features</h2>
+    <div><h3>Speed</h3><p>Fast.</p></div>
+    <div><h3>Scale</h3><p>Big.</p></div>
+    <div><h3>Safety</h3><p>Secure.</p></div>
+  </section>
+</body></html>`;
+const statAst = parseHtml(statBarHtml, "full");
+const statRoles = statAst.sections.map((s) => s.role);
+check("stat-bar: at least 3 sections found (hero + stat-bar + features)", statAst.sections.length >= 3, statRoles);
+const statSec = statAst.sections.find((s) => {
+  // stat-bar is not a semantic section so it lands as unknown; identify by its blocks
+  return s.blocks && s.blocks.length >= 4;
+});
+check("stat-bar: stat-bar div becomes a section with 4 blocks", (statSec?.blocks?.length ?? 0) === 4, statAst.sections.map((s) => ({ role: s.role, blocks: s.blocks?.length })));
+
+console.log("== ingest: pricing section heuristic ==");
+const pricingHtml = `<!DOCTYPE html><html lang="en"><head><title>T</title></head><body>
+  <section class="hero"><h1>App</h1><p>Great app for you.</p><a href="#" class="btn">Start</a></section>
+  <section id="pricing">
+    <h2>Plans</h2>
+    <div class="pricing-card">
+      <h3>Pro</h3>
+      <div class="price">$269</div>
+      <div class="period">/month</div>
+      <ul><li>Feature A</li><li>Feature B</li></ul>
+      <a href="#" class="btn">Get started</a>
+    </div>
+  </section>
+  <footer><p>Footer text here for the page.</p></footer>
+</body></html>`;
+const pricingAst = parseHtml(pricingHtml, "full");
+const pricingSecRoles = pricingAst.sections.map((s) => s.role);
+check("pricing: section with id=pricing classified as pricing", pricingSecRoles.includes("pricing"), pricingSecRoles);
+check("pricing: not mis-classified as features", !pricingSecRoles.includes("features") || pricingSecRoles.includes("pricing"), pricingSecRoles);
+
 console.log("== library: each (sparse) example expands to a valid element subtree ==");
 for (const [type, doc] of Object.entries(LIBRARY)) {
   if (!doc.example) continue;

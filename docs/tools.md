@@ -118,8 +118,8 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 ### Ingest (no config needed)
 | Tool | Description |
 |------|-------------|
-| `ingest_html` | Parse raw HTML into a compact layout AST (sections, roles, headings, CTAs, form fields) the AI can rebuild as a Webcake page. |
-| `ingest_url` | Fetch a URL and run the same extraction — turn an existing page into a layout anchor to recreate or adapt. |
+| `ingest_html` | Parse raw HTML into a reference layout AST (sections classified by role, headings, CTAs, form fields, top colors/fonts, CSS custom-property palette, background_images from stylesheets). `detail:'compact'` (default) returns ~2-5 KB; `detail:'full'` returns a richer AST with per-section blocks (cards/tiles/steps with title/body/image/cta), li lists, gradients, and images as `{ src, alt }` objects — use for clone-faithful rebuilds. Image URLs in the result (`images`, `background_images`, `og_image`) should be re-hosted via `upload_images` when cloning. |
+| `ingest_url` | Fetch a public URL and run the same extraction as `ingest_html`. Supports the same `detail` option. Returns a warning when the page is client-rendered so the caller can fall back to a screenshot (Claude analyzes screenshots natively). |
 
 ### Persistence (needs `WEBCAKE_API_BASE` + `WEBCAKE_JWT`)
 | Tool | Description |

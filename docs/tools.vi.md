@@ -118,8 +118,8 @@ gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả t
 ### Ingest (không cần config)
 | Tool | Mô tả |
 |------|-------------|
-| `ingest_html` | Parse HTML thô thành AST layout gọn (sections, vai trò, heading, CTA, trường form) để AI dựng lại thành trang Webcake. |
-| `ingest_url` | Fetch một URL rồi chạy cùng bộ trích xuất — biến một trang có sẵn thành mỏ neo layout để tái tạo hay phỏng theo. |
+| `ingest_html` | Parse HTML thô thành AST layout tham chiếu (sections phân loại theo vai trò, heading, CTA, trường form, màu sắc/font hàng đầu, bảng màu CSS custom-property, background_images từ stylesheet). `detail:'compact'` (mặc định) trả ~2-5 KB; `detail:'full'` trả AST giàu hơn gồm blocks lặp lại theo section (card/tile/bước với title/body/image/cta), danh sách li, gradient, và images dạng `{ src, alt }` — dùng khi clone trung thực. URL ảnh trong kết quả (`images`, `background_images`, `og_image`) nên được re-host qua `upload_images` khi clone. |
+| `ingest_url` | Fetch URL công khai rồi chạy cùng bộ trích xuất như `ingest_html`. Hỗ trợ cùng tham số `detail`. Trả cảnh báo khi trang là client-rendered để caller có thể dùng screenshot thay thế (Claude phân tích screenshot natively). |
 
 ### Lưu trữ (cần `WEBCAKE_API_BASE` + `WEBCAKE_JWT`)
 | Tool | Mô tả |
