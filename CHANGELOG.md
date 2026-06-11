@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.61] - 2026-06-11
+
+### Added
+- `ingest_html` and `ingest_url` now return a `size_hint` field (`{ height, basis, css? }`) on every AST section, providing the desktop section height in px derived from explicit `height`/`min-height` CSS rules on the source element when present or estimated from content volume otherwise; the generation guide (`get_generation_guide`) now directs the model to set each rebuilt section's desktop height from this hint instead of the 800 px default, so the page's vertical rhythm tracks the source.
+- `ingest_html` and `ingest_url` in `detail:'full'` mode now return a `widgets` array on sections that contain composite visuals (phone or device mockups, chat threads, mini dashboards, browser frames), each entry providing the cleaned source HTML and matching stylesheet rules as `{ hint, html, css? }`; the generation guide now directs the model to build each composite widget as one `html-box` by inlining `widgets[].css` rules into `widgets[].html` verbatim rather than approximating the markup from summary fields.
+
 ## [1.0.60] - 2026-06-11
 
 ### Fixed
