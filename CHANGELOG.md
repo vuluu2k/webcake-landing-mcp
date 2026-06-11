@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.57] - 2026-06-11
+
+### Added
+- New `upload_images` tool re-hosts up to 20 external image URLs or `data:` URIs as Webcake-hosted URLs (statics.pancake.vn) by downloading and uploading each image to the Webcake backend; no Webcake credentials required; defaults to `dry_run=true`.
+- `ingest_html` and `ingest_url` now accept a `detail` parameter (`'compact'` default / `'full'`); `detail:'full'` returns a richer AST (up to ~25 KB) that adds the CSS custom-property palette, `background_images` extracted from `<style>` blocks, per-section repeating blocks (cards/tiles/steps with title/body/image/cta), `li` lists, gradients, and images as `{ src, alt }` objects; use for clone-faithful rebuilds.
+
+### Changed
+- `publish_page` now calls the Webcake build host (`POST <buildBase>/render/build`) before publishing when one is configured (prod auto-preset `https://build.webcake.io`, override with `WEBCAKE_BUILD_BASE` env or `x-webcake-build-base` header), so the published page and `/preview/<page_id>` render immediately without re-saving in the editor; the result now includes a `rendered` boolean; the dry-run response now includes a `build_step` field showing whether the build host would be called; when no build host is available the tool falls back to source-only publish with a `warning` in the result.
+- `text-block` descriptor now documents that the element does not emit `border-radius`; for a rounded pill or badge shape, place a `rectangle` (with `borderRadius`) behind the `text-block` — setting `styles.background` on a `text-block` activates gradient text-fill mode, not a box fill.
+- Generation guide and server instructions now include a TAG/BADGE pill recipe, document that `borderRadius` is a CSS-unit string (e.g. `"13px"`), add a REFERENCE INPUT section with `detail:'full'/'compact'` guidance and role-to-element mapping hints for `ingest_html`/`ingest_url`, and list `upload_images` in the tool registry with guidance to re-host image URLs found in ingest results when intent is `'clone'`.
+
 ## [1.0.56] - 2026-06-11
 
 ### Added
