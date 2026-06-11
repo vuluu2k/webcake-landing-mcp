@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.59] - 2026-06-11
+
+### Changed
+- `create_page` now resolves the organization automatically on the real run (`dry_run:false`): if the account has exactly one org it is auto-selected and the result includes `organization_auto_selected:true`; if there are multiple orgs and none is specified, the tool returns `ok:false` with the org list and a `draft_id` so the caller re-calls with the chosen `organization_id` — no up-front `list_organizations` call is needed before saving.
+- `create_page` now accepts `organization_id:"personal"` as a sentinel to explicitly save a page without any organization, bypassing auto-resolution entirely.
+- `create_page` dry-run response now includes an `organization_note` field that describes how the organization will be resolved on the real run given the current inputs.
+- Generation guide (`get_generation_guide`) and server instructions updated to match the new org-resolution rules: call `list_organizations` only when the account has 2+ orgs; with exactly one org, `create_page` selects it automatically; pass `organization_id:"personal"` only when the user explicitly wants no org.
+
 ## [1.0.58] - 2026-06-11
 
 ### Changed
