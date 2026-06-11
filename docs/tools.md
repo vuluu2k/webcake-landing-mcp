@@ -113,6 +113,7 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | Tool | Description |
 |------|-------------|
 | `search_images` | Find REAL stock photos (Pexels) for a page — returns hotlinkable URLs at several sizes to drop into an image element's `specials.src`. Works with **no setup** (a shared hosted proxy supplies images); set `PEXELS_API_KEY` env or the `x-pexels-key` header to use your own [free Pexels key](https://www.pexels.com/api/) / quota. |
+| `upload_images` | Convert external image URLs (from `ingest_html`/`ingest_url` results) or `data:` URIs into Webcake-hosted URLs (`statics.pancake.vn`) for use in `specials.src`. Batch mode: up to 20 URLs per call, processed in parallel, with an 8 MB per-image cap. No Webcake credentials required. **Defaults to `dry_run=true`.** Use when cloning a page or when the user supplies their own image URLs; use `search_images` for stock photos. |
 
 ### Ingest (no config needed)
 | Tool | Description |

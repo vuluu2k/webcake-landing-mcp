@@ -35,6 +35,7 @@ function timeoutOrNetworkError(url: string, e: any): { ok: false; status: number
   return { ok: false, status: 0, error: `Network error calling ${url}: ${e?.message ?? e}` };
 }
 
+const UPLOAD_FILE_ENDPOINT = "/external/upload_file";
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
 const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
@@ -450,6 +451,56 @@ export function buildPublishRequestRedacted(
     headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
     body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Image upload (no JWT required — public /external endpoint)
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload an image to the Webcake backend as base64.
+ * The /external/upload_file endpoint is public — no JWT required.
+ * Returns `{ ok: true, url }` on success or `{ ok: false, error }` on failure.
+ */
+export async function uploadImageBase64(
+  base: string,
+  b64: string,
+  ext: string,
+  contentType: string
+): Promise<{ ok: boolean; url?: string; status?: number; error?: string }> {
+  const url = `${base.replace(/\/+$/, "")}${UPLOAD_FILE_ENDPOINT}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ type: "base64", base64: b64, ext, content_type: contentType }),
+      signal: timeoutSignal(HTTP_TIMEOUT_MS),
+    });
+  } catch (e: any) {
+    const e2 = timeoutOrNetworkError(url, e);
+    return { ok: false, status: e2.status, error: e2.error };
+  }
+  const rawText = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    /* non-JSON */
+  }
+  if (!res.ok || json?.success === false) {
+    const reason = json?.reason ?? json?.message ?? (json ? undefined : rawText.slice(0, 200));
+    return {
+      ok: false,
+      status: res.status,
+      error: `Backend returned ${res.status}${reason ? `: ${reason}` : ""}`,
+    };
+  }
+  const hostedUrl: string | undefined = typeof json?.data === "string" ? json.data : undefined;
+  if (!hostedUrl) {
+    return { ok: false, status: res.status, error: "Backend returned success but no URL in data field" };
+  }
+  return { ok: true, url: hostedUrl, status: res.status };
 }
 
 /**

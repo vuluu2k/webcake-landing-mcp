@@ -113,6 +113,7 @@ gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả t
 | Tool | Mô tả |
 |------|-------------|
 | `search_images` | Tìm ảnh stock THẬT (Pexels) cho trang — trả URL hotlink nhiều cỡ để gắn vào `specials.src` của element ảnh. Chạy **không cần setup** (proxy hosted chung cấp ảnh); đặt env `PEXELS_API_KEY` hoặc header `x-pexels-key` để dùng [key Pexels miễn phí](https://www.pexels.com/api/) / quota riêng. |
+| `upload_images` | Chuyển URL ảnh ngoài (từ kết quả `ingest_html`/`ingest_url`) hoặc `data:` URI thành URL do Webcake host (`statics.pancake.vn`) để dùng trong `specials.src`. Xử lý đến 20 URL/lần song song, giới hạn 8 MB/ảnh. Không cần Webcake credentials. **Mặc định `dry_run=true`.** Dùng khi clone trang hoặc khi người dùng cung cấp ảnh riêng; dùng `search_images` cho ảnh stock. |
 
 ### Ingest (không cần config)
 | Tool | Mô tả |

@@ -39,4 +39,4 @@ MODEL (essentials):
 
 - PREVIEW vs PUBLISH: the preview_url returned by create_page/update_page/add_section lives on the PREVIEW host (preview.localhost:5800 local / staging.webcake.me staging / www.webcake.me prod — NOT the builder subdomain) and renders the stored source immediately — share it as-is for review. When the user wants the page LIVE (public/published, optionally on their custom domain), call publish_page({ page_id, custom_domain?, custom_path?, dry_run:false }).
 
-Start by calling get_generation_guide. Tools: get_generation_guide, list_elements, get_element, new_element, new_page_skeleton, get_page_schema, validate_page, search_images, ingest_html, ingest_url, list_organizations, create_page, list_pages, find_pages, get_page, update_page, add_section, patch_page, publish_page.`;
+Start by calling get_generation_guide. Tools: get_generation_guide, list_elements, get_element, new_element, new_page_skeleton, get_page_schema, validate_page, search_images, upload_images, ingest_html, ingest_url, list_organizations, create_page, list_pages, find_pages, get_page, update_page, add_section, patch_page, publish_page.`;

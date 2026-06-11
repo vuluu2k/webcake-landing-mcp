@@ -13,14 +13,15 @@ metadata:
 > `page_source` from a brief, and to edit existing pages. The same rules are served at
 > runtime via the server `instructions` (src/domains/landing/instructions.ts) — this skill is the long form.
 
-## Tools (19)
+## Tools (20)
 
 Reference/validation (no backend/env needed):
 `get_generation_guide`, `list_elements`, `get_element`, `new_element`,
 `new_page_skeleton`, `get_page_schema`, `validate_page`.
 
-Media (works out of the box via a shared proxy; optional own key via `PEXELS_API_KEY` env / `x-pexels-key` header — free at https://www.pexels.com/api/):
-`search_images` — real stock photos for the page; returns hotlinkable URLs (`src.large` hero, `src.medium` card) to drop into an image element's `specials.src`. Only on `ok:false` → fall back to `https://placehold.co/<w>x<h>`.
+Media (works out of the box; no Webcake credentials required for either tool):
+`search_images` — real stock photos for the page; returns hotlinkable URLs (`src.large` hero, `src.medium` card) to drop into an image element's `specials.src`. Works out of the box via a shared proxy; optional own key via `PEXELS_API_KEY` env / `x-pexels-key` header — free at https://www.pexels.com/api/. Only on `ok:false` → fall back to `https://placehold.co/<w>x<h>`.
+`upload_images` — converts external image URLs (from `ingest_html`/`ingest_url` results) or `data:` URIs into Webcake-hosted URLs (`statics.pancake.vn`) for use in `specials.src`. Use when cloning a page (`intent='clone'`) or when the user provides their own image URLs. Batch: up to 20 URLs/call in parallel, 8 MB cap per image. No Webcake creds needed. Defaults to `dry_run=true`.
 
 Reference ingest (no env needed) — turn an EXISTING page into a layout anchor:
 `ingest_html(html, intent?)` / `ingest_url(url, intent?)` — parse HTML or fetch a URL into a compact AST (title, description, sections classified by role — hero/features/form/cta/footer/… — with headings, CTAs, images, form fields, plus top colors + fonts from inline styles). Use as a LAYOUT REFERENCE, not a clone source. Default `intent='adapt'` (rewrite content for user's brand); `intent='clone'` only when the user explicitly asks. For a screenshot/image input, no tool is needed — Claude analyzes it natively.

@@ -164,7 +164,7 @@ server, the `login` browser flow (+ backend contract), and how to grab a JWT by 
 |-------|---------------|
 | **[Connect your IDE / claude.ai](docs/connect-mcp.md)** | Step-by-step connection for every client (npx & hosted URL), troubleshooting table. |
 | **[Configuration](docs/configuration.md)** | Env vars, `--env` presets, browser `login`, per-request headers, getting a JWT. |
-| **[Tools reference](docs/tools.md)** | All 19 tools in detail + the step-by-step workflow + model notes. |
+| **[Tools reference](docs/tools.md)** | All 20 tools in detail + the step-by-step workflow + model notes. |
 | **[Usage examples](docs/usage-examples.md)** | Three end-to-end walkthroughs: build from a brief, surgical edit, inspect a type. |
 | **[Manual / advanced install](docs/manual-install.md)** | Shell installers, cloned builds, hand-written per-IDE config. |
 | **[Page-element schema](docs/page-element-schema.md)** | The full element-model reference (+ [every special/event](docs/element-specials-reference.md)). |
@@ -173,13 +173,13 @@ server, the `login` browser flow (+ backend contract), and how to grab a JWT by 
 
 ## 🧰 The tools at a glance
 
-19 tools in five groups — full descriptions in **[docs/tools.md](docs/tools.md)**:
+20 tools in five groups — full descriptions in **[docs/tools.md](docs/tools.md)**:
 
 | Group | Tools | Needs |
 |-------|-------|-------|
 | **Reference** | `get_generation_guide` · `list_elements` · `get_element` · `get_page_schema` | nothing |
 | **Generation** | `new_element` · `new_page_skeleton` · `validate_page` | nothing |
-| **Media** | `search_images` (real Pexels stock photos) | nothing (optional own key) |
+| **Media** | `search_images` (real Pexels stock photos) · `upload_images` (re-host external images) | nothing |
 | **Ingest** | `ingest_html` · `ingest_url` (recreate an existing page) | nothing |
 | **Persistence** | `list_organizations` · `create_page` · `list_pages` · `find_pages` · `get_page` · `update_page` · `add_section` · `patch_page` · `publish_page` | `WEBCAKE_API_BASE` + `WEBCAKE_JWT` |
 
