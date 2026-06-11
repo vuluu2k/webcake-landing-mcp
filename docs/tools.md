@@ -62,13 +62,15 @@ validate_page({ source })
 ### Step 5: Persist — `list_organizations` / `create_page` / `update_page`
 
 ```
-# List the account's organizations — ask which to use; default = the is_default org
+# List the account's organizations.
+# 1 org → create_page auto-selects it. 2+ orgs → show list, ask the user, pass organization_id.
+# Pass organization_id:"personal" only when the user explicitly wants no org.
 list_organizations({})
 → [{ id: "org_1", name: "Acme", is_default: true }, ...]
 
 # Create a NEW page (source-only). Defaults to dry_run=true.
-create_page({ source, organization_id: "org_1" })       # preview
-create_page({ source, dry_run: false })                  # actually create
+create_page({ source, organization_id: "org_1" })       # explicit org — preview
+create_page({ source, dry_run: false })                  # omit org → auto-resolves via list_organizations
 
 # Edit an EXISTING page
 list_pages({})                                           # find the page
@@ -127,7 +129,7 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | Tool | Description |
 |------|-------------|
 | `list_organizations` | List the account's organizations (id, name, is_default). Default = the `is_default` org. |
-| `create_page` | Persist a generated source as a new page (source-only). Validates, caches the source as `draft_id`, then creates. On validation failure, timeout, or network error the draft is kept — retry via `create_page({ draft_id, dry_run:false })` or fix via `patch_page({ draft_id, patches })`. **Defaults to `dry_run=true`.** |
+| `create_page` | Persist a generated source as a new page (source-only). Validates, caches the source as `draft_id`, then creates. `organization_id` accepts an org id or the string `"personal"` (explicit no-org). When omitted and no env default is set, calls `list_organizations` automatically: 1 org → auto-selected (`organization_auto_selected:true`); 2+ orgs → returns the org list and asks you to re-call with `organization_id` (never guesses); 0 orgs or lookup fails → personal. On validation failure, timeout, or network error the draft is kept — retry via `create_page({ draft_id, dry_run:false })` or fix via `patch_page({ draft_id, patches })`. **Defaults to `dry_run=true`.** |
 | `list_pages` | List the account's pages (id, name, organization_id, updated_at) to pick one to edit. |
 | `find_pages` | Search the account's pages by name, domain, and/or page id (AND-combined) to locate one to edit; returns id, name, org, custom/default domain, updated_at. |
 | `get_page` | Fetch an existing page's decoded source tree, COMPACTED to the sparse authoring shape (factory-default boilerplate stripped — far fewer tokens; `compact:false` for the raw tree). Edit and send back as-is. |

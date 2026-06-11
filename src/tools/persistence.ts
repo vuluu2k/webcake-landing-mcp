@@ -59,7 +59,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 9) Create page (persist) --------------------------------------------------
   server.tool(
     "create_page",
-    "Persists a page source to the configured Webcake backend: creates a NEW page and saves the source (source-only — opens in the editor where re-saving renders it). Validates first. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. The page lands in `organization_id` if given; without an org the page is personal (org=null). Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Persists a page source to the configured Webcake backend: creates a NEW page and saves the source (source-only — opens in the editor where re-saving renders it). Validates first. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. Organization resolution on the real run (dry_run=false): (1) explicit organization_id wins; pass the string 'personal' to save without any org. (2) WEBCAKE_ORG_ID env / x-webcake-org-id header wins. (3) Otherwise list_organizations is called: 0 orgs or lookup fails → personal (no org); exactly 1 org → used automatically (result includes organization_auto_selected:true); 2+ orgs → returns ok:false with the org list and asks the caller to re-call with organization_id. Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       source: z
         .any()
@@ -73,7 +73,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       organization_id: z
         .union([z.string(), z.number()])
         .optional()
-        .describe("Organization to create the page in (from list_organizations). Omit for a personal page; falls back to WEBCAKE_ORG_ID env if set."),
+        .describe("Organization to create the page in (id from list_organizations). Pass the string 'personal' to explicitly save without any organization (skips auto-resolution). Omit to fall back to WEBCAKE_ORG_ID env; if that is also unset, the server calls list_organizations: 1 org → auto-selected; 2+ orgs → returns the list and asks you to pick; 0 orgs → personal."),
       dry_run: z
         .boolean()
         .optional()
@@ -114,7 +114,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // Resolve name/org from args, then fall back to what the draft stored.
       const cachedDraft = existingDraftId ? getDraft(existingDraftId) : null;
       const pageName = name ?? cachedDraft?.name ?? "AI Page";
-      const orgId = organization_id != null ? `${organization_id}` : cachedDraft?.organization_id;
+
+      // 'personal' is a sentinel meaning "no org, skip auto-resolution".
+      const isExplicitPersonal = organization_id != null && `${organization_id}`.toLowerCase() === "personal";
+      const explicitOrgId = (organization_id != null && !isExplicitPersonal) ? `${organization_id}` : undefined;
+      // On dry_run, use the explicit arg or the draft's stored org (if any).
+      const draftOrgId = cachedDraft?.organization_id;
+      const orgId = explicitOrgId ?? draftOrgId;
 
       const result = domain.validate(expanded);
       if (!result.valid) {
@@ -157,6 +163,19 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         } else {
           existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: orgId });
         }
+
+        // Describe what will happen on the real run given current inputs (cheap, no network call).
+        let organizationNote: string;
+        if (isExplicitPersonal) {
+          organizationNote = "Will save as a personal page (organization_id:'personal' was passed — auto-resolution skipped).";
+        } else if (explicitOrgId) {
+          organizationNote = `Will use the explicitly supplied organization_id: ${explicitOrgId}.`;
+        } else if (config?.orgId) {
+          organizationNote = `Will use the org from WEBCAKE_ORG_ID env / x-webcake-org-id header: ${config.orgId}.`;
+        } else {
+          organizationNote = "No organization_id supplied and no WEBCAKE_ORG_ID env set — on the real run list_organizations will be called: 1 org → auto-selected; 2+ orgs → will ask you to pick; 0 orgs → personal.";
+        }
+
         return text({
           dry_run: true,
           validation: { valid: true, warnings: result.warnings, stats: result.stats },
@@ -164,6 +183,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           env_ready: missing.length === 0,
           missing_env: missing,
           target_organization_id: orgId ?? config?.orgId ?? null,
+          organization_note: organizationNote,
           draft_id: existingDraftId,
           request: config
             ? buildRequestRedacted(config, pageName, parsed, orgId)
@@ -186,18 +206,79 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
 
+      // --- Organization resolution (real run only — dry_run is cheap) ---
+      // Resolution order:
+      //   1. 'personal' sentinel → no org (skip auto-resolution entirely)
+      //   2. Explicit organization_id arg → use as-is
+      //   3. WEBCAKE_ORG_ID env / x-webcake-org-id header (config.orgId) → use as-is
+      //   4. Call listOrganizations:
+      //      - 0 orgs or call fails → personal (proceed, add a note in result)
+      //      - exactly 1 org → auto-select (return organization_auto_selected:true)
+      //      - 2+ orgs → return ok:false with org list; caller must re-call with organization_id
+      let resolvedOrgId: string | undefined = orgId; // may already be set from arg or draft
+      let organizationAutoSelected = false;
+      let organizationNote: string | undefined;
+
+      if (isExplicitPersonal) {
+        // Deliberate personal — skip auto-resolution entirely.
+        resolvedOrgId = undefined;
+      } else if (resolvedOrgId == null && !config.orgId) {
+        // No explicit org and no env default → look up orgs.
+        const orgResult = await listOrganizations(config);
+        if (!orgResult.ok || !orgResult.organizations) {
+          // Lookup failed — proceed personal, note the failure.
+          console.error(`[create_page] listOrganizations failed: ${orgResult.error}`);
+          organizationNote = `org lookup failed (${orgResult.error ?? "unknown error"}) — saving as personal page.`;
+        } else {
+          const orgs = orgResult.organizations;
+          if (orgs.length === 0) {
+            // No orgs — personal is the only option.
+          } else if (orgs.length === 1) {
+            // Exactly one org → auto-select.
+            resolvedOrgId = `${orgs[0].id}`;
+            organizationAutoSelected = true;
+          } else {
+            // Multiple orgs — cannot guess; ask the caller to pick.
+            const orgList = orgs.map((o) => ({ id: o.id, name: o.name, is_default: o.is_default }));
+            // Cache so the model can retry with organization_id without re-sending source.
+            if (existingDraftId) {
+              updateDraft(existingDraftId, expanded);
+            } else {
+              existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: undefined });
+            }
+            return text({
+              created: false,
+              reason: "organization_required",
+              organizations: orgList,
+              draft_id: existingDraftId,
+              error: "This account has multiple organizations. Re-call create_page with organization_id set to one of the listed org ids (or 'personal' to save without an org).",
+              hint: `Ask the user which organization to use, then re-call: create_page({ draft_id: "${existingDraftId}", organization_id: "<chosen id>", dry_run: false }).`,
+            });
+          }
+        }
+      } else if (resolvedOrgId == null && config.orgId) {
+        // Env default present — use it (already reflected in authHeaders via config.orgId).
+        resolvedOrgId = config.orgId;
+      }
+
       // CACHE-FIRST: write to draft cache BEFORE the network call. On timeout or
       // network failure the draft survives and the model can retry without re-sending.
       if (existingDraftId) {
         updateDraft(existingDraftId, expanded);
       } else {
-        existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: orgId });
+        existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: resolvedOrgId });
       }
 
-      const outcome = await createPage(config, pageName, parsed, orgId);
+      const outcome = await createPage(config, pageName, parsed, resolvedOrgId);
       if (outcome.ok) {
         deleteDraft(existingDraftId); // created — drop the draft
-        return text({ created: true, ...outcome, warnings: result.warnings });
+        return text({
+          created: true,
+          ...outcome,
+          warnings: result.warnings,
+          ...(organizationAutoSelected ? { organization_auto_selected: true } : {}),
+          ...(organizationNote ? { note: organizationNote } : {}),
+        });
       }
       // Failure (including timeout): keep the draft so the model can retry.
       updateDraft(existingDraftId, expanded);

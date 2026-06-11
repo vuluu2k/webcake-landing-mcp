@@ -62,13 +62,15 @@ validate_page({ source })
 ### Bước 5: Lưu — `list_organizations` / `create_page` / `update_page`
 
 ```
-# Liệt kê các organization của tài khoản — hỏi dùng cái nào; mặc định = org is_default
+# Liệt kê organization của tài khoản.
+# 1 org → create_page tự chọn. 2+ org → hiện danh sách, hỏi người dùng, truyền organization_id.
+# Truyền organization_id:"personal" chỉ khi người dùng muốn lưu không thuộc org nào.
 list_organizations({})
 → [{ id: "org_1", name: "Acme", is_default: true }, ...]
 
 # Tạo trang MỚI (chỉ-source). Mặc định dry_run=true.
-create_page({ source, organization_id: "org_1" })       # xem trước
-create_page({ source, dry_run: false })                  # tạo thật
+create_page({ source, organization_id: "org_1" })       # org tường minh — xem trước
+create_page({ source, dry_run: false })                  # bỏ trống org → tự giải quyết qua list_organizations
 
 # Sửa một trang CÓ SẴN
 list_pages({})                                           # tìm trang
@@ -127,7 +129,7 @@ gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả t
 | Tool | Mô tả |
 |------|-------------|
 | `list_organizations` | Liệt kê organization của tài khoản (id, name, is_default). Mặc định = org `is_default`. |
-| `create_page` | Lưu một source đã sinh thành trang mới (chỉ-source). Kiểm tra, cache source thành `draft_id`, rồi tạo. Lỗi kiểm tra / timeout / lỗi mạng vẫn giữ draft — thử lại bằng `create_page({ draft_id, dry_run:false })` hoặc sửa bằng `patch_page({ draft_id, patches })`. **Mặc định `dry_run=true`.** |
+| `create_page` | Lưu một source đã sinh thành trang mới (chỉ-source). Kiểm tra, cache source thành `draft_id`, rồi tạo. `organization_id` nhận id org hoặc chuỗi `"personal"` (tường minh không org). Khi bỏ trống và không có env mặc định, tự gọi `list_organizations`: 1 org → tự chọn (`organization_auto_selected:true`); 2+ org → trả danh sách org, yêu cầu re-call với `organization_id` (không đoán); 0 org hoặc lookup lỗi → personal. Lỗi kiểm tra / timeout / lỗi mạng vẫn giữ draft — thử lại bằng `create_page({ draft_id, dry_run:false })` hoặc sửa bằng `patch_page({ draft_id, patches })`. **Mặc định `dry_run=true`.** |
 | `list_pages` | Liệt kê các trang của tài khoản (id, name, organization_id, updated_at) để chọn cái cần sửa. |
 | `find_pages` | Tìm trang theo tên, domain, và/hoặc page id (kết hợp AND) để định vị trang cần sửa; trả id, name, org, domain custom/mặc định, updated_at. |
 | `get_page` | Lấy cây source đã decode của một trang, ĐÃ NÉN về dạng thưa (lược boilerplate mặc định — ít token hơn hẳn; `compact:false` để lấy cây thô). Sửa xong gửi lại nguyên dạng. |

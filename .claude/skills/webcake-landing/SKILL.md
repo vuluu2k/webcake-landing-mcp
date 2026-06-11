@@ -67,13 +67,13 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 
 ## Workflow — new page
 
-1. **INTAKE — every time, even a quick/test page** (ask first, offer defaults, don't assume, and do NOT jump straight to building): page purpose/goal · brand/page name · what they sell + price (sales/ads pages) · primary color + logo/branding · sections & layout in order · primary CTA + destination · form fields · desktop+mobile or mobile-only · which organization. Then RESTATE a short outline (sections + CTA + colors) and wait for the user's confirmation before generating. Don't generate + persist on the same turn as the request.
+1. **INTAKE — every time, even a quick/test page** (ask first, offer defaults, don't assume, and do NOT jump straight to building): page purpose/goal · brand/page name · what they sell + price (sales/ads pages) · primary color + logo/branding · sections & layout in order · primary CTA + destination · form fields · desktop+mobile or mobile-only · which organization (only ask when the account has 2+ orgs — call `list_organizations` to check first; if exactly 1 org, save into it automatically; pass `organization_id:"personal"` only when the user explicitly wants no org). Then RESTATE a short outline (sections + CTA + colors) and wait for the user's confirmation before generating. Don't generate + persist on the same turn as the request.
 2. `get_generation_guide`, then `new_page_skeleton`.
 3. `get_element` per type (specials + sparse example); `new_element` for sparse skeletons.
 4. Assemble `{ page, popup, settings, options, cartConfigs }` from SPARSE nodes; fill `specials`, set coordinates (no overlaps). For intricate composite visuals (phone/chat mockup, mini dashboard, browser frame, ticket card) use ONE `html-box` with fully inline-styled HTML (root div `width:100%;height:100%;overflow:hidden`; flex/grid allowed inside; content must fit `styles.height`) instead of dozens of absolute-positioned elements — never for primary copy, CTAs, forms, or event targets.
 5. `validate_page` → fix every error.
-6. `list_organizations` → show options, ask which (default = `is_default`).
-7. `create_page` `dry_run:true` (preview) → `dry_run:false` with chosen `organization_id`.
+6. `list_organizations` → if exactly ONE org exists, `create_page` auto-selects it (no need to ask). If MULTIPLE orgs exist, show them and ask the user which to use (highlight `is_default` as the suggested default); pass the chosen `organization_id` to `create_page`. Pass `organization_id:"personal"` only when the user explicitly wants no org. `create_page` enforces this: 2+ orgs with no `organization_id` → it returns the org list and asks you to pick.
+7. `create_page` `dry_run:true` (preview) → `dry_run:false` with chosen `organization_id` (or omit if auto-selection applies).
 8. Give the editor URL for review. Note: `preview_url` on the preview host serves the STORED `app`/`app_css` build — an MCP-created page's preview is **blank** until `publish_page` (with build host) or an editor re-save. Call `publish_page({ page_id, dry_run:false })` to build + publish and make the preview live. For a custom domain: `publish_page({ page_id, custom_domain?, custom_path?, dry_run:false })`.
 
 ## Workflow — edit existing page
@@ -89,7 +89,7 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 - `validate_page` before any create/update; fix every error.
 - `dry_run` first; send `dry_run:false` only after user confirms.
 - Edit surgically; preserve ids + coordinates.
-- Owner-scoped endpoints; default org = `is_default` (pass `organization_id` or set `WEBCAKE_ORG_ID`).
+- Owner-scoped endpoints. Organization resolution: 1 org → auto-selected; 2+ orgs → ask user, pass `organization_id`; `"personal"` = explicit no-org. Set `WEBCAKE_ORG_ID` to skip the lookup.
 - Popups are top-level; form inputs need unique `specials.field_name` (canonical keys for auto-typing).
 - Numbers for `top/left/width/height/fontSize`; colors `rgba()`; only containers have `children`.
 - Author SPARSE (omit `properties`/`runtime`/empty `events`+`children`/`config` — the server hydrates them); when you DO send `runtime`, it is `{}`.
