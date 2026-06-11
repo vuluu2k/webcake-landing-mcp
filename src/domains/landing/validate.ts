@@ -353,6 +353,41 @@ export function validatePage(input: unknown): ValidationResult {
             `${path} (text-block): specials.text is only the emoji "${visible}" — keyboard emoji as standalone icons look unprofessional and render inconsistently across devices. Use a rectangle with per-breakpoint config.svgMask (raw <svg> string) + styles.background set to the brand accent color instead (see the rectangle element's example). Emoji are fine inline within sentences, never as card icons.`
           );
         }
+
+        // Wrapped-text overflow: live text height is AUTO — text that wraps to
+        // more lines than the declared box spills DOWN and overlaps the element
+        // below (the classic "2-line card title over the card body" defect).
+        // Rough estimate: avg glyph width ≈ fontSize × 0.55, line height ≈
+        // fontSize × 1.4; lines counted per explicit <br> segment. Warn only when
+        // the estimate exceeds the declared height by MORE than one full line
+        // (keeps the heuristic from flagging well-sized paragraphs). Skip text
+        // with template variables ({{…}}) — rendered length is unknown.
+        if (!rawText.includes("{{")) {
+          const segments = rawText
+            .split(/<br\s*\/?>/i)
+            .map((s) => s.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/g, " ").trim())
+            .filter((s) => s !== "");
+          if (segments.length > 0) {
+            for (const bp of ["desktop", "mobile"] as const) {
+              const styles = node.responsive?.[bp]?.styles;
+              const w = num(styles?.width);
+              const h = num(styles?.height);
+              const fs = num(styles?.fontSize) ?? 16;
+              if (!w || !h || w <= 0 || fs <= 0) continue;
+              const lines = segments.reduce(
+                (acc, seg) => acc + Math.max(1, Math.ceil((seg.length * fs * 0.55) / w)),
+                0
+              );
+              const lineH = fs * 1.4;
+              const est = Math.round(lines * lineH);
+              if (est > h + lineH) {
+                warnings.push(
+                  `${path} (text-block) [${bp}]: text wraps to ~${lines} lines (~${est}px) but the box is only ${h}px tall — live text height is AUTO, so it will spill down and overlap the element below. Set height ≈ ${est}px and push the elements below down (estimate: lines ≈ ceil(chars × fontSize × 0.55 / width), height ≈ lines × fontSize × 1.4).`
+                );
+              }
+            }
+          }
+        }
       }
     }
 
