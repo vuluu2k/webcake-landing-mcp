@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.58] - 2026-06-11
+
+### Changed
+- `html-box` descriptor (`get_element`) has been rewritten to document COMPOSITE VISUALS as the primary use case: intricate non-interactive mockups such as phone/chat threads, mini dashboards, browser-window frames, inbox/notification lists, and ticket-style cards should use ONE `html-box` instead of dozens of absolute-positioned elements; the descriptor now includes a full authoring recipe (inline styles only, root `div` fills the box via `width:100%;height:100%;box-sizing:border-box;overflow:hidden`, flex/grid allowed inside, content must fit `styles.height`, `specials.html` must be HTML-escaped, both breakpoints required, font-family inline on the root), explicit when-not-to-use guidance (primary copy, CTAs, form fields, event targets), and a phone-chat mockup example.
+- Generation guide (`get_generation_guide`) and server instructions now direct the model to rebuild a composite widget found in an ingested page or screenshot as a single `html-box` with all styles inlined, rather than decomposing it into element soup.
+
 ## [1.0.57] - 2026-06-11
 
 ### Added
