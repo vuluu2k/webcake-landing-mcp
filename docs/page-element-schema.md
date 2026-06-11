@@ -170,7 +170,7 @@ Màu **luôn dùng định dạng `rgba(r, g, b, a)`** (theo dữ liệu thật 
 | `text-block` | – | `text` (HTML string), `tag` (`"p"`/`"h1"`…`"h6"`/`"span"`) | Khối văn bản. Style chữ ở `styles`. `specials.text` có thể chứa HTML inline. |
 | `list-paragraph` | – | `text` (chuỗi các `<li>…</li>`) | Danh sách gạch đầu dòng. Mỗi item là 1 `<li>`. |
 | `image-block` | – | `src` (URL ảnh), `resize` | Ảnh. Ảnh thật cũng có thể ở `styles.backgroundImage`. `config.overlay` để phủ màu. |
-| `rectangle` | – | — | Hình khối/màu nền; dùng làm divider, badge, lớp nền. |
+| `rectangle` | – | `svgMask` (config, per breakpoint — raw `<svg>` string; renderer applies as mask, shape color from `styles.background`) | Hình khối/màu nền; dùng làm divider, badge, lớp nền. Cũng dùng làm **icon SVG**: đặt `config.svgMask` ở CẢ hai breakpoint (desktop + mobile) + `styles.background` là màu thương hiệu — chuyên nghiệp hơn emoji. |
 | `line` | – | — | Đường kẻ ngang. |
 | `button` | – | `text` (nhãn nút), `required`, `format`, `connectedSurvey` | Nút bấm. Hành vi đặt trong `events` (click → open_link/scroll_to/open_popup/submit…). |
 | `video` | – | `typeVideo` (youtube/upload…), `video_cdn`, `img` (thumbnail), `autoReplay` | Trình phát video. |

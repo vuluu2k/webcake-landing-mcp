@@ -56,6 +56,10 @@ const PLACEHOLDER_REQUIRED_FIELDS = new Set(["select", "country-select", "group-
 // and the whole page fails to render. 'custom' instead reads specials.customTranslation.
 const COUNTDOWN_LANGUAGES = new Set(["vietnam", "english", "filipino", "khmer", "lao", "indonesian", "thai", "malay", "custom"]);
 
+// countdown's specials.type must be one of these; any other value causes a TypeError
+// when the renderer tries to look up timer mode (timer dead, page broken).
+const COUNTDOWN_TYPES = new Set(["minute", "duration", "daily"]);
+
 // Fixed canvas reference (matches vocab CANVAS) used for the layout/bounds check.
 const CANVAS_DESKTOP = 960;
 const CANVAS_MOBILE = 420;
@@ -191,7 +195,13 @@ export function validatePage(input: unknown): ValidationResult {
 
     // children only on containers
     if (Array.isArray(node.children) && node.children.length > 0 && type && !CONTAINER_TYPES.has(type)) {
-      errors.push(`${path} (${type}): has children but "${type}" is not a container type.`);
+      const idRef = typeof node.id === "string" ? node.id : "<id>";
+      errors.push(
+        `${path} (${type}, id=${idRef}): has children but "${type}" is not a container type. ` +
+        `Fix via patch_page {op:'replace', id:'${idRef}', element:{type:'group', …}} — a group with the SAME box and the SAME children, ` +
+        `plus a full-size rectangle (top:0, left:0, the group's width/height) inserted as the FIRST child carrying this element's ` +
+        `background/borderRadius/boxShadow (a group's own background does NOT render on the live page; children's top/left are relative to the group).`
+      );
     }
 
     // form fields need field_name
@@ -283,6 +293,208 @@ export function validatePage(input: unknown): ValidationResult {
       if (typeof lang === "string" && !COUNTDOWN_LANGUAGES.has(lang)) {
         errors.push(`${path} (countdown): specials.language="${lang}" is not supported and crashes the renderer. Use one of: ${[...COUNTDOWN_LANGUAGES].join(", ")} (use "custom" + specials.customTranslation for other languages).`);
       }
+      // countdown.type must be one of the three mode keys; anything else → TypeError (timer dead).
+      const cdType = node.specials?.type;
+      if (cdType !== undefined && !COUNTDOWN_TYPES.has(cdType)) {
+        errors.push(`${path} (countdown): specials.type="${cdType}" is not a valid countdown mode — the timer will throw a TypeError and remain dead. Must be one of: minute, duration, daily.`);
+      }
+      if (cdType === undefined || cdType === null || cdType === "") {
+        errors.push(`${path} (countdown): specials.type is missing — must be 'minute', 'duration', or 'daily'.`);
+      }
+    }
+
+    // image-block: if neither specials.src nor a url() in styles.background exists
+    // on a breakpoint, the live publisher has nothing to paint — renders blank.
+    // (The normalization pass in landingDomain.expand auto-derives background from
+    // src when src is set; this warning fires only if both are absent.)
+    if (type === "image-block") {
+      for (const bp of ["desktop", "mobile"] as const) {
+        const styles = node.responsive?.[bp]?.styles;
+        const src = node.specials?.src;
+        const hasSrc = typeof src === "string" && src.trim() !== "";
+        const hasBgUrl = typeof styles?.background === "string" && styles.background.includes("url(");
+        if (!hasSrc && !hasBgUrl) {
+          warnings.push(`${path} (image-block) [${bp}]: neither specials.src nor a url() in styles.background is set — the live published page renders blank here. Set specials.src to an image URL.`);
+        }
+      }
+    }
+
+    // text-block: styles.background activates gradient-text-fill mode
+    // (emits -webkit-text-fill-color:transparent); without -webkitBackgroundClip:'text'
+    // the glyphs go invisible on the live page. Warn when background is set but the
+    // clip key is absent.
+    if (type === "text-block") {
+      for (const bp of ["desktop", "mobile"] as const) {
+        const styles = node.responsive?.[bp]?.styles;
+        if (!styles || typeof styles !== "object") continue;
+        const hasBg = typeof styles.background === "string" && styles.background.trim() !== "";
+        const hasClip = typeof styles["-webkitBackgroundClip"] === "string";
+        if (hasBg && !hasClip) {
+          warnings.push(
+            `${path} (text-block) [${bp}]: styles.background is set (gradient text-fill mode) but styles['-webkitBackgroundClip'] is missing — the text glyphs will be invisible on the live page. Add styles['-webkitBackgroundClip']:'text', or use styles.backgroundTxt for a box background instead.`
+          );
+        }
+      }
+      // Emoji-as-icon: a text-block whose visible content is ONLY emoji is a
+      // standalone keyboard-emoji icon (🎯💼📱✅⭐) — the guide bans these on
+      // cards. Emoji inline within a sentence does not trip this (the text has
+      // other characters).
+      const rawText = node.specials?.text;
+      if (typeof rawText === "string") {
+        const visible = rawText.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/g, " ").trim();
+        const onlyEmoji =
+          visible !== "" &&
+          /\p{Extended_Pictographic}/u.test(visible) &&
+          // allowed alongside pictographs: emoji components, ZWJ (200D),
+          // variation selector-16 (FE0F), keycap (20E3), whitespace
+          /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|[\u200D\uFE0F\u20E3\s])+$/u.test(visible);
+        if (onlyEmoji) {
+          warnings.push(
+            `${path} (text-block): specials.text is only the emoji "${visible}" — keyboard emoji as standalone icons look unprofessional and render inconsistently across devices. Use a rectangle with per-breakpoint config.svgMask (raw <svg> string) + styles.background set to the brand accent color instead (see the rectangle element's example). Emoji are fine inline within sentences, never as card icons.`
+          );
+        }
+      }
+    }
+
+    // editor-blog: specials.html containing HTML-escaped markup (heuristic: '&lt;'
+    // present) will render as literal tag strings on the live page. The publisher
+    // injects html RAW with no unescape — store raw HTML, not escaped HTML.
+    if (type === "editor-blog") {
+      const html = node.specials?.html;
+      if (typeof html === "string" && html.includes("&lt;")) {
+        warnings.push(
+          `${path} (editor-blog): specials.html appears to contain escaped HTML ('&lt;' found) — the publisher injects html RAW so escaped markup will render as literal '&lt;p&gt;' text on the live page. Store raw HTML (e.g. '<p>Hello</p>' not '&lt;p&gt;Hello&lt;/p&gt;').`
+        );
+      }
+    }
+
+    // video: required specials by typeVideo.
+    if (type === "video") {
+      const tv = node.specials?.typeVideo;
+      if (tv === "webcake" || tv === "vimeo") {
+        const vid = node.specials?.video;
+        if (!vid || typeof vid !== "string" || vid.trim() === "") {
+          errors.push(
+            `${path} (video): typeVideo='${tv}' requires specials.video (${tv === "vimeo" ? "full Vimeo URL" : "webcake video URL"}) — missing causes a TypeError that breaks the whole page on load.`
+          );
+        }
+      }
+      if (tv === "youtube") {
+        const id = node.specials?.id;
+        if (!id || typeof id !== "string" || id.trim() === "") {
+          errors.push(
+            `${path} (video): typeVideo='youtube' requires specials.id (the YouTube video ID, e.g. 'dQw4w9WgXcQ') — missing causes the player to fail to initialize.`
+          );
+        }
+        const vid = node.specials?.video;
+        if (typeof vid === "string" && vid.trim() !== "") {
+          // a non-URL string in specials.video crashes new URL() during hydration
+          try { new URL(vid); } catch {
+            warnings.push(
+              `${path} (video): typeVideo='youtube' has specials.video='${vid}' which is not a valid URL — this can crash new URL() during page hydration. For YouTube, only specials.id is needed; leave specials.video unset or set it to a valid URL.`
+            );
+          }
+        }
+      }
+    }
+
+    // list-paragraph: missing specials.text renders the literal string "undefined".
+    if (type === "list-paragraph") {
+      const txt = node.specials?.text;
+      if (txt === undefined || txt === null || txt === "") {
+        warnings.push(`${path} (list-paragraph): specials.text is missing or empty — the live renderer renders the literal string 'undefined'. Set specials.text to a string of <li>item</li> entries.`);
+      }
+    }
+
+    // type 'checkbox' never renders on the published page — warn immediately.
+    if (type === "checkbox") {
+      warnings.push(`${path} (checkbox): renders blank on the published page and never submits — the published renderer has no case for this type. Use checkbox-group with a single option instead.`);
+    }
+
+    // address.field_name must be exactly 'province_id/district_id/commune_id'; any
+    // other value causes the dropdowns to never populate (renderer splits on '/').
+    if (type === "address") {
+      const fn = node.specials?.field_name;
+      if (fn !== "province_id/district_id/commune_id") {
+        errors.push(`${path} (address): specials.field_name must be exactly "province_id/district_id/commune_id" (got "${fn ?? "missing"}") — the renderer splits on '/' to derive the three internal select names; any other value causes dropdowns to never populate.`);
+      }
+    }
+
+    // verify-code: split-input mode (default) only renders for length_otp 4 or 6.
+    if (type === "verify-code") {
+      const otpInputType = node.specials?.type_otp_input;
+      const isSplit = !otpInputType || otpInputType !== "one-input";
+      if (isSplit) {
+        const len = node.specials?.length_otp;
+        if (len !== 4 && len !== 6) {
+          errors.push(`${path} (verify-code): type_otp_input is 'split-input' (default) but length_otp=${len ?? "missing"} — split-input only renders OTP boxes for length_otp 4 or 6; any other value renders nothing. Use type_otp_input:'one-input' for other lengths.`);
+        }
+      }
+    }
+
+    // random-number: all three numbers are required; missing any → renders 'NaN'.
+    if (type === "random-number") {
+      const sp = node.specials ?? {};
+      const bad = (["startNumber", "endNumber", "jumpNumber"] as const).filter((k) => {
+        const v = sp[k];
+        return v === undefined || v === null || (typeof v !== "number" && isNaN(Number(v)));
+      });
+      if (bad.length > 0) {
+        errors.push(`${path} (random-number): specials.${bad.join(", ")} missing or non-numeric — renders literal 'NaN'. All three (startNumber, endNumber, jumpNumber) are required.`);
+      }
+    }
+
+    // spin-wheel: segment percents must sum to 100; also validate message when popup='default'.
+    if (type === "spin-wheel") {
+      const codeStr: unknown = node.specials?.code;
+      const codeDataStr: unknown = node.specials?.codeDataset;
+      const hasCode = typeof codeStr === "string" && codeStr.trim() !== "";
+      const hasCodeDataset = typeof codeDataStr === "string" && codeDataStr.trim() !== "";
+      if (hasCode || hasCodeDataset) {
+        const source = hasCode ? (codeStr as string) : (codeDataStr as string);
+        const lines = source.split("\n").map((l: string) => l.trim()).filter(Boolean);
+        const percents = lines.map((l: string) => {
+          const parts = l.split("|");
+          return parts.length >= 3 ? parseFloat(parts[2]) : NaN;
+        });
+        const allNumeric = percents.every((p: number) => Number.isFinite(p));
+        if (allNumeric && percents.length > 0) {
+          const total = percents.reduce((a: number, b: number) => a + b, 0);
+          if (Math.abs(total - 100) > 0.01) {
+            errors.push(`${path} (spin-wheel): segment percents sum to ${total.toFixed(2)}, not 100 — the winner-selection algorithm throws a TypeError on spin. Adjust segment percents so they sum to exactly 100.`);
+          }
+        }
+      }
+    }
+
+    // survey: option.title is required unless type=='image'.
+    if (type === "survey") {
+      const surveyType = node.specials?.type;
+      if (surveyType !== "image" && Array.isArray(node.specials?.options)) {
+        node.specials.options.forEach((opt: any, oi: number) => {
+          if (!opt || typeof opt !== "object") return;
+          if (!opt.title || (typeof opt.title === "string" && opt.title.trim() === "")) {
+            errors.push(`${path} (survey): options[${oi}] is missing title — causes a TypeError during page build when type is not 'image'. Set option.title or change specials.type to 'image'.`);
+          }
+        });
+      }
+    }
+
+    // grid without a datasetId is permanently invisible on the live published page
+    // (the renderer hides it pending a dataset fetch that never arrives).
+    if (type === "grid") {
+      const dsId = node.specials?.datasetId;
+      if (!dsId || typeof dsId !== "string" || dsId.trim() === "") {
+        warnings.push(`${path} (grid): specials.datasetId is missing — the grid is hidden (opacity 0, off-canvas) on the published page until a successful dataset fetch that never arrives. Set a valid datasetId or use groups for static card layouts.`);
+      }
+    }
+
+    // cart-items placed on the page renders empty on publish — the type-switch in
+    // the publisher has no cart-items case (default ''); render_v4 has no
+    // cart-items class either. The real cart UI is WCart's floating drawer
+    // (div.cart_view) appended beside the cart icon, not by this element.
+    if (type === "cart-items") {
+      warnings.push(`${path} (cart-items): renders empty on the published page — the cart drawer is rendered by WCart beside the cart icon, not by this element. Remove it; configure cartConfigs.checkoutElements['CART-ITEM'] for drawer font sizes instead.`);
     }
 
     // collect events
@@ -381,6 +593,8 @@ export function validatePage(input: unknown): ValidationResult {
 
   // field_name uniqueness WITHIN each form — duplicate names collide in the
   // submitted data. (A nested form is its own data scope, so stop at one.)
+  // Also: warn on fields nested deeper than a direct child of the form (they
+  // validate but never submit — the form's submit loop iterates children only).
   const collectFieldNames = (n: any, acc: string[]) => {
     if (!n || !Array.isArray(n.children)) return;
     for (const c of n.children) {
@@ -403,6 +617,46 @@ export function validatePage(input: unknown): ValidationResult {
         );
       }
     }
+
+    // submit_success must be the NUMBER 1 or 2, not a string.
+    const ss = form.specials?.submit_success;
+    if (ss !== undefined && typeof ss === "string") {
+      warnings.push(`form "${form.id ?? "?"}": specials.submit_success is a string "${ss}" — must be the NUMBER 1 (popup) or 2 (redirect). A string silently falls to the redirect branch (no-op).`);
+    }
+    // submit_success===1 needs a popup_target that resolves to a popup element id.
+    if (ss === 1) {
+      const pt = form.specials?.popup_target;
+      if (!pt || typeof pt !== "string" || pt.trim() === "") {
+        warnings.push(`form "${form.id ?? "?"}": submit_success=1 but popup_target is missing — submit succeeds with zero user feedback. Set popup_target to the id of a popup element.`);
+      } else if (danglesId(pt)) {
+        warnings.push(`form "${form.id ?? "?"}": submit_success=1 but popup_target="${pt}" does not match any element id — submit succeeds with zero user feedback.`);
+      }
+    }
+    // submit_success===2 needs a redirect_url.
+    if (ss === 2) {
+      const ru = form.specials?.redirect_url;
+      if (!ru || typeof ru !== "string" || ru.trim() === "") {
+        warnings.push(`form "${form.id ?? "?"}": submit_success=2 but redirect_url is missing — redirect destination unknown, submit will be a no-op.`);
+      }
+    }
+
+    // Warn on FIELD_TYPES elements that are descendants of the form but NOT direct children.
+    // The form's submit loop only iterates form.children (no recursion), so nested fields
+    // validate but never submit.
+    const checkNestedFields = (parent: any, depth: number) => {
+      if (!parent || !Array.isArray(parent.children)) return;
+      for (const c of parent.children) {
+        if (!c || typeof c !== "object") continue;
+        if (c.type === "form") continue; // nested form is its own scope
+        if (depth > 0 && FIELD_TYPES.has(c.type)) {
+          warnings.push(
+            `form "${form.id ?? "?"}": field "${c.id ?? "?"}" (${c.type}) is nested inside "${parent.type}" — it will validate but never submit. Make it a direct child of the form.`
+          );
+        }
+        checkNestedFields(c, depth + 1);
+      }
+    };
+    checkNestedFields(form, 0);
   }
 
   // 3) Layout bounds — flag children that fall off their container's canvas (a

@@ -84,9 +84,9 @@ export const CLICK_ACTIONS: Record<string, string> = {
 };
 
 export const HOVER_ACTIONS: Record<string, string> = {
-  change_color: "Change color on hover. Extra: change_color, change_color_type, hoverText, hoverBorder, target_mode, target_element.",
-  change_background: "Change background on hover. Extra: hoverColor (applied via --hover-color).",
-  change_text_color: "Change text color on hover. Extra: hoverText.",
+  change_color: "Change color on hover — the MODERN self-contained form. Extra: change_color_type ('text'|'background'|'border'|'reset'), change_color (rgba or linear-gradient value to apply), target_mode ('default' acts on the trigger element itself | 'other' acts on a different element), target_element ('w-<id>' of the element to change when target_mode='other'). Use this instead of the legacy change_background / change_text_color actions.",
+  change_background: "LEGACY — change background on hover via CSS variable --hover-color. BROKEN on published pages: the publisher never defines --hover-color so the hover has no effect. Use change_color with change_color_type:'background' instead.",
+  change_text_color: "LEGACY — change text color on hover via CSS variable --hover-text. BROKEN on published pages: the publisher never defines --hover-text so the hover has no effect. Use change_color with change_color_type:'text' instead.",
   change_underline: "Underline on hover.",
   change_overline: "Overline on hover.",
   animation_hover: "Play a hover animation. target = none.",

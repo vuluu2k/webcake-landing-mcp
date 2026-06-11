@@ -222,12 +222,12 @@ Sections are the page's top-level layout roots. All other elements live as child
 
 | Key | Type / Values | Meaning | Evidence |
 |---|---|---|---|
-| `pageLoadEvent` | `'show'` \| `'hide'` | Show or hide this section on page load after a delay | section.js |
-| `pageLoadEventDelay` | number (ms) | Delay before applying `pageLoadEvent` | section.js |
-| `loadDelayMultiplier` | number | Multiplier applied to `pageLoadEventDelay` (delay × multiplier) | section.js |
-| `afterPageLoadEvent` | `'show'` \| `'hide'` | Action to take after `pageLoadEvent` completes | section.js |
-| `afterPageLoadEventDelay` | number (ms) | Delay for `afterPageLoadEvent` | section.js |
-| `afterLoadDelayMultiplier` | number | Multiplier for `afterPageLoadEventDelay` | section.js |
+| `pageLoadEvent` | `'none'` \| `'auto-hide'` \| `'auto-show'` | Controls section visibility on page load. `'auto-show'`: section is pre-hidden at build; after `pageLoadEventDelay × loadDelayMultiplier` ms it becomes visible. Any non-`'none'` value other than `'auto-show'` hides the section. `'none'` = normal visible. | section.js |
+| `pageLoadEventDelay` | number | Delay value combined with `loadDelayMultiplier` (delay × multiplier ms) before applying `pageLoadEvent` | section.js |
+| `loadDelayMultiplier` | number | Unit for `pageLoadEventDelay`: 1 = ms, 1000 = s, 60000 = min | section.js |
+| `afterPageLoadEvent` | `'none'` \| `'hide'` \| `'show'` | Action taken after `pageLoadEvent` resolves | section.js |
+| `afterPageLoadEventDelay` | number | Delay value for `afterPageLoadEvent` (combined with `afterLoadDelayMultiplier`) | section.js |
+| `afterLoadDelayMultiplier` | number | Unit for `afterPageLoadEventDelay`: 1 = ms, 1000 = s, 60000 = min | section.js |
 | `globalSection` | boolean | Mark as a global/shared section synced across pages | Section.vue |
 | `globalSectionName` | string | Name identifier for the global section | Section.vue |
 | `imageCompression` | boolean | Enable CDN image compression for background image | factory.ts |
