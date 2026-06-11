@@ -6,6 +6,59 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.56] - 2026-06-11
+
+### Added
+- The `expand` pipeline now automatically derives `styles.background` from `specials.src` for every `image-block` node; the live published renderer reads only `styles.background`, so pages authored with only `specials.src` set previously rendered blank on publish.
+- `validate_page` now errors when `countdown.specials.type` is missing or is not `minute`, `duration`, or `daily`; an invalid type throws a TypeError at runtime leaving the timer dead.
+- `validate_page` now errors when a `video` with `typeVideo='vimeo'` or `typeVideo='webcake'` is missing `specials.video`, or when `typeVideo='youtube'` is missing `specials.id`; either omission crashes the whole page on load.
+- `validate_page` now errors when an `address` element's `specials.field_name` is not exactly `province_id/district_id/commune_id`; any other value causes the province/district/commune dropdowns to never populate.
+- `validate_page` now errors when a `verify-code` in split-input mode (the default) has `length_otp` other than 4 or 6; any other value renders no OTP boxes at all.
+- `validate_page` now errors when a `random-number` is missing or has a non-numeric `startNumber`, `endNumber`, or `jumpNumber`; any missing value renders the literal string `NaN` on the live page.
+- `validate_page` now errors when a `spin-wheel`'s segment percents do not sum to 100; unbalanced percents throw a TypeError on spin.
+- `validate_page` now errors when a `survey` option lacks a `title` and `specials.type` is not `image`; a missing title causes a TypeError during page build.
+- `validate_page` now warns when an `image-block` has neither `specials.src` nor a `url()` in `styles.background` for a breakpoint (renders blank on the published page at that breakpoint).
+- `validate_page` now warns when a `text-block` has `styles.background` set without `styles['-webkitBackgroundClip']:'text'`; gradient text-fill mode makes all glyphs invisible on the live page without the clip key.
+- `validate_page` now warns when a `text-block`'s visible text consists entirely of standalone emoji; the recommendation is to use a `rectangle` with `config.svgMask` and a brand-color `styles.background` for card icons instead.
+- `validate_page` now warns when a `text-block`'s estimated wrapped height exceeds the declared box height; live text height is auto, so the overflow pushes the elements below downward.
+- `validate_page` now warns when an `editor-blog` element's `specials.html` appears to contain escaped HTML (`&lt;` present); the publisher injects html raw, so escaped markup renders as literal tag strings on the live page.
+- `validate_page` now warns when a `list-paragraph` has missing or empty `specials.text`; the live renderer renders the literal string `undefined` when the key is absent.
+- `validate_page` now warns when a `checkbox` element is used; the published renderer has no case for this type and renders it blank — use `checkbox-group` with a single option instead.
+- `validate_page` now warns when a `grid` is missing `specials.datasetId`; without a dataset the grid is permanently hidden (opacity 0, off-canvas) on the published page.
+- `validate_page` now warns when a `cart-items` element is placed; the published renderer has no case for it and renders an empty string — the real cart UI is the WCart floating drawer beside the cart icon.
+- `validate_page` now warns when a form's `specials.submit_success` is a string; it must be the number `1` or `2` — a string silently falls to the no-op redirect branch.
+- `validate_page` now warns when a form has `submit_success=1` but `popup_target` is missing or refers to a non-existent element id; the submit then succeeds with no user feedback.
+- `validate_page` now warns when a form has `submit_success=2` but `redirect_url` is missing; the redirect destination is unknown and the submit is a no-op.
+- `validate_page` now warns when a form field (`FIELD_TYPES` element) is nested inside a group or other container rather than as a direct child of the form; the form's submit loop does not recurse, so nested fields validate but never submit.
+
+### Changed
+- Element descriptors for all five categories (layout, content, form, commerce, marketing) have been updated with verified renderer-contract behavior — crash conditions, dead specials, required keys, corrected types, and default values — derived from the production renderer source for 30+ element types; these updates are reflected in `get_element`, `list_elements`, and `get_generation_guide`.
+- `section` descriptor now warns that `globalSection:true` renders the section empty on a normal page publish, and that `custom_class`/`custom_css` take effect only when `specials.customAdvance:true`; `video_background` and the `pageLoadEvent` enum values are now fully documented.
+- `dynamic_page` descriptor now prominently warns that children are dropped by the renderer on a normal publish; use `section` for all normal content.
+- `group` descriptor now documents that a group's own background and border do not render on the live page (use a full-size `rectangle` as the first child for visual styling) and adds `scrollAuto:'yes'` for horizontal-scroll mobile strips.
+- `grid` descriptor now marks `specials.datasetId` as required for live rendering (without it the grid is permanently hidden), corrects `timeSlide` units to seconds, and notes that only `children[0]` is used as the clone template on the published page.
+- `carousel` descriptor now documents that the renderer overrides `styles.width`, that `autoplayMode` is the string `'off'|'start'|'repeat'` (not a boolean), and adds `transition`/`transitionTime` config keys; `slide` and `popup` descriptors now mark `specials.src` as dead on the published renderer (set the background via `styles.background` instead).
+- `popup` descriptor now enumerates `position` values and documents `openInPage`, `delayPopup`, `scrollTo`, and `maxHeight` keys.
+- `text-block` descriptor now documents that `styles.background` activates gradient text-fill mode (requires `styles['-webkitBackgroundClip']:'text'`) and that `styles.backgroundTxt` is the correct key for a colored box behind the text; `config.virtualHeight` is also documented.
+- `image-block` descriptor now explains that the live renderer reads `styles.background` (not `specials.src`) and that the server auto-derives it from `specials.src` on every expand; CDN crop keys (`widthBgImage`, `heightBgImage`, `topBgImage`, `leftBgImage`) and `keep_solution` are now documented.
+- `rectangle` descriptor now fully documents `config.svgMask` for per-breakpoint scalable SVG icon shapes and recommends this pattern over keyboard emoji for feature card icons; the `line` seed now sets default `borderWidth`, `borderStyle`, and `borderColor` (previously no visual defaults were seeded, making the element invisible without explicit styling).
+- `button` descriptor now warns that the `change_background` and `change_text_color` hover event actions are broken on published pages (the CSS variables they rely on are never defined at publish time); use `change_color` with `change_color_type` instead.
+- `video` descriptor now documents required specials per `typeVideo`, notes that a `url()` in `styles.background` takes precedence over the `specials.img` poster (do not set a flat background color on a video element), and documents `videoFit`.
+- `gallery` seed now sets `config.showThumbnail:true` on both breakpoints; previously unset, the live renderer showed an 80px thumbnail strip while the editor hid it; the descriptor now documents that video items must use `type:'video'` and that `typeVideo:'upload'` renders empty on the live page.
+- `html-box` and `editor-blog` descriptors now clarify their opposite HTML-escaping behaviors (`html-box` stores escaped HTML; `editor-blog` stores raw HTML) and that both have a wrapper height fixed to `styles.height`.
+- `form` descriptor now documents that all form fields must be direct children of the form (not nested inside groups or rectangles), corrects `submit_success` as a number (not a string), marks `popup_target` as required when `submit_success=1`, and adds `sync_to_crm`; the seed now sets `fb_event_type:'none'` and `sync_to_crm:'none'`.
+- `checkbox` descriptor now marks the element as non-functional on the published page; use `checkbox-group` with a single option instead.
+- `address` descriptor now marks `specials.field_name` as the canonical fixed value `province_id/district_id/commune_id` required by the renderer, and the seed now sets this value directly (it previously seeded a dynamic `address_<id>` value that caused the dropdowns to never populate).
+- `verify-code` seed now sets `type_otp_input:'split-input'` and `length_otp:6`; the descriptor documents that split-input only renders OTP boxes for `length_otp` 4 or 6.
+- `cart-items` descriptor now prominently warns not to place this element; `table` descriptor now makes `specials.sourceTable` the primary content key (the SSR publisher renders only this and the google_sheet branch is commented out in the production publisher).
+- `countdown` seed now sets `customize:'nothing'` (was `false`) and adds `showHour:true`; the descriptor corrects `customize` from a boolean to the string `'customize'|'nothing'` and marks `specials.type` as required.
+- `spin-wheel` seed now sets `background`, `backgroundBtn`, `spin`, `rotate`, `popup`, `popupTurnOver`, and `showCoupon`; the descriptor corrects `spin` to a string-number of turns, marks `message` as required when `popup='default'`, and corrects `showCoupon` to the string `'yes'|'no'`.
+- `notify` descriptor now corrects `dataType` values (1=Google Sheets, 2=dataset; there is no static-data `0`), corrects `soundMode` to the string `'none'|'default'|'link'` (was documented as a boolean), fixes `source`/`sheetID` semantics (source is the spreadsheet ID; sheetID is the tab name), and documents `config.notiPos` for viewport-pinned toast positioning.
+- `change_background` and `change_text_color` hover event actions are now documented as legacy and broken on published pages in the event vocab; `change_color` with `change_color_type` is the correct modern replacement.
+- `get_generation_guide` now includes a TEXT HEIGHT MATH section explaining that live `text-block` height is auto with a wrapping-estimate formula; the HERO section warns against text columns running under an adjacent image; the FEATURES section recommends `rectangle`+`config.svgMask` over keyboard emoji for card icons; a CARD ANATOMY note documents the group-as-container pattern.
+- Server instructions now note that `get_element` must be called for any element type not already fetched in the current conversation (including when building a second page in a long session where earlier skeletons may have been compacted out of context).
+- `validate_page` "has children but not a container type" error message now includes the element id and a `patch_page` fix hint describing the correct group-with-rectangle-backdrop structure.
+
 ## [1.0.55] - 2026-06-10
 
 ### Fixed
