@@ -930,6 +930,53 @@ console.log("== borderRadius normalization: numeric/unitless coerced to px by ex
   );
 }
 
+console.log("== background normalization: url() layers canonicalised to the editor shorthand ==");
+{
+  const CANON = "center center/ cover no-repeat scroll content-box url(https://x.test/a.jpg) border-box";
+  const mkBgPage = (bgValue: string) => ({
+    page: [
+      {
+        id: "bg_sec", type: "section",
+        responsive: {
+          desktop: { styles: { height: 400, background: bgValue } },
+          mobile:  { styles: { height: 400, background: bgValue } },
+        },
+        children: [],
+      },
+    ],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  const bgOf = (src: any) => src.page[0].responsive.desktop.styles.background;
+
+  // 1) plain-CSS url layer (reference-page style) → canonical shorthand
+  const expPlain: any = landingDomain.expand(mkBgPage("url(https://x.test/a.jpg) center/cover no-repeat"));
+  check("background: plain 'url(x) center/cover no-repeat' → canonical", bgOf(expPlain) === CANON, bgOf(expPlain));
+
+  // 2) gradient overlay + non-canonical url layer → gradient kept, url layer canonicalised
+  const grad = "linear-gradient(160deg, rgba(13,45,58,0.88) 0%, rgba(10,124,110,0.75) 60%, rgba(13,45,58,0.9) 100%)";
+  const expGrad: any = landingDomain.expand(mkBgPage(`${grad}, url(https://x.test/a.jpg) center/cover`));
+  check("background: gradient + url layer → gradient kept + canonical url", bgOf(expGrad) === `${grad}, ${CANON}`, bgOf(expGrad));
+
+  // 3) editor-mangled 'undefined/ …' layer → repaired to canonical, gradient kept
+  const expBroken: any = landingDomain.expand(
+    mkBgPage(`${grad}, undefined/ undefined/ undefined/ undefined/ content-box url(https://x.test/a.jpg)`)
+  );
+  check("background: mangled 'undefined/…' url layer → repaired", bgOf(expBroken) === `${grad}, ${CANON}`, bgOf(expBroken));
+
+  // 4) already-canonical layer left byte-identical (idempotent)
+  const expCanon: any = landingDomain.expand(mkBgPage(CANON));
+  check("background: canonical layer untouched", bgOf(expCanon) === CANON, bgOf(expCanon));
+
+  // 5) gradient-only / color-only backgrounds untouched
+  const expOnlyGrad: any = landingDomain.expand(mkBgPage(grad));
+  check("background: gradient-only untouched", bgOf(expOnlyGrad) === grad, bgOf(expOnlyGrad));
+
+  // 6) expand(compact(x)) invariant with a canonicalised background
+  const expanded = landingDomain.expand(mkBgPage(`${grad}, url(https://x.test/a.jpg) center/cover`));
+  const reexpanded = landingDomain.expand(landingDomain.compact(expanded));
+  check("background round-trip: expand(compact(expand(x))) deep-equals expand(x)", deepEq(reexpanded, expanded));
+}
+
 console.log("== text-block styles.background warning (gradient-text-fill mode) ==");
 {
   const mkTbBgPage = (bgValue: string, withClip: boolean) => ({

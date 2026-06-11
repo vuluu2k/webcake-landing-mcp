@@ -117,12 +117,12 @@ gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả t
 | Tool | Mô tả |
 |------|-------------|
 | `search_images` | Tìm ảnh stock THẬT (Pexels) cho trang — trả URL hotlink nhiều cỡ để gắn vào `specials.src` của element ảnh. Chạy **không cần setup** (proxy hosted chung cấp ảnh); đặt env `PEXELS_API_KEY` hoặc header `x-pexels-key` để dùng [key Pexels miễn phí](https://www.pexels.com/api/) / quota riêng. |
-| `upload_images` | Chuyển URL ảnh ngoài (từ kết quả `ingest_html`/`ingest_url`) hoặc `data:` URI thành URL do Webcake host (`statics.pancake.vn`) để dùng trong `specials.src`. Xử lý đến 20 URL/lần song song, giới hạn 8 MB/ảnh. Không cần Webcake credentials. **Mặc định `dry_run=true`.** Dùng khi clone trang hoặc khi người dùng cung cấp ảnh riêng; dùng `search_images` cho ảnh stock. |
+| `upload_images` | Chuyển URL ảnh ngoài (từ kết quả `ingest_html`/`ingest_url`) hoặc `data:` URI thành URL do Webcake host (`statics.pancake.vn`) để dùng trong `specials.src`. Xử lý đến 20 URL/lần song song, giới hạn 8 MB/ảnh. Không cần Webcake credentials. **Mặc định `dry_run=true`.** Ảnh trong reference là tài sản của người dùng — dùng tool này cho CẢ HAI intent (adapt VÀ clone) khi trang được dựng từ HTML/URL tham chiếu, và khi người dùng cung cấp ảnh riêng; `search_images` chỉ lấp các slot không có ảnh nguồn. |
 
 ### Ingest (không cần config)
 | Tool | Mô tả |
 |------|-------------|
-| `ingest_html` | Parse HTML thô thành AST layout tham chiếu (sections phân loại theo vai trò, heading, CTA, trường form, màu sắc/font hàng đầu, bảng màu CSS custom-property, background_images từ stylesheet). `detail:'compact'` (mặc định) trả ~2-5 KB; `detail:'full'` trả AST giàu hơn gồm blocks lặp lại theo section (card/tile/bước với title/body/image/cta), danh sách li, gradient, và images dạng `{ src, alt }` — dùng khi clone trung thực. URL ảnh trong kết quả (`images`, `background_images`, `og_image`) nên được re-host qua `upload_images` khi clone. |
+| `ingest_html` | Parse HTML thô thành AST layout tham chiếu (sections phân loại theo vai trò, heading, CTA, trường form, màu sắc/font hàng đầu, bảng màu CSS custom-property, background_images từ stylesheet). `detail:'compact'` (mặc định) trả ~2-5 KB; `detail:'full'` trả AST giàu hơn gồm blocks lặp lại theo section (card/tile/bước với title/body/image/cta), danh sách li, gradient, và images dạng `{ src, alt }` — dùng khi clone trung thực. URL ảnh trong kết quả (`images`, `background_images`, `og_image`) là tài sản của người dùng — re-host qua `upload_images` và dùng lại cho CẢ HAI intent (adapt chỉ viết lại chữ, không thay ảnh). |
 | `ingest_url` | Fetch URL công khai rồi chạy cùng bộ trích xuất như `ingest_html`. Hỗ trợ cùng tham số `detail`. Trả cảnh báo khi trang là client-rendered để caller có thể dùng screenshot thay thế (Claude phân tích screenshot natively). |
 
 ### Lưu trữ (cần `WEBCAKE_API_BASE` + `WEBCAKE_JWT`)

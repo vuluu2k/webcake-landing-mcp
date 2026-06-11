@@ -116,6 +116,75 @@ function normalizeBorderRadius(node: any): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// background normalization: the editor's background trait can only parse a
+// url() layer written in its own canonical shorthand
+//   '<pos>/ <size> <repeat> <attachment> content-box url(<src>) border-box'
+// (splitBackground in landing_page_backend/assets/editor/common.js). A url()
+// layer in any other format — e.g. plain CSS copied from a reference page like
+// 'url(x) center/cover no-repeat' — survives the first save, but the moment the
+// page is touched in the editor the picker re-composes it from unparsed parts
+// as 'undefined/ undefined/ … content-box url(x)' and SAVES that garbage, so
+// the band renders blank. Gradient/color layers are unaffected.
+//
+// Fix: after every expand pass, split styles.background into top-level comma
+// layers (paren-aware); keep gradient/color layers unless they carry a literal
+// 'undefined' token (a previously mangled layer — drop it); rewrite every url()
+// layer that is not already editor-canonical into the canonical shorthand,
+// preserving the url. Deterministic + idempotent, so expand(compact(x)) ==
+// expand(x) still holds.
+// ---------------------------------------------------------------------------
+
+/** Split a CSS background value into top-level comma-separated layers. */
+function splitBackgroundLayers(bg: string): string[] {
+  const layers: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of bg) {
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      layers.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  layers.push(cur);
+  return layers.map((l) => l.trim()).filter((l) => l !== "");
+}
+
+/** The editor-canonical url() layer shape its splitBackground() can re-parse. */
+const CANONICAL_URL_LAYER =
+  /^(left|center|right) (top|center|bottom)\/ (cover|contain|auto|[\d.]+(?:px|%)(?: [\d.]+(?:px|%))?) (no-repeat|repeat|repeat-x|repeat-y|space|round)(?: (scroll|fixed|local))? content-box url\(.+\)(?: border-box)?$/;
+
+/** Normalise one styles.background value (returns the input when no url layer). */
+function normalizeBackgroundValue(bg: unknown): unknown {
+  if (typeof bg !== "string" || !bg.includes("url(")) return bg;
+  const out: string[] = [];
+  for (const layer of splitBackgroundLayers(bg)) {
+    const url = layer.match(/url\((['"]?)(.*?)\1\)/);
+    if (url) {
+      out.push(CANONICAL_URL_LAYER.test(layer) ? layer : imgBackground(url[2]));
+    } else if (!/\bundefined\b/.test(layer)) {
+      out.push(layer);
+    }
+  }
+  return out.length ? out.join(", ") : bg;
+}
+
+/** Walk a tree node and canonicalise every url() background layer in-place (mutates). */
+function normalizeBackgrounds(node: any): void {
+  if (!node || typeof node !== "object") return;
+  for (const bp of ["desktop", "mobile"] as const) {
+    const styles = node.responsive?.[bp]?.styles;
+    if (!styles || typeof styles !== "object") continue;
+    const fixed = normalizeBackgroundValue(styles.background);
+    if (fixed !== styles.background) styles.background = fixed;
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) normalizeBackgrounds(child);
+  }
+}
+
 /** Apply all post-expand normalizations to every node in a page source. */
 function normalizeSource(source: any): any {
   if (!source || typeof source !== "object") return source;
@@ -124,6 +193,7 @@ function normalizeSource(source: any): any {
       for (const node of (source as any)[arr]) {
         normalizeImageBlocks(node);
         normalizeBorderRadius(node);
+        normalizeBackgrounds(node);
       }
     }
   }
