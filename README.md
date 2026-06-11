@@ -80,7 +80,8 @@ MCP (Model Context Protocol) server that teaches AI agents how to build a comple
 It exposes the element catalog, per-element usage hints + `specials`, the full page JSON Schema,
 valid element/page skeletons, a page validator, and tools to create or edit pages on the backend.
 The AI agent produces the full `{ page, popup, settings, options, cartConfigs }` JSON; `create_page`
-persists it (source-only — the page opens in the editor where re-saving renders it).
+persists it and auto-publishes (build + `publish_html`) so the preview renders immediately (the edit
+tools save source-only — re-publish via `publish_page` after edits).
 
 | Method | Best for | Auth |
 |--------|----------|------|

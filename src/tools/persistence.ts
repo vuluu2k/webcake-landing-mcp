@@ -31,10 +31,52 @@ import {
   toPreviewUrl,
 } from "../persistence/webcake-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "../persistence/draft-cache.js";
+import type { WebcakeConfig } from "../persistence/types.js";
 
 export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // Resolve config from THIS request's headers (remote per-user JWT) first, then env.
   const cfgFor = (extra: any) => readConfig(configFromHeaders(extra?.requestInfo?.headers));
+
+  // After a successful CREATE, build the rendered app and publish via the
+  // editor's publish_html route so the page renders immediately — without this
+  // a fresh page's preview is a blank shell until publish_page runs or the page
+  // is re-saved in the editor. Failures here never fail the create (the page
+  // exists either way); the result tells the caller how to retry. Skipped when
+  // no build host is configured (a source-only legacy publish renders nothing).
+  const autoPublish = async (config: WebcakeConfig, pageId: string, source: any) => {
+    if (!config.buildBase) {
+      return {
+        published: false,
+        skipped: true,
+        note: "No build host configured (WEBCAKE_BUILD_BASE env / x-webcake-build-base header; prod preset auto-configures https://build.webcake.io) — created source-only; the preview stays blank until publish_page runs with a build host or the page is re-saved in the editor.",
+      };
+    }
+    console.error(`[create_page] auto-publish: building ${pageId} via ${config.buildBase}`);
+    const build = await buildPageApp(config.buildBase, pageId, source);
+    if (!build.ok) {
+      console.error(`[create_page] auto-publish build failed: ${build.error}`);
+      return {
+        published: false,
+        error: `Build host failed (${build.error ?? "unknown error"})`,
+        hint: `The page was CREATED fine — only the rendering publish failed. Retry via publish_page({ page_id: "${pageId}", dry_run: false }).`,
+      };
+    }
+    const outcome = await publishPage(config, pageId, source, { app: build.app, app_css: build.app_css });
+    if (!outcome.ok) {
+      console.error(`[create_page] auto-publish publish failed: ${outcome.error}`);
+      return {
+        published: false,
+        status: outcome.status,
+        error: outcome.error,
+        hint: `The page was CREATED fine — only the rendering publish failed. Retry via publish_page({ page_id: "${pageId}", dry_run: false }).`,
+      };
+    }
+    return {
+      published: true,
+      rendered: true,
+      note: "Auto-published (no domain): the preview link renders for ~10 minutes after each publish, then expires. For a permanent public URL attach a domain via publish_page({ page_id, custom_domain, dry_run:false }).",
+    };
+  };
 
   // 8) List organizations -----------------------------------------------------
   server.tool(
@@ -59,7 +101,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 9) Create page (persist) --------------------------------------------------
   server.tool(
     "create_page",
-    "Persists a page source to the configured Webcake backend: creates a NEW page and saves the source (source-only — opens in the editor where re-saving renders it). Validates first. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. Organization resolution on the real run (dry_run=false): (1) explicit organization_id wins; pass the string 'personal' to save without any org. (2) WEBCAKE_ORG_ID env / x-webcake-org-id header wins. (3) Otherwise list_organizations is called: 0 orgs or lookup fails → personal (no org); exactly 1 org → used automatically (result includes organization_auto_selected:true); 2+ orgs → returns ok:false with the org list and asks the caller to re-call with organization_id. Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Persists a page source to the configured Webcake backend: creates a NEW page, saves the source, then AUTO-PUBLISHES it (builds the rendered app on the build host + publishes via the editor's publish_html route) so the preview renders immediately — set publish:false to skip, and note the no-domain preview link still expires ~10 minutes after each publish (publish_page with custom_domain gives a permanent URL). A failed auto-publish never fails the create (result.publish says how to retry). Validates first. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. Organization resolution on the real run (dry_run=false): (1) explicit organization_id wins; pass the string 'personal' to save without any org. (2) WEBCAKE_ORG_ID env / x-webcake-org-id header wins. (3) Otherwise list_organizations is called: 0 orgs or lookup fails → personal (no org); exactly 1 org → used automatically (result includes organization_auto_selected:true); 2+ orgs → returns ok:false with the org list and asks the caller to re-call with organization_id. Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       source: z
         .any()
@@ -78,9 +120,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .boolean()
         .optional()
         .describe("Default TRUE — validate, cache the source as draft_id, and preview the request without sending. Set false to actually create."),
+      publish: z
+        .boolean()
+        .optional()
+        .describe("Default TRUE — after a successful create, automatically build the rendered app and publish (publish_html) so the preview renders immediately. Set false to create source-only (blank preview until publish_page runs)."),
     },
     { title: "Create Webcake Page", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-    async ({ source, draft_id, name, organization_id, dry_run }, extra) => {
+    async ({ source, draft_id, name, organization_id, dry_run, publish }, extra) => {
       const isDry = dry_run !== false; // default true (safe)
 
       // --- Resolve source: from cache (draft_id) or from the argument ---
@@ -93,7 +139,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           return text({
             created: false,
             reason: "draft_expired",
-            hint: "The cached draft is gone (expired after ~30 min or evicted). Re-send the full source via create_page({ source:…, dry_run:false }).",
+            hint: "The cached draft is gone (expired after ~2 h or evicted). Re-send the full source via create_page({ source:…, dry_run:false }).",
           });
         }
         if (cached.kind != null && cached.kind !== "page") {
@@ -139,7 +185,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
-            "Do NOT rebuild the whole source — it is cached as draft_id. Each error names the offending element id — fix ONLY those elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged tree and creates the page. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' } (run list_elements/get_element if unsure). A stray/extra key ('must NOT have additional properties') → { op:'replace', id, element:<clean node> } — op:'update' MERGES and cannot delete a key. The draft expires in ~30 min.",
+            "Do NOT rebuild the whole source — it is cached as draft_id. Each error names the offending element id — fix ONLY those elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged tree and creates the page. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' } (run list_elements/get_element if unsure). A stray/extra key ('must NOT have additional properties') → { op:'replace', id, element:<clean node> } — op:'update' MERGES and cannot delete a key. The draft expires in ~2 h.",
         });
       }
       const parsed = domain.coerce(expanded);
@@ -184,6 +230,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           missing_env: missing,
           target_organization_id: orgId ?? config?.orgId ?? null,
           organization_note: organizationNote,
+          publish_step:
+            publish === false
+              ? { would_run: false, note: "publish:false — the real run will create source-only (blank preview until publish_page)." }
+              : config?.buildBase
+              ? { would_run: true, build_host: config.buildBase, note: "After creating, the real run auto-builds the rendered app and publishes (publish_html) so the preview renders immediately." }
+              : { would_run: false, note: "No build host configured — the real run creates source-only (blank preview). Set WEBCAKE_BUILD_BASE env or x-webcake-build-base header (prod preset auto-configures) to enable auto-publish." },
           draft_id: existingDraftId,
           request: config
             ? buildRequestRedacted(config, pageName, parsed, orgId)
@@ -272,9 +324,16 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const outcome = await createPage(config, pageName, parsed, resolvedOrgId);
       if (outcome.ok) {
         deleteDraft(existingDraftId); // created — drop the draft
+        // Auto-publish (default): build + publish_html so the preview renders
+        // immediately. Never fails the create — result.publish carries the state.
+        const publishOutcome =
+          publish === false
+            ? { published: false, skipped: true, note: "publish:false — created source-only; the preview stays blank until publish_page runs." }
+            : await autoPublish(config, outcome.page_id!, parsed);
         return text({
           created: true,
           ...outcome,
+          publish: publishOutcome,
           ...warningsField(result.warnings),
           ...(organizationAutoSelected ? { organization_auto_selected: true } : {}),
           ...(organizationNote ? { note: organizationNote } : {}),
@@ -282,12 +341,22 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       }
       // Failure (including timeout): keep the draft so the model can retry.
       updateDraft(existingDraftId, expanded);
+      // A backend 404/5xx on a route that normally works is usually a transient
+      // deploy/restart window — the fix is to RETRY THE SAME REQUEST, not to
+      // change parameters. (Observed failure mode: a transient 404 with an
+      // organization_id made the model "work around" it by dropping the org —
+      // the page then landed in personal instead of the requested workspace.)
+      const transient = outcome.status === 404 || (outcome.status ?? 0) >= 500 || outcome.status === 0;
       return text({
         created: false,
         ...outcome,
         ...warningsField(result.warnings),
         draft_id: existingDraftId,
-        hint: `Create failed — source is cached. Retry via create_page({ draft_id: "${existingDraftId}", dry_run: false }) or fix elements via patch_page({ draft_id: "${existingDraftId}", patches:[…], dry_run:false }). The draft expires in ~30 min.`,
+        hint:
+          `Create failed — source is cached. Retry via create_page({ draft_id: "${existingDraftId}", dry_run: false }) or fix elements via patch_page({ draft_id: "${existingDraftId}", patches:[…], dry_run:false }). The draft expires in ~2 h.` +
+          (transient
+            ? ` A ${outcome.status === 0 ? "network error" : outcome.status} from the backend is usually TRANSIENT (deploy/restart window) — retry the SAME draft with the SAME organization_id after a short pause. Do NOT drop or change organization_id to work around it: the page would land in the wrong workspace.`
+            : ""),
       });
     }
   );
@@ -412,7 +481,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           return text({
             updated: false,
             reason: "draft_expired",
-            hint: "The cached draft is gone (expired after ~30 min or evicted). Re-send the full source via update_page({ page_id, source:…, dry_run:false }).",
+            hint: "The cached draft is gone (expired after ~2 h or evicted). Re-send the full source via update_page({ page_id, source:…, dry_run:false }).",
           });
         }
         if (cached.kind !== "update") {
@@ -499,7 +568,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         ...outcome,
         ...warningsField(result.warnings),
         draft_id: existingDraftId,
-        hint: `Update failed — source is cached. Retry via update_page({ draft_id: "${existingDraftId}", dry_run: false }) or fix elements via patch_page({ page_id: "${resolvedPageId}", patches:[…] }). The draft expires in ~30 min.`,
+        hint: `Update failed — source is cached. Retry via update_page({ draft_id: "${existingDraftId}", dry_run: false }) or fix elements via patch_page({ page_id: "${resolvedPageId}", patches:[…] }). The draft expires in ~2 h.`,
       });
     }
   );
@@ -586,7 +655,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           return text({
             added: false,
             reason: "draft_expired",
-            hint: "The cached section draft is gone (expired after ~30 min or evicted). Re-send the sections via add_section({ page_id, sections:[…] }).",
+            hint: "The cached section draft is gone (expired after ~2 h or evicted). Re-send the sections via add_section({ page_id, sections:[…] }).",
           });
         }
         if (cached.kind !== "sections") {
@@ -645,7 +714,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
-            "Do NOT rebuild the section batch — it is cached as draft_id. Each error names the offending element id — fix ONLY those elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged shell and appends the sections. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' }. A stray/extra key ('must NOT have additional properties') → { op:'replace', id, element:<clean node> } — op:'update' MERGES and cannot delete a key. The draft expires in ~30 min.",
+            "Do NOT rebuild the section batch — it is cached as draft_id. Each error names the offending element id — fix ONLY those elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged shell and appends the sections. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' }. A stray/extra key ('must NOT have additional properties') → { op:'replace', id, element:<clean node> } — op:'update' MERGES and cannot delete a key. The draft expires in ~2 h.",
         });
       }
 
@@ -870,7 +939,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           return text({
             patched: false,
             reason: "draft_expired",
-            hint: "The cached draft is gone (expired after ~30 min or evicted). Re-send the full source via create_page.",
+            hint: "The cached draft is gone (expired after ~2 h or evicted). Re-send the full source via create_page.",
           });
         }
         base = draft.source; // already an expanded full tree
@@ -1152,6 +1221,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         } else {
           updateDraft(draft_id, base); // keep for retry
         }
+        // A page created via the fix-after-error path gets the same auto-publish
+        // as a direct create_page (build + publish_html so the preview renders).
+        const publishOutcome = outcome.ok ? await autoPublish(config, outcome.page_id!, parsed) : undefined;
         return text({
           patched: outcome.ok,
           created: outcome.ok,
@@ -1162,6 +1234,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           preview_url: outcome.preview_url,
           status: outcome.status,
           error: outcome.error,
+          ...(publishOutcome ? { publish: publishOutcome } : {}),
           ...warningsField(result.warnings),
           ...(outcome.ok ? {} : { draft_id, hint: `Create failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) or resolve the error first.` }),
         });
@@ -1219,7 +1292,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         error: outcome.error,
         ...warningsField(result.warnings),
         draft_id: liveDraftId,
-        hint: `Save failed — the patched source is cached. Retry via patch_page({ draft_id: "${liveDraftId}", dry_run: false }) with no patches. The draft expires in ~30 min.`,
+        hint: `Save failed — the patched source is cached. Retry via patch_page({ draft_id: "${liveDraftId}", dry_run: false }) with no patches. The draft expires in ~2 h.`,
       });
     }
   );

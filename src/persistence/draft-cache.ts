@@ -43,7 +43,11 @@ export interface PageDraft {
   created: number; // ms; refreshed on each patch so an actively-edited draft stays alive
 }
 
-const TTL_MS = 30 * 60 * 1000; // 30 minutes
+/** Draft lifetime — default 2 hours. Override via WEBCAKE_DRAFT_TTL_MS env. */
+const TTL_MS = (() => {
+  const v = parseInt(process.env.WEBCAKE_DRAFT_TTL_MS ?? "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 2 * 60 * 60 * 1000;
+})();
 const MAX_ENTRIES = 50;
 const store = new Map<string, PageDraft>();
 
