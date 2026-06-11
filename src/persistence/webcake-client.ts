@@ -44,14 +44,23 @@ const SEARCH_PAGES_ENDPOINT = "/api/v1/ai/search_pages";
 const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
 const APPEND_ENDPOINT = "/api/v1/ai/append_section";
-// The editor's own publish route (NOT under /api/v1/ai): saves the source as a
-// new version and creates/updates the page_published record (+ optional custom
-// domain/path) so the page goes live. NOTE: this scope is host-constrained to
-// the BUILDER host (router scope `host: "builder."`), so the request goes to
-// config.builderBase, not the API base.
-const publishEndpoint = (pageId: string) => `/api/pages/${encodeURIComponent(pageId)}/edit/publish`;
-const publishUrl = (config: WebcakeConfig, pageId: string) =>
-  `${(config.builderBase ?? config.base).replace(/\/+$/, "")}${publishEndpoint(pageId)}`;
+// The editor's own publish routes (NOT under /api/v1/ai). Both scopes are
+// host-constrained to the BUILDER host (router scope `host: "builder."`), so
+// requests go to config.builderBase, not the API base.
+//
+// /edit/publish_html is what the editor's publish button calls and the ONLY
+// route that creates/updates the PagePublishedV2 record — the record EVERY
+// public serving path reads (render_custom_domain → get_published_by_domain_path_v2
+// → serves page_published_v2.app). It expects the rendered app/app_css in the body.
+//
+// /edit/publish is LEGACY: it saves the source (+app/app_css onto the page_source
+// row, which only the ~10-minute /preview/:id window serves) and writes a
+// PagePublished v1 record that no serving path reads. Kept only as the
+// source-only fallback when no build host is available.
+const publishHtmlEndpoint = (pageId: string) => `/api/pages/${encodeURIComponent(pageId)}/edit/publish_html`;
+const legacyPublishEndpoint = (pageId: string) => `/api/pages/${encodeURIComponent(pageId)}/edit/publish`;
+const publishUrl = (config: WebcakeConfig, pageId: string, rendered: boolean) =>
+  `${(config.builderBase ?? config.base).replace(/\/+$/, "")}${rendered ? publishHtmlEndpoint(pageId) : legacyPublishEndpoint(pageId)}`;
 
 function authHeaders(config: WebcakeConfig, orgId?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -90,13 +99,34 @@ export function toEditorUrl(config: WebcakeConfig, raw: string | undefined): str
 }
 
 /**
+ * Build a SELF-LOGGING-IN editor link. The bare `/editor/v2/<id>` route sits
+ * behind the backend's `:passport` pipeline (jwt COOKIE or Bearer header), so a
+ * plain editor URL 401s ("Token not found") in any browser that isn't already
+ * logged in to Webcake. The builder host exposes `GET /transport?token=&redirect_uri=`
+ * (public; AuthController.transport) which sets the `jwt` cookie and redirects —
+ * so we wrap the editor URL in it, carrying the SAME jwt the MCP call used
+ * (env / auth.json / per-request header). The token is the caller's own
+ * credential, but the link logs into their account — share it with the page
+ * owner only, never publish it. Preview links stay UNWRAPPED (they're public).
+ */
+export function toEditorLoginUrl(config: WebcakeConfig, raw: string | undefined): string | undefined {
+  const editor = toEditorUrl(config, raw);
+  if (!editor || !config.jwt) return editor;
+  const builder = config.builderBase ?? config.appBase;
+  if (!builder) return editor;
+  return `${builder.replace(/\/+$/, "")}/transport?token=${encodeURIComponent(config.jwt)}&redirect_uri=${encodeURIComponent(editor)}`;
+}
+
+/**
  * Resolve the public preview link (`/preview/<page_id>`) onto the PREVIEW host
  * (config.previewBase) — NOT the builder subdomain. The /preview/:id route only
  * exists on the root preview hosts (preview.localhost:5800 local /
- * staging.webcake.me staging / www.webcake.me prod); the v4 renderer there serves
- * the STORED `app`/`app_css` build columns — an MCP-created page's preview is
- * blank until publish_page (with a build host) runs or the page is re-saved in
- * the Webcake editor.
+ * staging.webcake.me staging / www.webcake.me prod); the v4 renderer there
+ * serves the page_source row's STORED `app`/`app_css` build columns, and only
+ * for ~10 minutes after the last source save (then "Preview page is expired").
+ * An MCP-created page's preview is blank until a rendered publish_page runs or
+ * the page is re-saved in the Webcake editor — and even then the link is
+ * ephemeral; only a custom_domain publish gives a permanent URL.
  */
 export function toPreviewUrl(config: WebcakeConfig, raw: string | undefined): string | undefined {
   if (!raw) return raw;
@@ -212,7 +242,7 @@ export async function createPage(
     ok: true,
     status: res.status,
     page_id: pageId,
-    editor_url: toEditorUrl(config, editorPath),
+    editor_url: toEditorLoginUrl(config, editorPath),
     preview_url: toPreviewUrl(config, previewPath),
     organization_id: (orgId ?? config.orgId) ?? null,
     raw: data,
@@ -366,7 +396,7 @@ export async function appendSection(
     ok: true,
     status: res.status,
     page_id: pageIdOut,
-    editor_url: toEditorUrl(config, data?.editor_url),
+    editor_url: toEditorLoginUrl(config, data?.editor_url),
     preview_url: toPreviewUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
     section_count: data?.section_count,
@@ -415,7 +445,7 @@ export async function updatePageSource(
     ok: true,
     status: res.status,
     page_id: pageIdOut,
-    editor_url: toEditorUrl(config, data?.editor_url),
+    editor_url: toEditorLoginUrl(config, data?.editor_url),
     preview_url: toPreviewUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
     raw: data,
@@ -511,41 +541,79 @@ export async function buildPageApp(
 
 export type PublishOpts = { customDomain?: string; customPath?: string; app?: string; app_css?: string };
 
-function publishBody(sourceString: string, opts: PublishOpts = {}): string {
-  // The publish action expects `source` as a JSON STRING (it Jason.decode!s it),
-  // plus optional custom_domain/custom_path. is_publish marks the save as a
-  // publish in save_page_with_source. app/app_css are the rendered HTML produced
-  // by the build host — when present the page renders without the editor.
-  const payload: Record<string, unknown> = {
-    source: sourceString,
+/**
+ * Body for the editor's /edit/publish_html route — mirrors the payload the
+ * editor's PublishModal sends (see landing_page_backend assets/editor
+ * PublishModal.vue): the saved source rides as the `data_node` JSON STRING (the
+ * route Jason.decode!s it and stores it via save_page_with_source), there is NO
+ * `source` key, and `settings` (with `mobile_only` folded in from
+ * options.mobileOnly) is stored on the PagePublishedV2 record the public
+ * serving paths read. `render_type: "v4"` only when a domain is attached —
+ * exactly what the editor sends. `auto: false` so the publish creates a version.
+ */
+function publishHtmlBody(source: any, opts: PublishOpts = {}): string {
+  const hasDomain = !!opts.customDomain;
+  return JSON.stringify({
+    custom_domain: opts.customDomain ?? "",
+    custom_path: opts.customPath ?? "",
+    selected_custom_domain: hasDomain,
+    data_node: JSON.stringify(source),
+    render_type: hasDomain ? "v4" : null,
+    app: opts.app,
+    app_css: opts.app_css ?? "",
+    settings: { ...(source?.settings ?? {}), mobile_only: source?.options?.mobileOnly ?? false },
+    type: 1,
+    auto: false,
+  });
+}
+
+/**
+ * Body for the LEGACY /edit/publish route (source-only fallback): `source` as a
+ * JSON STRING plus custom_domain/custom_path; is_publish marks the save as a
+ * publish in save_page_with_source. No PagePublishedV2 record is written, so
+ * nothing goes live — the page only renders in the editor / the short-lived
+ * /preview window after a build.
+ */
+function legacyPublishBody(source: any, opts: PublishOpts = {}): string {
+  return JSON.stringify({
+    source: JSON.stringify(source),
     custom_domain: opts.customDomain ?? "",
     custom_path: opts.customPath ?? "",
     is_publish: true,
-  };
-  if (opts.app != null) payload["app"] = opts.app;
-  if (opts.app_css != null) payload["app_css"] = opts.app_css;
-  return JSON.stringify(payload);
+  });
 }
 
-/** Build (but do not send) the publish request with the token masked — for dry-run previews. */
+function publishRequestBody(source: any, opts: PublishOpts, rendered: boolean): string {
+  return rendered ? publishHtmlBody(source, opts) : legacyPublishBody(source, opts);
+}
+
+/**
+ * Build (but do not send) the publish request with the token masked — for
+ * dry-run previews. `willRender` says whether the real run will call the build
+ * host and take the publish_html path (dry_run itself never builds, so the
+ * preview stands in a size hint / placeholder for app/app_css).
+ */
 export function buildPublishRequestRedacted(
   config: WebcakeConfig,
   pageId: string,
-  sourceString: string,
-  opts: PublishOpts = {}
+  source: any,
+  opts: PublishOpts = {},
+  willRender = opts.app != null
 ) {
-  // Build a preview body: replace actual app/app_css content with size hints so the
-  // preview is readable while still showing whether rendered HTML is included.
+  // Replace actual app/app_css content with size hints (or a placeholder when
+  // the build runs later) so the preview stays readable.
   const previewOpts: PublishOpts = { ...opts };
-  if (opts.app != null) previewOpts.app = `<${opts.app.length} bytes>` as any;
-  if (opts.app_css != null) previewOpts.app_css = `<${opts.app_css.length} bytes>` as any;
-  const body = publishBody(sourceString, previewOpts);
+  if (willRender) {
+    previewOpts.app = opts.app != null ? `<${opts.app.length} bytes>` : "<built by the build host on dry_run=false>";
+    previewOpts.app_css = opts.app_css != null ? `<${opts.app_css.length} bytes>` : "<built by the build host on dry_run=false>";
+  }
+  const body = publishRequestBody(source, previewOpts, willRender);
   return {
     method: "POST",
-    url: publishUrl(config, pageId),
+    url: publishUrl(config, pageId, willRender),
     headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
     body: body.replace(config.jwt, "***JWT***").slice(0, 600) + (body.length > 600 ? `… (${body.length} bytes)` : ""),
-    rendered: opts.app != null,
+    rendered: willRender,
   };
 }
 
@@ -640,17 +708,21 @@ async function postToHost(
 }
 
 /**
- * Publish a page: saves the source as a new version and creates/updates the
- * page_published record (live status + optional custom domain/path). When
- * opts.app/app_css are provided (built by buildPageApp) the page renders
- * immediately without needing the editor. Returns the resulting public URL —
- * `https://<domain>/<path>` when a custom domain is attached, else the
- * preview-host link (`<previewBase>/preview/<page_id>`).
+ * Publish a page. With opts.app/app_css (built by buildPageApp) it POSTs the
+ * editor's /edit/publish_html route, which creates/updates the PagePublishedV2
+ * record — the one the public serving paths read — so the page actually goes
+ * LIVE. Without them it falls back to the legacy /edit/publish route, which
+ * only saves the source as a new version (nothing goes live).
+ *
+ * Returns the resulting public URL — `https://<domain>/<path>` when a custom
+ * domain is attached, else the preview-host link
+ * (`<previewBase>/preview/<page_id>`), which the backend only serves for ~10
+ * minutes after the publish (then "Preview page is expired").
  */
 export async function publishPage(
   config: WebcakeConfig,
   pageId: string,
-  sourceString: string,
+  source: any,
   opts: PublishOpts = {}
 ): Promise<{
   ok: boolean;
@@ -661,17 +733,19 @@ export async function publishPage(
   domain?: string | null;
   path?: string | null;
   rendered?: boolean;
+  live?: boolean;
   raw?: unknown;
   error?: string;
 }> {
-  const url = publishUrl(config, pageId);
+  const rendered = opts.app != null;
+  const url = publishUrl(config, pageId, rendered);
   let status: number;
   let text: string;
   try {
     // The builder-host pipeline runs an `accepts ["html"]` plug (it serves the
     // editor SPA); a literal application/json Accept gets a 406, so send */*
     // like the browser does — the action still returns JSON.
-    ({ status, text } = await postToHost(url, { ...authHeaders(config), Accept: "*/*" }, publishBody(sourceString, opts)));
+    ({ status, text } = await postToHost(url, { ...authHeaders(config), Accept: "*/*" }, publishRequestBody(source, opts, rendered)));
   } catch (e: any) {
     const e2 = timeoutOrNetworkError(url, e);
     return { ok: false, status: e2.status, error: e2.error };
@@ -698,6 +772,21 @@ export async function publishPage(
   const path: string | null = data?.path ?? null;
   const previewUrl = toPreviewUrl(config, `/preview/${pageId}`);
   const publishedUrl = domain ? `https://${domain}${path ? `/${String(path).replace(/^\/+/, "")}` : ""}` : previewUrl;
+  // The publish_html response data is PagePublishedV2.json — it carries the full
+  // app/app_css/source/data_node columns. Keep only the small identifying fields.
+  const raw =
+    data && typeof data === "object"
+      ? {
+          id: data.id,
+          page_id: data.page_id,
+          domain: data.domain,
+          path: data.path,
+          status: data.status,
+          version_id: data.version_id,
+          render_type: data.render_type,
+          type: data.type,
+        }
+      : data;
   return {
     ok: true,
     status,
@@ -706,7 +795,8 @@ export async function publishPage(
     preview_url: previewUrl,
     domain,
     path,
-    rendered: opts.app != null,
-    raw: data,
+    rendered,
+    live: rendered,
+    raw,
   };
 }

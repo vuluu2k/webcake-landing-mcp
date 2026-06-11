@@ -85,8 +85,10 @@ add_section({ page_id, draft_id, dry_run: false })       # chạy lại với dr
 add_section({ page_id, sections: [formSection, footerSection], dry_run: false })  # hoặc bỏ qua dry-run
 
 # Lên SÓNG — publish_page gọi build host (prod mặc định https://build.webcake.io) để sinh
-# app/app_css cho trang render ngay, rồi gắn domain/set trạng thái live.
-# Không có build host: publish chỉ-source, trang trắng cho đến khi lưu lại trong editor.
+# app/app_css, rồi publish qua route publish_html của editor (route DUY NHẤT tạo bản ghi
+# PagePublishedV2 mà mọi đường serve công khai đọc). custom_domain cho trang URL vĩnh viễn;
+# KHÔNG có domain thì chỉ còn /preview/<page_id> — link này hết hạn ~10 phút sau khi publish.
+# Không có build host: rơi về lưu chỉ-source (không có gì lên sóng).
 publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", dry_run: false })
 ```
 
@@ -136,7 +138,7 @@ gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả t
 | `update_page` | Ghi đè source của một trang bằng cây đã sửa. Kiểm tra, cache thành `draft_id`, rồi lưu. Timeout / lỗi vẫn giữ draft — thử lại bằng `update_page({ draft_id, dry_run:false })` hoặc `patch_page({ draft_id, dry_run:false })` (không patches). **Mặc định `dry_run=true`.** |
 | `add_section` | Nối thêm section vào trang có sẵn mà không gửi lại cả source (đường dựng tăng dần). Luôn cache batch thành `draft_id`; chạy lại với `{ page_id, draft_id, dry_run:false }` — khỏi gửi lại sections. Lỗi kiểm tra / timeout cũng giữ draft — sửa bằng `patch_page({ draft_id, patches })`. **Mặc định `dry_run=true`.** |
 | `patch_page` | Sửa trang theo id element mà không gửi lại cả source. Nhắm trang live (`page_id`) HOẶC draft đã cache (`draft_id`). Loại draft: `create_page` (tạo trang khi hợp lệ), `add_section` (nối khi hợp lệ), `update_page`/live-patch (thử lại updatePageSource). **Patches rỗng/bỏ trống + `draft_id` = commit nguyên trạng (đường thử-lại-timeout vạn năng).** **Mặc định `dry_run=true`.** |
-| `publish_page` | Publish một trang: gọi build host của Webcake (`POST <buildBase>/render/build`) để sinh `app`/`app_css` — prod mặc định `https://build.webcake.io`, tuỳ chỉnh qua `WEBCAKE_BUILD_BASE` env / header `x-webcake-build-base` — giúp trang render ngay mà không cần mở editor. Không có build host thì publish chỉ-source, trang sẽ trắng cho đến khi lưu lại trong editor. Kết quả trả `rendered:true/false`. **Mặc định `dry_run=true`** (không gọi build host khi dry_run). |
+| `publish_page` | Publish một trang LÊN SÓNG: gọi build host của Webcake (`POST <buildBase>/render/build`; prod mặc định `https://build.webcake.io`, tuỳ chỉnh qua `WEBCAKE_BUILD_BASE` env / header `x-webcake-build-base`) để sinh `app`/`app_css`, rồi publish qua route `publish_html` của editor — route duy nhất ghi bản ghi PagePublishedV2 mà mọi đường serve công khai đọc. Có `custom_domain` thì trang live vĩnh viễn tại domain đó; **không có domain thì chỉ còn `/preview/<page_id>` — hết hạn ~10 phút sau khi publish**. Không có build host thì rơi về lưu chỉ-source kiểu cũ (không có gì lên sóng). Kết quả trả `live` + `rendered`. **Mặc định `dry_run=true`** (không gọi build host khi dry_run). |
 
 ---
 

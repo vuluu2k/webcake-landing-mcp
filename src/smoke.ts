@@ -17,7 +17,7 @@ import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
 import { parseHtml } from "./persistence/html-ingest.js";
 import { warningsField } from "./mcp/response.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
-import { toEditorUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
+import { toEditorUrl, toEditorLoginUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
@@ -587,6 +587,16 @@ console.log("== config: named environment presets (local/staging/prod) ==");
   check("editor url from an absolute api url → builder host", toEditorUrl(localCfg, "http://localhost:5800/editor/v2/abc?x=1") === "http://builder.localhost:5800/editor/v2/abc?x=1");
   check("editor url passthrough when empty", toEditorUrl(localCfg, undefined) === undefined);
 
+  // The RETURNED editor link must sign the browser in: the /editor route sits
+  // behind the jwt-cookie passport, so the link is wrapped in the builder
+  // host's public /transport?token=&redirect_uri= cookie-setting redirect.
+  const loginUrl = toEditorLoginUrl(localCfg, "/editor/v2/abc")!;
+  check("editor login url goes through /transport on the builder host", loginUrl.startsWith("http://builder.localhost:5800/transport?token="), loginUrl);
+  check("editor login url carries the jwt as token", loginUrl.includes("token=t&"), loginUrl);
+  check("editor login url percent-encodes the redirect target", loginUrl.endsWith(`redirect_uri=${encodeURIComponent("http://builder.localhost:5800/editor/v2/abc")}`), loginUrl);
+  check("editor login url passthrough when empty", toEditorLoginUrl(localCfg, undefined) === undefined);
+  check("editor login url stays bare without a jwt", toEditorLoginUrl({ ...localCfg, jwt: "" }, "/editor/v2/abc") === "http://builder.localhost:5800/editor/v2/abc");
+
   // The PREVIEW link lives on its own root host (NOT the builder subdomain):
   // preview.localhost:5800 / staging.webcake.me / www.webcake.me.
   check("env presets carry preview bases", resolveEnv("local")?.previewBase === "http://preview.localhost:5800" && resolveEnv("staging")?.previewBase === "https://staging.webcake.me" && resolveEnv("prod")?.previewBase === "https://www.webcake.me");
@@ -600,11 +610,23 @@ console.log("== config: named environment presets (local/staging/prod) ==");
   check("preview url passthrough when empty", toPreviewUrl(localCfg, undefined) === undefined);
   check("preview url falls back to builder when previewBase missing", toPreviewUrl({ ...localCfg, previewBase: undefined }, "/preview/abc") === "http://builder.localhost:5800/preview/abc");
 
-  // publish request preview: JWT must be masked everywhere.
-  const pub = buildPublishRequestRedacted({ ...localCfg, jwt: "SECRETJWT" }, "pg1", JSON.stringify({ page: [] }), { customDomain: "shop.example.com", customPath: "sale" });
-  check("publish request hits the editor publish route on the BUILDER host", pub.url === "http://builder.localhost:5800/api/pages/pg1/edit/publish", pub.url);
-  check("publish request masks the JWT", !JSON.stringify(pub).includes("SECRETJWT"), pub);
-  check("publish request carries domain/path + source string", pub.body.includes("shop.example.com") && pub.body.includes("custom_path") && pub.body.includes("is_publish"), pub.body);
+  // publish request preview: JWT must be masked everywhere. Without a build
+  // (willRender=false) the LEGACY source-only route is used…
+  const pub = buildPublishRequestRedacted({ ...localCfg, jwt: "SECRETJWT" }, "pg1", { page: [] }, { customDomain: "shop.example.com", customPath: "sale" });
+  check("legacy publish preview hits /edit/publish on the BUILDER host", pub.url === "http://builder.localhost:5800/api/pages/pg1/edit/publish", pub.url);
+  check("legacy publish preview masks the JWT", !JSON.stringify(pub).includes("SECRETJWT"), pub);
+  check("legacy publish preview carries domain/path + source string", pub.body.includes("shop.example.com") && pub.body.includes("custom_path") && pub.body.includes("is_publish"), pub.body);
+  check("legacy publish preview is marked rendered:false", pub.rendered === false, pub);
+  // …with a build (willRender=true) the editor's publish_html route — the only
+  // one that writes the PagePublishedV2 record public serving reads — is used,
+  // with the editor-shaped body (data_node, no `source` key).
+  const pubHtml = buildPublishRequestRedacted({ ...localCfg, jwt: "SECRETJWT" }, "pg1", { page: [], options: { mobileOnly: true } }, { customDomain: "shop.example.com" }, true);
+  check("rendered publish preview hits /edit/publish_html on the BUILDER host", pubHtml.url === "http://builder.localhost:5800/api/pages/pg1/edit/publish_html", pubHtml.url);
+  check("rendered publish preview masks the JWT", !JSON.stringify(pubHtml).includes("SECRETJWT"), pubHtml);
+  check("rendered publish preview uses the editor body shape", pubHtml.body.includes("data_node") && pubHtml.body.includes("selected_custom_domain") && pubHtml.body.includes("render_type"), pubHtml.body);
+  check("rendered publish preview folds mobile_only into settings", pubHtml.body.includes('"mobile_only":true'), pubHtml.body);
+  check("rendered publish preview stands in a placeholder for the unbuilt app", pubHtml.body.includes("built by the build host"), pubHtml.body);
+  check("rendered publish preview is marked rendered:true", pubHtml.rendered === true, pubHtml);
 }
 
 console.log("== login: connect URL + loopback callback parsing (offline) ==");

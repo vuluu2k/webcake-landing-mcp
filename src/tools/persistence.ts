@@ -1227,7 +1227,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 15) Publish page (go live) -------------------------------------------------
   server.tool(
     "publish_page",
-    "Publishes an EXISTING page: builds the rendered app via the Webcake build host (POST <buildBase>/render/build) when available — prod default https://build.webcake.io, override with WEBCAKE_BUILD_BASE env / x-webcake-build-base header — so the published page and /preview/<page_id> render immediately without opening the editor. When no build host is configured or the build fails, falls back to source-only publish with a warning (page will appear blank until re-saved in the Webcake editor or a build host is configured). Saves the source as a new version and creates/updates the page_published record (live status), optionally attaching a custom domain/path. DEFAULTS to dry_run=true (network-free: does NOT call the build host on dry_run). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Publishes an EXISTING page LIVE via the editor's publish_html route: builds the rendered app on the Webcake build host (POST <buildBase>/render/build; prod default https://build.webcake.io, override with WEBCAKE_BUILD_BASE env / x-webcake-build-base header), then creates/updates the PagePublishedV2 record — the record ALL public serving reads. With custom_domain the page goes live at that domain (it must already point at Webcake). WITHOUT a domain there is NO permanent public URL: the returned preview link (<previewBase>/preview/<page_id>) only renders for ~10 minutes after the publish, then shows 'Preview page is expired' — tell the user to attach a domain for a lasting URL. If no build host is configured or the build fails, falls back to the LEGACY source-only publish route with a warning (saves a version; nothing goes live; the page stays blank). DEFAULTS to dry_run=true (network-free: does NOT call the build host on dry_run). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       page_id: z.string().describe("The page id to publish (must be owned by the account)."),
       custom_domain: z
@@ -1244,15 +1244,18 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       if (!config) return text({ published: false, reason: "missing_env", missing_env: missing });
 
       // Publish re-saves the page's CURRENT stored source (the publish endpoint
-      // requires the source in the request), so read it first — even on dry_run,
-      // to show the real payload.
+      // requires it in the request), so read it first — even on dry_run, to show
+      // the real payload.
       const res = await getPageSource(config, page_id);
       if (!res.ok || res.source == null) {
         return text({ published: false, reason: "page_not_found", status: res.status, error: res.error ?? "No source on this page." });
       }
-      const sourceString = JSON.stringify(res.source);
       const opts = { customDomain: custom_domain, customPath: custom_path };
       const buildBase = config.buildBase;
+      // Only the preview window serves a domain-less publish, and only briefly.
+      const previewExpiryNote = custom_domain
+        ? undefined
+        : "No custom_domain — the page has NO permanent public URL. The preview link only renders for ~10 minutes after the publish, then shows 'Preview page is expired'. Attach a custom_domain (already pointed at Webcake) for a lasting URL.";
 
       if (isDry) {
         // dry_run is network-free — do NOT call the build host.
@@ -1264,14 +1267,17 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             ? `https://${custom_domain}${custom_path ? `/${custom_path}` : ""}`
             : toPreviewUrl(config, `/preview/${page_id}`),
           build_step: buildBase
-            ? { would_run: true, build_host: buildBase, note: "Build host will be called on dry_run=false to produce rendered app/app_css." }
-            : { would_run: false, note: "No build host configured — publish will be source-only. Set WEBCAKE_BUILD_BASE env or x-webcake-build-base header (prod preset: https://build.webcake.io) to enable rendered output." },
-          request: buildPublishRequestRedacted(config, page_id, sourceString, opts),
+            ? { would_run: true, build_host: buildBase, note: "Build host will be called on dry_run=false to produce rendered app/app_css, then the page is published live via the editor's publish_html route." }
+            : { would_run: false, note: "No build host configured — publish will fall back to the LEGACY source-only route (nothing goes live). Set WEBCAKE_BUILD_BASE env or x-webcake-build-base header (prod preset: https://build.webcake.io) to publish for real." },
+          ...(previewExpiryNote ? { note: previewExpiryNote } : {}),
+          request: buildPublishRequestRedacted(config, page_id, res.source, opts, !!buildBase),
           hint: "Re-run with dry_run=false to actually publish.",
         });
       }
 
-      // Real publish: attempt to build app/app_css first when a build host is available.
+      // Real publish: build app/app_css first — required for the publish_html
+      // (live) route. Without a successful build we fall back to the legacy
+      // source-only route rather than publishing a blank PagePublishedV2 record.
       let app: string | undefined;
       let app_css: string | undefined;
       let rendered = false;
@@ -1286,17 +1292,20 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           rendered = true;
           console.error(`[publish_page] build ok — app ${app?.length ?? 0}B css ${app_css?.length ?? 0}B`);
         } else {
-          buildWarning = `Build host failed (${buildResult.error ?? "unknown error"}) — publishing source-only. The page will appear blank until it is re-saved in the Webcake editor or a working build host is configured.`;
+          buildWarning = `Build host failed (${buildResult.error ?? "unknown error"}) — fell back to the legacy source-only publish: a version was saved but NOTHING WENT LIVE (the live publish_html route needs the rendered app). Fix the build host and re-run publish_page.`;
           console.error(`[publish_page] build failed: ${buildResult.error}`);
         }
       } else {
-        buildWarning = "No build host configured (WEBCAKE_BUILD_BASE env / x-webcake-build-base header; prod preset has https://build.webcake.io automatically). Publishing source-only — the page will appear blank until it is re-saved in the Webcake editor or a build host is configured.";
+        buildWarning = "No build host configured (WEBCAKE_BUILD_BASE env / x-webcake-build-base header; prod preset has https://build.webcake.io automatically). Fell back to the legacy source-only publish: a version was saved but NOTHING WENT LIVE (the live publish_html route needs the rendered app).";
       }
 
       const publishOpts = { ...opts, app, app_css };
-      const outcome = await publishPage(config, page_id, sourceString, publishOpts);
+      const outcome = await publishPage(config, page_id, res.source, publishOpts);
       return text({
         published: outcome.ok,
+        // live = the PagePublishedV2 record public serving reads was written
+        // (publish_html route). The legacy fallback only saves a version.
+        live: outcome.ok && rendered,
         rendered,
         page_id,
         url: outcome.published_url,
@@ -1305,6 +1314,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         path: outcome.path,
         status: outcome.status,
         error: outcome.error,
+        ...(outcome.ok && previewExpiryNote ? { note: previewExpiryNote } : {}),
         ...(buildWarning ? { warning: buildWarning } : {}),
       });
     }

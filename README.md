@@ -152,10 +152,12 @@ npx -y webcake-landing-mcp login    # opens the browser once, saves the token to
 
 …or set `WEBCAKE_ENV` (`local` | `staging` | `prod` — fills in all base URLs) + `WEBCAKE_JWT`.
 
-For `publish_page` to produce a **rendered** (non-blank) page, a build host is needed:
-- `prod` preset auto-configures `https://build.webcake.io` — no extra setup.
+For `publish_page` to actually put a page **live**, a build host is needed (it renders the
+`app`/`app_css` that the live `publish_html` route requires):
+- `prod` preset auto-configures `https://build.webcake.io` — no extra setup (the preset applies when the env resolves to `prod`: `WEBCAKE_ENV=prod`, `--env prod`, or `x-webcake-env: prod`).
 - For staging/local, set `WEBCAKE_BUILD_BASE=<url>` or send the `x-webcake-build-base` header per request.
-- Without it, `publish_page` falls back to source-only with `rendered:false` + a warning.
+- Without it, `publish_page` falls back to a legacy source-only save with `rendered:false, live:false` + a warning — nothing goes live.
+- A page is only **permanently** live with a `custom_domain`; without one the returned `/preview/<page_id>` link expires ~10 minutes after the publish.
 
 Everything else — the full env-var table, environment presets, per-request headers for the hosted
 server, the `login` browser flow (+ backend contract), and how to grab a JWT by hand — lives in
