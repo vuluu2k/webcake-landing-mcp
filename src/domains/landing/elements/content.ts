@@ -243,12 +243,24 @@ export const CONTENT: ElementDescriptor[] = [
   {
     type: "html-box", category: "content", container: false, defaultName: "HTML Box",
     summary: "Raw HTML embed. specials.html holds the markup stored HTML-escaped (unescaped at render via v-html). Contrast with editor-blog which stores html RAW. Embedded <iframe> is auto-stretched to 100%×100% of the box. Wrapper height is FIXED to styles.height — content taller than the box overflows. &nbsp; in the stored value becomes a space at render. Use unescape-safe HTML (e.g. '&lt;' → the literal character '<' after unescape).",
-    useWhen: "Embedding third-party widgets or custom markup the standard elements can't express.",
+    useWhen: "COMPOSITE VISUALS (primary use): intricate, non-interactive mockups with 10+ nested parts — phone/chat mockup (message thread with bubbles/avatars/tags), mini dashboard, browser-window frame, inbox/notification list, ticket-style card. Use ONE html-box per mockup instead of 30-40 absolute-positioned elements. Recipe: (1) inline styles ONLY — no class/id (no stylesheet inside the box); (2) root div: style='width:100%;height:100%;box-sizing:border-box;overflow:hidden;…' — fills the element box; flex/grid are fine INSIDE the box (absolute-canvas rule applies only to Webcake elements); (3) design inner content to fit styles.height — content taller overflows silently; (4) specials.html must be HTML-ESCAPED ('&lt;div…'); (5) set BOTH breakpoints with real width/height; (6) set font-family inline on the root if the mockup needs a specific font. WHEN NOT to use: real headings, CTAs, forms, prices, any content the user/editor must edit per-piece, or any element that events must target — html-box is an opaque blob in the editor and invisible to form/event wiring; never put the page's primary copy in one. ALSO: embedding third-party widgets or custom markup the standard elements can't express.",
     keySpecials: { html: "string — raw HTML content stored HTML-escaped (e.g. '&lt;p&gt;Hello&lt;/p&gt;'); the renderer unescapes it before injecting via v-html. The wrapper height is FIXED to styles.height — content that is taller overflows the box. An embedded <iframe> is auto-stretched to 100%×100% of the box." },
     seed: (el) => {
       seedPosition(el);
       setBox(el, 280, 310);
       el.specials.html = "";
+    },
+    example: {
+      id: "phone_chat1", type: "html-box",
+      responsive: {
+        desktop: { styles: { top: 60, left: 330, width: 300, height: 360, position: "absolute" } },
+        mobile:  { styles: { top: 60, left:  60, width: 300, height: 360, position: "absolute" } },
+      },
+      specials: {
+        // Phone-chat mockup: rounded shell + header bar + 2 chat bubbles.
+        // Stored HTML-ESCAPED — the renderer unescapes before v-html injection.
+        html: "&lt;div style=&quot;width:100%;height:100%;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;border-radius:24px;background:#fff;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:system-ui,sans-serif;&quot;&gt;&lt;div style=&quot;background:#4f46e5;padding:14px 16px;display:flex;align-items:center;gap:10px;&quot;&gt;&lt;div style=&quot;width:36px;height:36px;border-radius:50%;background:#a5b4fc;display:flex;align-items:center;justify-content:center;font-size:16px;color:#fff;font-weight:bold;&quot;&gt;W&lt;/div&gt;&lt;div&gt;&lt;div style=&quot;color:#fff;font-weight:600;font-size:14px;&quot;&gt;Webcake Support&lt;/div&gt;&lt;div style=&quot;color:#c7d2fe;font-size:11px;&quot;&gt;Online&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;flex:1;padding:16px;display:flex;flex-direction:column;gap:12px;background:#f5f5f5;&quot;&gt;&lt;div style=&quot;display:flex;gap:8px;align-items:flex-end;&quot;&gt;&lt;div style=&quot;width:28px;height:28px;border-radius:50%;background:#4f46e5;flex-shrink:0;&quot;&gt;&lt;/div&gt;&lt;div style=&quot;background:#fff;border-radius:16px 16px 16px 4px;padding:10px 14px;font-size:13px;color:#1a1a2e;max-width:200px;box-shadow:0 1px 4px rgba(0,0,0,0.08);&quot;&gt;Chào bạn! Mình có thể giúp gì cho bạn hôm nay? 😊&lt;/div&gt;&lt;/div&gt;&lt;div style=&quot;display:flex;gap:8px;align-items:flex-end;flex-direction:row-reverse;&quot;&gt;&lt;div style=&quot;background:#4f46e5;border-radius:16px 16px 4px 16px;padding:10px 14px;font-size:13px;color:#fff;max-width:200px;&quot;&gt;Mình muốn tạo landing page cho shop! 🚀&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;",
+      },
     },
   },
   {

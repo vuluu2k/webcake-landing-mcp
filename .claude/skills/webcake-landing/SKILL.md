@@ -70,7 +70,7 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 1. **INTAKE — every time, even a quick/test page** (ask first, offer defaults, don't assume, and do NOT jump straight to building): page purpose/goal · brand/page name · what they sell + price (sales/ads pages) · primary color + logo/branding · sections & layout in order · primary CTA + destination · form fields · desktop+mobile or mobile-only · which organization. Then RESTATE a short outline (sections + CTA + colors) and wait for the user's confirmation before generating. Don't generate + persist on the same turn as the request.
 2. `get_generation_guide`, then `new_page_skeleton`.
 3. `get_element` per type (specials + sparse example); `new_element` for sparse skeletons.
-4. Assemble `{ page, popup, settings, options, cartConfigs }` from SPARSE nodes; fill `specials`, set coordinates (no overlaps).
+4. Assemble `{ page, popup, settings, options, cartConfigs }` from SPARSE nodes; fill `specials`, set coordinates (no overlaps). For intricate composite visuals (phone/chat mockup, mini dashboard, browser frame, ticket card) use ONE `html-box` with fully inline-styled HTML (root div `width:100%;height:100%;overflow:hidden`; flex/grid allowed inside; content must fit `styles.height`) instead of dozens of absolute-positioned elements — never for primary copy, CTAs, forms, or event targets.
 5. `validate_page` → fix every error.
 6. `list_organizations` → show options, ask which (default = `is_default`).
 7. `create_page` `dry_run:true` (preview) → `dry_run:false` with chosen `organization_id`.
