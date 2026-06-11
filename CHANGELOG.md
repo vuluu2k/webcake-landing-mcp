@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.62] - 2026-06-11
+
+### Added
+- `validate_page` now warns when a `text-block`'s estimated rendered height overflows onto a sibling element placed directly below its declared box; the warning names both the overflowing block and the victim element, and prescribes the exact new height and minimum top offset to apply.
+- `validate_page` now warns when a section's declared height exceeds the bottom of its lowest child by more than 320px, flagging the empty trailing band at the section's bottom.
+- `validate_page`, `create_page`, `update_page`, `add_section`, and `patch_page` now include a `warnings_notice` field alongside any non-empty `warnings` list; the notice is an explicit fix directive so the model treats every warning as a required correction rather than advisory output.
+
+### Changed
+- `validate_page`'s own-box text-overflow check now applies a tighter slack of `min(fontSize × 1.4, 24px)` instead of one full line, catching the common 2-line heading placed on a 1-line-sized box that previously slipped through at larger font sizes.
+- `validate_page` tool description updated to describe warnings as "visible design defects" that must be fixed and re-validated to an empty list before persisting; only a demonstrably false positive may remain.
+- Generation guide (`get_generation_guide`) and server instructions now mandate fixing every `validate_page` warning before the first `create_page` or `update_page` call, and before reporting a page as done to the user.
+
 ## [1.0.61] - 2026-06-11
 
 ### Added
