@@ -139,7 +139,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
-            "Do NOT rebuild the whole source — it is cached as draft_id. Fix ONLY the listed elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged tree and creates the page. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' } (run list_elements/get_element if unsure of the exact type name). The draft expires in ~30 min.",
+            "Do NOT rebuild the whole source — it is cached as draft_id. Each error names the offending element id — fix ONLY those elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged tree and creates the page. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' } (run list_elements/get_element if unsure). A stray/extra key ('must NOT have additional properties') → { op:'replace', id, element:<clean node> } — op:'update' MERGES and cannot delete a key. The draft expires in ~30 min.",
         });
       }
       const parsed = domain.coerce(expanded);
@@ -645,7 +645,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
-            "Do NOT rebuild the section batch — it is cached as draft_id. Fix ONLY the listed elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged shell and appends the sections. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' }. The draft expires in ~30 min.",
+            "Do NOT rebuild the section batch — it is cached as draft_id. Each error names the offending element id — fix ONLY those elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged shell and appends the sections. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' }. A stray/extra key ('must NOT have additional properties') → { op:'replace', id, element:<clean node> } — op:'update' MERGES and cannot delete a key. The draft expires in ~30 min.",
         });
       }
 
@@ -832,7 +832,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
   server.tool(
     "patch_page",
-    "Edits a page by element id WITHOUT re-sending the whole source — the surgical-edit and fix-after-error path. Targets EITHER a live page (page_id) OR a cached draft source (draft_id). Draft sources come from: (a) create_page — failed validation or timed-out network call → patched/committed tree is CREATED as a new page once valid; (b) add_section dry_run or validation/network failure → patched/committed shell is APPENDED to the stored page once valid; (c) update_page or live-page patch_page — timed-out/failed network call → re-committed via updatePageSource. Send only a list of per-element ops; the MCP loads the source, applies them, validates the WHOLE merged tree (blocks on errors), and saves. Ops: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} (shallow-merges; op defaults to 'update'; `type` fixes a wrong element type), {op:'replace',id,element}, {op:'remove',id}, {op:'add',parent_id,element}. EMPTY/OMITTED patches with a draft_id = commit the cached draft as-is (skip apply, still validate, then honor dry_run) — this is the RETRY PATH after a timeout. Use this to fix the elements a failed create_page/update_page/add_section reported instead of rebuilding. DEFAULTS to dry_run=true (loads + merges + validates + previews, no write); dry_run=false to save. Needs WEBCAKE_API_BASE + WEBCAKE_JWT (a draft_id sections-patch only needs creds to actually append; a page_id patch reads the live page so needs creds even on dry_run).",
+    "Edits a page by element id WITHOUT re-sending the whole source — the surgical-edit and fix-after-error path. Targets EITHER a live page (page_id) OR a cached draft source (draft_id). Draft sources come from: (a) create_page — failed validation or timed-out network call → patched/committed tree is CREATED as a new page once valid; (b) add_section dry_run or validation/network failure → patched/committed shell is APPENDED to the stored page once valid; (c) update_page or live-page patch_page — timed-out/failed network call → re-committed via updatePageSource. Send only a list of per-element ops; the MCP loads the source, applies them, validates the WHOLE merged tree (blocks on errors), and saves. Ops: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} (shallow-merges; op defaults to 'update'; `type` fixes a wrong element type; update CANNOT delete an existing/stray key — schema 'additional properties' errors need op:'replace'), {op:'replace',id,element}, {op:'remove',id}, {op:'add',parent_id,element}. EMPTY/OMITTED patches with a draft_id = commit the cached draft as-is (skip apply, still validate, then honor dry_run) — this is the RETRY PATH after a timeout. Use this to fix the elements a failed create_page/update_page/add_section reported instead of rebuilding. DEFAULTS to dry_run=true (loads + merges + validates + previews, no write); dry_run=false to save. Needs WEBCAKE_API_BASE + WEBCAKE_JWT (a draft_id sections-patch only needs creds to actually append; a page_id patch reads the live page so needs creds even on dry_run).",
     {
       page_id: z.string().optional().describe("Edit a LIVE page by id (from create_page, list_pages, or find_pages; must be owned by the account). Provide page_id OR draft_id. For a sections or update draft_id you may also pass page_id here to override the stored page target."),
       draft_id: z.string().optional().describe("Commit or fix a CACHED source: from create_page (failed/timed-out → new page created once valid), add_section (dry_run or failure → sections appended), or update_page/live-page patch (timed-out/failed → updatePageSource retried). The originating tool's error/dry_run response returns draft_id. Provide page_id OR draft_id. Empty/omitted patches = commit the cached draft as-is (the RETRY PATH after a timeout)."),
@@ -840,7 +840,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .any()
         .optional()
         .describe(
-          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container. `element` may be a SPARSE node (id/type/styles/specials/events only) — the server hydrates omitted boilerplate from factory defaults. OMIT (or pass empty array) when draft_id is given and you just want to commit/retry the cached draft as-is."
+          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type; update MERGES — it cannot DELETE an existing/stray key, so 'must NOT have additional properties' errors need op:'replace' with a clean node); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container. `element` may be a SPARSE node (id/type/styles/specials/events only) — the server hydrates omitted boilerplate from factory defaults. OMIT (or pass empty array) when draft_id is given and you just want to commit/retry the cached draft as-is."
         ),
       dry_run: z
         .boolean()
@@ -1012,7 +1012,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             ...warningsField(result.warnings),
             patches_applied: applied,
             draft_id,
-            hint: "Still invalid — fix the remaining errors with another patch_page({ draft_id, patches:[…] }). Your applied fixes are kept in the draft.",
+            hint: "Still invalid — fix the remaining errors with another patch_page({ draft_id, patches:[…] }); your applied fixes are kept in the draft. Each error names the offending element id — target THAT id. A stray/extra key ('must NOT have additional properties') needs op:'replace' with a clean node (op:'update' merges; it cannot delete a key). Do NOT rebuild with create_page — the draft already holds everything.",
           });
         }
         const parsed = domain.coerce(expanded);

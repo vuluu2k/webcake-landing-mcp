@@ -135,6 +135,59 @@ export function coercePage(input: unknown): any {
   return input;
 }
 
+/**
+ * Resolve an ajv instancePath (e.g. "/page/1/children/2/responsive/desktop") to
+ * the deepest ELEMENT (object with string id + type) along it, plus the final
+ * value the path lands on. The positional path alone is the #1 reason a model
+ * patches the WRONG element after a schema error — indices are easy to miscount;
+ * ids are not.
+ */
+function describeInstancePath(
+  page: any,
+  instancePath: string
+): { id?: string; type?: string; value?: unknown } {
+  if (!instancePath || instancePath === "/") return {};
+  let cur: any = page;
+  let el: any;
+  for (const rawSeg of instancePath.split("/").slice(1)) {
+    if (cur == null || typeof cur !== "object") return { id: el?.id, type: el?.type };
+    const seg = rawSeg.replace(/~1/g, "/").replace(/~0/g, "~");
+    cur = Array.isArray(cur) ? cur[Number(seg)] : cur[seg];
+    if (cur && typeof cur === "object" && typeof cur.id === "string" && typeof cur.type === "string") el = cur;
+  }
+  return { id: el?.id, type: el?.type, value: cur };
+}
+
+/**
+ * Format one ajv error as an ACTIONABLE message: positional path + ajv message,
+ * plus the offending property name (additionalProperties), the actual bad value
+ * (enum/type), and — crucially — the enclosing element's id/type so the fix can
+ * target the right element by id on the first try. For stray-key errors it also
+ * names the only op that can fix them: patch update MERGES, so deleting a key
+ * needs op:'replace' (or, on a rebuild, simply omitting the key).
+ */
+function describeSchemaError(page: any, err: any): string {
+  const path = err.instancePath || "/";
+  let msg = `schema ${path} ${err.message}`;
+  const at = describeInstancePath(page, path);
+  const extraKey: string | undefined = err.params?.additionalProperty;
+  if (extraKey) msg += ` — offending key: "${extraKey}"`;
+  if (
+    (err.keyword === "enum" || err.keyword === "type" || err.keyword === "const") &&
+    (typeof at.value === "string" || typeof at.value === "number" || typeof at.value === "boolean")
+  ) {
+    msg += ` — got: ${JSON.stringify(at.value)}`;
+  }
+  if (at.id) msg += ` — element id="${at.id}"${at.type ? ` (type ${at.type})` : ""}`;
+  if (extraKey && at.id) {
+    msg +=
+      `. patch_page op:'update' MERGES and cannot delete this key — fix via ` +
+      `{op:'replace', id:'${at.id}', element:<the clean node without "${extraKey}">}` +
+      (extraKey === "animation" ? ` (animation belongs in responsive.<bp>.config.animation, not responsive.<bp>)` : "");
+  }
+  return msg;
+}
+
 export function validatePage(input: unknown): ValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -146,11 +199,13 @@ export function validatePage(input: unknown): ValidationResult {
     return { valid: false, errors: [`Invalid JSON: ${e.message}`], warnings: [], stats: { sections: 0, popups: 0, elements: 0, ids: 0 } };
   }
 
-  // 1) Structural (JSON Schema)
+  // 1) Structural (JSON Schema) — each error names the enclosing ELEMENT (id +
+  //    type) and the offending key/value, so a fix can target the right element
+  //    by id instead of decoding positional indices.
   const ok = validateSchema(page);
   if (!ok && validateSchema.errors) {
     for (const err of validateSchema.errors) {
-      errors.push(`schema ${err.instancePath || "/"} ${err.message}`);
+      errors.push(describeSchemaError(page, err));
     }
   }
 

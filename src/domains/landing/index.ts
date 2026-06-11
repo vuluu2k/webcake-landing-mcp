@@ -185,12 +185,49 @@ function normalizeBackgrounds(node: any): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// misplaced-animation normalization: models regularly emit the animation object
+// directly under responsive.<bp> instead of responsive.<bp>.config.animation —
+// the single most common "must NOT have additional properties" schema error,
+// and one a patch op:'update' can never fix (update merges; it cannot delete
+// the stray key). The intent is unambiguous, so move it where the editor reads
+// it: into config.animation (the author's explicit non-'none' config.animation
+// wins if both are set), then drop the stray key. Deterministic + idempotent,
+// so the expand(compact(x)) == expand(x) invariant holds.
+// ---------------------------------------------------------------------------
+
+/** Walk a tree node and relocate responsive.<bp>.animation → config.animation in-place (mutates). */
+function normalizeMisplacedAnimation(node: any): void {
+  if (!node || typeof node !== "object") return;
+  for (const bp of ["desktop", "mobile"] as const) {
+    const rbp = node.responsive?.[bp];
+    if (!rbp || typeof rbp !== "object") continue;
+    const stray = (rbp as any).animation;
+    if (stray !== undefined) {
+      if (stray && typeof stray === "object") {
+        rbp.config = rbp.config && typeof rbp.config === "object" ? rbp.config : {};
+        const existing = rbp.config.animation;
+        const existingWins =
+          existing && typeof existing === "object" && typeof existing.name === "string" && existing.name !== "none";
+        if (!existingWins) {
+          rbp.config.animation = { name: "none", delay: 0, duration: 3, repeat: null, ...stray };
+        }
+      }
+      delete (rbp as any).animation;
+    }
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) normalizeMisplacedAnimation(child);
+  }
+}
+
 /** Apply all post-expand normalizations to every node in a page source. */
 function normalizeSource(source: any): any {
   if (!source || typeof source !== "object") return source;
   for (const arr of ["page", "popup", "dynamic_pages"] as const) {
     if (Array.isArray((source as any)[arr])) {
       for (const node of (source as any)[arr]) {
+        normalizeMisplacedAnimation(node);
         normalizeImageBlocks(node);
         normalizeBorderRadius(node);
         normalizeBackgrounds(node);

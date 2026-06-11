@@ -151,6 +151,47 @@ check("bad page detects children-on-noncontainer", r2.errors.some((e) => e.inclu
 check("bad page detects missing mobile", r2.errors.some((e) => e.toLowerCase().includes("mobile")), r2.errors);
 check("bad page warns missing field_name", r2.warnings.some((w) => w.includes("field_name")), r2.warnings);
 
+console.log("== validate: schema errors name the element id + offending key ==");
+{
+  // A stray key directly under responsive.<bp> is the classic schema error a
+  // model cannot act on from the positional path alone — the message must name
+  // the element id, the stray key, and the only op that can delete it (replace).
+  const strayed = structuredClone(good) as any;
+  strayed.page[0].children[0].responsive.desktop.zoomy = 1;
+  const rs = validatePage(strayed);
+  check("stray key fails schema", !rs.valid, rs);
+  const schemaErr = rs.errors.find((e) => e.includes("additional properties")) ?? "";
+  check("schema error names the offending key", schemaErr.includes('offending key: "zoomy"'), schemaErr);
+  check("schema error names the element id", schemaErr.includes('element id="btn1"'), schemaErr);
+  check("schema error prescribes op:'replace'", schemaErr.includes("op:'replace'") && schemaErr.includes("cannot delete"), schemaErr);
+  // A bad enum value reports what was actually there.
+  const badType = structuredClone(good) as any;
+  badType.page[0].children[0].type = "txt-block";
+  const rt = validatePage(badType);
+  const enumErr = rt.errors.find((e) => e.includes("got:")) ?? "";
+  check("enum error reports the bad value + element id", enumErr.includes('"txt-block"') && enumErr.includes('element id="btn1"'), rt.errors);
+}
+
+console.log("== expand: relocates misplaced responsive.<bp>.animation into config ==");
+{
+  // Models regularly emit animation at the breakpoint level (schema error a
+  // patch update can never fix) — domain.expand moves it where the editor
+  // reads it, so the page validates on the FIRST create_page.
+  const misplaced = structuredClone(good) as any;
+  misplaced.page[0].children[0].responsive.desktop.animation = { name: "fadeInUp", delay: 0, duration: 2, repeat: null };
+  const fixed = landingDomain.expand(misplaced) as any;
+  const bp = fixed.page[0].children[0].responsive.desktop;
+  check("stray animation key removed", bp.animation === undefined, bp);
+  check("animation moved into config", bp.config?.animation?.name === "fadeInUp" && bp.config?.animation?.duration === 2, bp.config);
+  check("relocated page validates", validatePage(fixed).valid, validatePage(fixed).errors);
+  // An explicit non-'none' config.animation wins over the stray key.
+  const both = structuredClone(good) as any;
+  both.page[0].children[0].responsive.desktop.animation = { name: "fadeInUp" };
+  both.page[0].children[0].responsive.desktop.config.animation = { name: "zoomIn", delay: 1, duration: 4, repeat: null };
+  const kept = (landingDomain.expand(both) as any).page[0].children[0].responsive.desktop;
+  check("explicit config.animation wins over the stray key", kept.config.animation.name === "zoomIn" && kept.animation === undefined, kept.config);
+}
+
 console.log("== validate: accepts JSON string input ==");
 const r3 = validatePage(JSON.stringify(good));
 check("string input parsed & valid", r3.valid, r3.errors);
