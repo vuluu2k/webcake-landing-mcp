@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.60] - 2026-06-11
+
+### Fixed
+- The `expand` pipeline (invoked by `create_page`, `update_page`, `add_section`, `validate_page`, and `patch_page`) now auto-canonicalizes every `url()` layer in `styles.background` to the editor's exact shorthand; a non-canonical URL background (such as CSS copied from a reference page) previously survived the first save but was mangled to `undefined/ undefined/ …` the next time the page was edited in the Webcake editor, rendering the background band blank.
+
+### Changed
+- Generation guide (`get_generation_guide`), server instructions, and the `ingest_html`, `ingest_url`, `search_images`, and `upload_images` tool descriptions now enforce a strict image-source priority: images supplied by the user or found in a reference HTML/URL (ingest AST `images`, `background_images`, `og_image`) must be re-hosted via `upload_images` and reused in their original slots for both `intent:'adapt'` and `intent:'clone'`; `search_images` is reserved for image slots that have no source image.
+- `ingest_html` and `ingest_url` `intent` parameter description clarified: `intent:'adapt'` rewrites the page text for the user's brand while reference images are still re-hosted via `upload_images` and preserved in place.
+
 ## [1.0.59] - 2026-06-11
 
 ### Changed
