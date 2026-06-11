@@ -19,6 +19,7 @@ import {
   buildUpdateRequestRedacted,
   buildAppendRequestRedacted,
   buildPublishRequestRedacted,
+  buildPageApp,
   createPage,
   listOrganizations,
   listPages,
@@ -1145,7 +1146,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 15) Publish page (go live) -------------------------------------------------
   server.tool(
     "publish_page",
-    "Publishes an EXISTING page: saves the stored source as a new version and creates/updates its page_published record (live status), optionally attaching a custom domain/path. NOT needed for the preview link — /preview/<page_id> on the preview host renders the stored source directly; publish when the user wants the page LIVE (custom domain, or the public published URL). Note: this publishes source-only (no editor-rendered HTML); pages last published from the editor with custom head/body should be re-published there. DEFAULTS to dry_run=true. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Publishes an EXISTING page: builds the rendered app via the Webcake build host (POST <buildBase>/render/build) when available — prod default https://build.webcake.io, override with WEBCAKE_BUILD_BASE env / x-webcake-build-base header — so the published page and /preview/<page_id> render immediately without opening the editor. When no build host is configured or the build fails, falls back to source-only publish with a warning (page will appear blank until re-saved in the Webcake editor or a build host is configured). Saves the source as a new version and creates/updates the page_published record (live status), optionally attaching a custom domain/path. DEFAULTS to dry_run=true (network-free: does NOT call the build host on dry_run). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       page_id: z.string().describe("The page id to publish (must be owned by the account)."),
       custom_domain: z
@@ -1153,7 +1154,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .optional()
         .describe("Optional custom domain to serve the page at (e.g. 'shop.example.com' — must already point at Webcake). Omit to publish without a domain (served at the preview-host URL)."),
       custom_path: z.string().optional().describe("Optional path under the custom domain (e.g. 'sale')."),
-      dry_run: z.boolean().optional().describe("Default TRUE — preview the request without sending. Set false to actually publish."),
+      dry_run: z.boolean().optional().describe("Default TRUE — preview the request without sending. Does NOT call the build host. Set false to actually publish (build + publish)."),
     },
     { title: "Publish Webcake Page", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     async ({ page_id, custom_domain, custom_path, dry_run }, extra) => {
@@ -1170,8 +1171,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       }
       const sourceString = JSON.stringify(res.source);
       const opts = { customDomain: custom_domain, customPath: custom_path };
+      const buildBase = config.buildBase;
 
       if (isDry) {
+        // dry_run is network-free — do NOT call the build host.
         return text({
           dry_run: true,
           page_id,
@@ -1179,14 +1182,41 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           would_publish_to: custom_domain
             ? `https://${custom_domain}${custom_path ? `/${custom_path}` : ""}`
             : toPreviewUrl(config, `/preview/${page_id}`),
+          build_step: buildBase
+            ? { would_run: true, build_host: buildBase, note: "Build host will be called on dry_run=false to produce rendered app/app_css." }
+            : { would_run: false, note: "No build host configured — publish will be source-only. Set WEBCAKE_BUILD_BASE env or x-webcake-build-base header (prod preset: https://build.webcake.io) to enable rendered output." },
           request: buildPublishRequestRedacted(config, page_id, sourceString, opts),
           hint: "Re-run with dry_run=false to actually publish.",
         });
       }
 
-      const outcome = await publishPage(config, page_id, sourceString, opts);
+      // Real publish: attempt to build app/app_css first when a build host is available.
+      let app: string | undefined;
+      let app_css: string | undefined;
+      let rendered = false;
+      let buildWarning: string | undefined;
+
+      if (buildBase) {
+        console.error(`[publish_page] calling build host ${buildBase} for page ${page_id}`);
+        const buildResult = await buildPageApp(buildBase, page_id, res.source);
+        if (buildResult.ok) {
+          app = buildResult.app;
+          app_css = buildResult.app_css;
+          rendered = true;
+          console.error(`[publish_page] build ok — app ${app?.length ?? 0}B css ${app_css?.length ?? 0}B`);
+        } else {
+          buildWarning = `Build host failed (${buildResult.error ?? "unknown error"}) — publishing source-only. The page will appear blank until it is re-saved in the Webcake editor or a working build host is configured.`;
+          console.error(`[publish_page] build failed: ${buildResult.error}`);
+        }
+      } else {
+        buildWarning = "No build host configured (WEBCAKE_BUILD_BASE env / x-webcake-build-base header; prod preset has https://build.webcake.io automatically). Publishing source-only — the page will appear blank until it is re-saved in the Webcake editor or a build host is configured.";
+      }
+
+      const publishOpts = { ...opts, app, app_css };
+      const outcome = await publishPage(config, page_id, sourceString, publishOpts);
       return text({
         published: outcome.ok,
+        rendered,
         page_id,
         url: outcome.published_url,
         preview_url: outcome.preview_url,
@@ -1194,6 +1224,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         path: outcome.path,
         status: outcome.status,
         error: outcome.error,
+        ...(buildWarning ? { warning: buildWarning } : {}),
       });
     }
   );

@@ -36,6 +36,7 @@ function timeoutOrNetworkError(url: string, e: any): { ok: false; status: number
 }
 
 const UPLOAD_FILE_ENDPOINT = "/external/upload_file";
+const BUILD_ENDPOINT = "/render/build";
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
 const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
@@ -92,8 +93,10 @@ export function toEditorUrl(config: WebcakeConfig, raw: string | undefined): str
  * Resolve the public preview link (`/preview/<page_id>`) onto the PREVIEW host
  * (config.previewBase) — NOT the builder subdomain. The /preview/:id route only
  * exists on the root preview hosts (preview.localhost:5800 local /
- * staging.webcake.me staging / www.webcake.me prod); the v4 renderer there reads
- * the stored page_source directly, so the link works without publishing.
+ * staging.webcake.me staging / www.webcake.me prod); the v4 renderer there serves
+ * the STORED `app`/`app_css` build columns — an MCP-created page's preview is
+ * blank until publish_page (with a build host) runs or the page is re-saved in
+ * the Webcake editor.
  */
 export function toPreviewUrl(config: WebcakeConfig, raw: string | undefined): string | undefined {
   if (!raw) return raw;
@@ -420,21 +423,108 @@ export async function updatePageSource(
 }
 
 // ---------------------------------------------------------------------------
+// Build (render/build — standalone render service)
+// ---------------------------------------------------------------------------
+
+/** Longer timeout for the build host — renders can take 30-90 s for a large page. */
+const BUILD_TIMEOUT_MS = (() => {
+  const v = parseInt(process.env.WEBCAKE_BUILD_TIMEOUT_MS ?? "", 10);
+  return Number.isFinite(v) && v > 0 ? v : 180_000;
+})();
+
+/**
+ * Call the Webcake build host to produce rendered `app`/`app_css` HTML from a
+ * page source. The build host is a standalone render service at
+ * `POST <buildBase>/render/build`.
+ *
+ * Request body field renames (from page-source keys):
+ *   source.popup      → popups
+ *   source.cartConfigs → $cartConfigs   (REQUIRED — builder crashes if missing)
+ *   source.svariations → $syncVariations
+ *
+ * Response (direct, no Elixir wrapper):
+ *   { success: true, data: { app: "<html>", app_css: "<style>" } }
+ *   { success: false, error: "…" }  on failure
+ */
+export async function buildPageApp(
+  buildBase: string,
+  pageId: string,
+  source: any
+): Promise<{ ok: boolean; app?: string; app_css?: string; status?: number; error?: string }> {
+  const url = `${buildBase.replace(/\/+$/, "")}${BUILD_ENDPOINT}`;
+  const body = JSON.stringify({
+    settings: source.settings ?? {},
+    page: source.page ?? [],
+    popups: source.popup ?? [],
+    options: source.options ?? {},
+    pageId,
+    $cartConfigs: source.cartConfigs ?? {},
+    $syncVariations: source.svariations ?? [],
+    products: [],
+    domain: null,
+    promotion_product: {},
+  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body,
+      signal: AbortSignal.timeout(BUILD_TIMEOUT_MS),
+    });
+  } catch (e: any) {
+    const isTimeout = e?.name === "TimeoutError" || e?.name === "AbortError";
+    return {
+      ok: false,
+      status: 0,
+      error: isTimeout
+        ? `build host timed out after ${BUILD_TIMEOUT_MS}ms`
+        : `Network error calling build host ${url}: ${e?.message ?? e}`,
+    };
+  }
+  const rawText = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    /* non-JSON */
+  }
+  if (!res.ok || json?.success === false) {
+    const reason = json?.error ?? json?.message ?? (json ? undefined : rawText.slice(0, 300));
+    return {
+      ok: false,
+      status: res.status,
+      error: `Build host returned ${res.status}${reason ? `: ${reason}` : ""}`,
+    };
+  }
+  const app: string | undefined = json?.data?.app;
+  const app_css: string | undefined = json?.data?.app_css;
+  if (!app) {
+    return { ok: false, status: res.status, error: "Build host returned success but no app in data" };
+  }
+  return { ok: true, app, app_css, status: res.status };
+}
+
+// ---------------------------------------------------------------------------
 // Publish
 // ---------------------------------------------------------------------------
 
-export type PublishOpts = { customDomain?: string; customPath?: string };
+export type PublishOpts = { customDomain?: string; customPath?: string; app?: string; app_css?: string };
 
 function publishBody(sourceString: string, opts: PublishOpts = {}): string {
   // The publish action expects `source` as a JSON STRING (it Jason.decode!s it),
   // plus optional custom_domain/custom_path. is_publish marks the save as a
-  // publish in save_page_with_source.
-  return JSON.stringify({
+  // publish in save_page_with_source. app/app_css are the rendered HTML produced
+  // by the build host — when present the page renders without the editor.
+  const payload: Record<string, unknown> = {
     source: sourceString,
     custom_domain: opts.customDomain ?? "",
     custom_path: opts.customPath ?? "",
     is_publish: true,
-  });
+  };
+  if (opts.app != null) payload["app"] = opts.app;
+  if (opts.app_css != null) payload["app_css"] = opts.app_css;
+  return JSON.stringify(payload);
 }
 
 /** Build (but do not send) the publish request with the token masked — for dry-run previews. */
@@ -444,12 +534,18 @@ export function buildPublishRequestRedacted(
   sourceString: string,
   opts: PublishOpts = {}
 ) {
-  const body = publishBody(sourceString, opts);
+  // Build a preview body: replace actual app/app_css content with size hints so the
+  // preview is readable while still showing whether rendered HTML is included.
+  const previewOpts: PublishOpts = { ...opts };
+  if (opts.app != null) previewOpts.app = `<${opts.app.length} bytes>` as any;
+  if (opts.app_css != null) previewOpts.app_css = `<${opts.app_css.length} bytes>` as any;
+  const body = publishBody(sourceString, previewOpts);
   return {
     method: "POST",
     url: publishUrl(config, pageId),
     headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
-    body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
+    body: body.replace(config.jwt, "***JWT***").slice(0, 600) + (body.length > 600 ? `… (${body.length} bytes)` : ""),
+    rendered: opts.app != null,
   };
 }
 
@@ -545,9 +641,11 @@ async function postToHost(
 
 /**
  * Publish a page: saves the source as a new version and creates/updates the
- * page_published record (live status + optional custom domain/path). Returns the
- * resulting public URL — `https://<domain>/<path>` when a custom domain is
- * attached, else the preview-host link (`<previewBase>/preview/<page_id>`).
+ * page_published record (live status + optional custom domain/path). When
+ * opts.app/app_css are provided (built by buildPageApp) the page renders
+ * immediately without needing the editor. Returns the resulting public URL —
+ * `https://<domain>/<path>` when a custom domain is attached, else the
+ * preview-host link (`<previewBase>/preview/<page_id>`).
  */
 export async function publishPage(
   config: WebcakeConfig,
@@ -562,6 +660,7 @@ export async function publishPage(
   preview_url?: string;
   domain?: string | null;
   path?: string | null;
+  rendered?: boolean;
   raw?: unknown;
   error?: string;
 }> {
@@ -607,6 +706,7 @@ export async function publishPage(
     preview_url: previewUrl,
     domain,
     path,
+    rendered: opts.app != null,
     raw: data,
   };
 }

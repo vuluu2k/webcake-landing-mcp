@@ -82,7 +82,9 @@ add_section({ page_id, sections: heroSection })          # dry_run=true → vali
 add_section({ page_id, draft_id, dry_run: false })       # re-run with draft_id — no re-send of sections
 add_section({ page_id, sections: [formSection, footerSection], dry_run: false })  # or skip dry-run entirely
 
-# Go LIVE (the preview link works without this — publish to attach a domain / set live status)
+# Go LIVE — publish_page builds rendered app/app_css via the build host (prod default
+# https://build.webcake.io) so the page renders immediately, then attaches domain/sets live status.
+# Without a build host configured the page is published source-only and will appear blank.
 publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", dry_run: false })
 ```
 
@@ -132,7 +134,7 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | `update_page` | Overwrite an existing page's source with an edited tree. Validates, caches the source as `draft_id`, then saves. On timeout or failure the draft is kept — retry via `update_page({ draft_id, dry_run:false })` or `patch_page({ draft_id, dry_run:false })` (no patches). **Defaults to `dry_run=true`.** |
 | `add_section` | Append section(s) to an existing page without re-sending the whole source (incremental-build path). Always caches the batch as `draft_id`; re-run with `{ page_id, draft_id, dry_run:false }` — no need to re-send sections. Validation failure, timeout, or network error also keeps the draft — fix via `patch_page({ draft_id, patches })` or retry `patch_page({ draft_id, dry_run:false })` with no patches. **Defaults to `dry_run=true`.** |
 | `patch_page` | Edit a page by element id without re-sending the whole source. Targets a live page (`page_id`) OR a cached draft (`draft_id`). Draft kinds: `create_page` (creates page once valid), `add_section` (appends once valid), `update_page`/live-patch (retries updatePageSource). **Empty/omitted patches + `draft_id` = commit-as-is (the universal timeout-retry path).** Live-page path pre-caches the patched source before the network call and returns `draft_id` for recovery. **Defaults to `dry_run=true`.** |
-| `publish_page` | Publish a page (live status, optional custom domain/path). The preview link works WITHOUT publishing — publish only to go live. **Defaults to `dry_run=true`.** |
+| `publish_page` | Publish a page: builds the rendered app via the Webcake build host (`POST <buildBase>/render/build`) when available — prod default `https://build.webcake.io`, override with `WEBCAKE_BUILD_BASE` env / `x-webcake-build-base` header — so the published page and `/preview/<page_id>` render immediately. Without a build host the page is published source-only and will appear blank until re-saved in the editor. Result includes `rendered:true/false`. **Defaults to `dry_run=true`** (network-free, does NOT call the build host). |
 
 ---
 

@@ -41,9 +41,9 @@ import type { WebcakeConfig } from "./types.js";
  * after create/update (a distinct host — NOT the API and NOT the SPA).
  */
 export const ENVIRONMENTS = {
-  local: { apiBase: "http://localhost:5800", appBase: "http://localhost:5173", builderBase: "http://builder.localhost:5800", previewBase: "http://preview.localhost:5800" },
-  staging: { apiBase: "https://api.staging.webcake.io", appBase: "https://staging.webcake.io", builderBase: "https://builder.staging.webcake.io", previewBase: "https://staging.webcake.me" },
-  prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io", builderBase: "https://builder.webcake.io", previewBase: "https://www.webcake.me" },
+  local: { apiBase: "http://localhost:5800", appBase: "http://localhost:5173", builderBase: "http://builder.localhost:5800", previewBase: "http://preview.localhost:5800", buildBase: undefined as string | undefined },
+  staging: { apiBase: "https://api.staging.webcake.io", appBase: "https://staging.webcake.io", builderBase: "https://builder.staging.webcake.io", previewBase: "https://staging.webcake.me", buildBase: undefined as string | undefined },
+  prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io", builderBase: "https://builder.webcake.io", previewBase: "https://www.webcake.me", buildBase: "https://build.webcake.io" },
 } as const;
 
 /** Strip trailing slashes from a base URL (undefined passes through). */
@@ -64,7 +64,7 @@ export function isEnvName(v: unknown): v is EnvName {
 /** The base URLs for a named environment, or undefined when the name is absent/unknown. */
 export function resolveEnv(
   name: string | undefined
-): { apiBase: string; appBase: string; builderBase: string; previewBase: string } | undefined {
+): { apiBase: string; appBase: string; builderBase: string; previewBase: string; buildBase: string | undefined } | undefined {
   return isEnvName(name) ? ENVIRONMENTS[name] : undefined;
 }
 
@@ -85,8 +85,8 @@ export function deriveBuilderBase(apiBase: string | undefined): string | undefin
 }
 
 /** Request-scoped overrides for the env config (used by the HTTP transport). */
-export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase" | "builderBase" | "previewBase">> & {
-  /** Named environment (local|staging|prod) — fills in base/appBase/builderBase/previewBase when not given explicitly. */
+export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase" | "builderBase" | "previewBase" | "buildBase">> & {
+  /** Named environment (local|staging|prod) — fills in base/appBase/builderBase/previewBase/buildBase when not given explicitly. */
   env?: string;
 };
 
@@ -123,6 +123,15 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
     saved.previewBase ??
     "https://www.webcake.me"
   );
+  // The build host is used by publish_page to build app/app_css before publishing.
+  // Prod preset has https://build.webcake.io; staging/local have no reliable public
+  // host so they leave it undefined — callers must set WEBCAKE_BUILD_BASE explicitly.
+  const buildBase = stripTrailingSlash(
+    overrides.buildBase ??
+    process.env.WEBCAKE_BUILD_BASE ??
+    preset?.buildBase ??
+    saved.buildBase
+  );
   return {
     config: {
       base: cleanBase,
@@ -131,6 +140,7 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
       appBase: stripTrailingSlash(overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase),
       builderBase,
       previewBase,
+      buildBase,
     },
     missing: [],
   };
@@ -166,6 +176,7 @@ export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
     appBase: header(headers, "x-webcake-app-base"),
     builderBase: header(headers, "x-webcake-builder-base"),
     previewBase: header(headers, "x-webcake-preview-base"),
+    buildBase: header(headers, "x-webcake-build-base"),
     env: header(headers, "x-webcake-env"),
   };
 }
@@ -182,6 +193,7 @@ export type SavedConfig = {
   appBase?: string;
   builderBase?: string;
   previewBase?: string;
+  buildBase?: string;
   savedAt?: string;
 };
 

@@ -10,6 +10,7 @@ import {
   ELEMENT_TYPES,
   ELEMENTS,
 } from "./domains/landing/elements/index.js";
+import { landingDomain } from "./domains/landing/index.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
@@ -843,6 +844,175 @@ console.log("== validate: animation contract checks ==");
     settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
   });
   check("opacity: 'inherit' string → no opacity warning", !rOpStr2.warnings.some((w) => w.includes("permanently faded")), rOpStr2.warnings);
+}
+
+console.log("== borderRadius normalization: numeric/unitless coerced to px by expand ==");
+{
+  // Helper: build a minimal page source with a button carrying a given borderRadius value.
+  const mkBrPage = (brValue: unknown) => ({
+    page: [
+      {
+        id: "br_sec", type: "section",
+        responsive: { desktop: { styles: { height: 400, background: "rgba(17,24,39,1)" } }, mobile: { styles: { height: 400, background: "rgba(17,24,39,1)" } } },
+        children: [
+          {
+            id: "br_btn", type: "button",
+            responsive: {
+              desktop: { styles: { top: 10, left: 10, width: 150, height: 44, borderRadius: brValue } },
+              mobile:  { styles: { top: 10, left: 10, width: 150, height: 44, borderRadius: brValue } },
+            },
+            specials: { text: "Test" },
+          },
+        ],
+      },
+    ],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+
+  // 1) numeric 16 → "16px" on both breakpoints
+  const exp16: any = landingDomain.expand(mkBrPage(16));
+  const btn16 = exp16.page[0].children[0];
+  check(
+    "borderRadius: number 16 → '16px' on desktop",
+    btn16.responsive.desktop.styles.borderRadius === "16px",
+    btn16.responsive.desktop.styles.borderRadius
+  );
+  check(
+    "borderRadius: number 16 → '16px' on mobile",
+    btn16.responsive.mobile.styles.borderRadius === "16px",
+    btn16.responsive.mobile.styles.borderRadius
+  );
+
+  // 2) unit-less string "16" → "16px"
+  const expStr: any = landingDomain.expand(mkBrPage("16"));
+  const btnStr = expStr.page[0].children[0];
+  check(
+    "borderRadius: unitless string '16' → '16px' on desktop",
+    btnStr.responsive.desktop.styles.borderRadius === "16px",
+    btnStr.responsive.desktop.styles.borderRadius
+  );
+
+  // 3) proper string "8px" left untouched
+  const expUnit: any = landingDomain.expand(mkBrPage("8px"));
+  const btnUnit = expUnit.page[0].children[0];
+  check(
+    "borderRadius: '8px' string left untouched",
+    btnUnit.responsive.desktop.styles.borderRadius === "8px",
+    btnUnit.responsive.desktop.styles.borderRadius
+  );
+
+  // 4) "50%" left untouched
+  const expPct: any = landingDomain.expand(mkBrPage("50%"));
+  const btnPct = expPct.page[0].children[0];
+  check(
+    "borderRadius: '50%' string left untouched",
+    btnPct.responsive.desktop.styles.borderRadius === "50%",
+    btnPct.responsive.desktop.styles.borderRadius
+  );
+
+  // 5) multi-corner string "16px 16px 0 0" left untouched
+  const expMulti: any = landingDomain.expand(mkBrPage("16px 16px 0 0"));
+  const btnMulti = expMulti.page[0].children[0];
+  check(
+    "borderRadius: '16px 16px 0 0' string left untouched",
+    btnMulti.responsive.desktop.styles.borderRadius === "16px 16px 0 0",
+    btnMulti.responsive.desktop.styles.borderRadius
+  );
+
+  // 6) expand(compact(x)) round-trip invariant with coerced borderRadius
+  // compact(expand(page-with-br-number)) → expand again must equal expand(original)
+  const expanded16 = landingDomain.expand(mkBrPage(16));
+  const compacted16 = landingDomain.compact(expanded16);
+  const reexpanded16 = landingDomain.expand(compacted16);
+  check(
+    "borderRadius round-trip: expand(compact(expand(br=16))) deep-equals expand(br=16)",
+    deepEq(reexpanded16, expanded16)
+  );
+}
+
+console.log("== text-block styles.background warning (gradient-text-fill mode) ==");
+{
+  const mkTbBgPage = (bgValue: string, withClip: boolean) => ({
+    page: [
+      {
+        id: "tb_sec", type: "section",
+        responsive: {
+          desktop: { config: {}, styles: { position: "relative", height: 400, background: "rgba(17,24,39,1)" } },
+          mobile:  { config: {}, styles: { position: "relative", height: 400, background: "rgba(17,24,39,1)" } },
+        },
+        specials: {}, runtime: {}, events: [],
+        children: [
+          {
+            id: "tb1", type: "text-block",
+            properties: { name: "T", movable: true, sync: true },
+            responsive: {
+              desktop: {
+                config: {}, styles: Object.assign(
+                  { top: 10, left: 10, width: 200, height: 40, background: bgValue },
+                  withClip ? { "-webkitBackgroundClip": "text" } : {}
+                ),
+              },
+              mobile: {
+                config: {}, styles: { top: 10, left: 10, width: 200, height: 40 },
+              },
+            },
+            specials: { text: "hello", tag: "p" },
+            runtime: {}, events: [],
+          },
+        ],
+      },
+    ],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+
+  // 1) background set, no clip → warning
+  const rNoBg = validatePage(mkTbBgPage("linear-gradient(90deg,rgba(255,0,0,1),rgba(0,0,255,1))", false));
+  check(
+    "text-block: styles.background without -webkitBackgroundClip → warning",
+    rNoBg.warnings.some((w) => w.includes("text-block") && w.includes("gradient text-fill") && w.includes("backgroundTxt")),
+    rNoBg.warnings
+  );
+
+  // 2) background + clip → no warning about gradient text-fill
+  const rWithClip = validatePage(mkTbBgPage("linear-gradient(90deg,rgba(255,0,0,1),rgba(0,0,255,1))", true));
+  check(
+    "text-block: styles.background WITH -webkitBackgroundClip → no gradient-fill warning",
+    !rWithClip.warnings.some((w) => w.includes("gradient text-fill")),
+    rWithClip.warnings
+  );
+
+  // 3) no background on text-block → no gradient-fill warning
+  const rNoBg2 = validatePage({
+    page: [
+      {
+        id: "tb_sec2", type: "section",
+        properties: { name: "S", movable: false, sync: true },
+        responsive: {
+          desktop: { config: {}, styles: { position: "relative", height: 400, background: "rgba(17,24,39,1)" } },
+          mobile:  { config: {}, styles: { position: "relative", height: 400, background: "rgba(17,24,39,1)" } },
+        },
+        specials: {}, runtime: {}, events: [],
+        children: [
+          {
+            id: "tb2", type: "text-block",
+            properties: { name: "T", movable: true, sync: true },
+            responsive: {
+              desktop: { config: {}, styles: { top: 10, left: 10, width: 200, height: 40, color: "rgba(255,255,255,1)" } },
+              mobile:  { config: {}, styles: { top: 10, left: 10, width: 200, height: 40, color: "rgba(255,255,255,1)" } },
+            },
+            specials: { text: "hello", tag: "p" },
+            runtime: {}, events: [],
+          },
+        ],
+      },
+    ],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  check(
+    "text-block: no styles.background → no gradient-fill warning",
+    !rNoBg2.warnings.some((w) => w.includes("gradient text-fill")),
+    rNoBg2.warnings
+  );
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

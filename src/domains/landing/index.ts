@@ -81,12 +81,50 @@ function normalizeImageBlocks(node: any): void {
   }
 }
 
-/** Apply image-block normalization to every node in a page source. */
+// ---------------------------------------------------------------------------
+// borderRadius normalization: the renderer emits border-radius RAW from the
+// styles object (exportCss.js: `border-radius: ${style.borderRadius};`).
+// A bare number (e.g. 16) or a unit-less string (e.g. "16") produces invalid
+// CSS that browsers silently ignore — every corner renders square. Valid values
+// are strings with CSS units: "16px", "50%", "16px 16px 0 0".
+//
+// Fix: after every expand pass, walk every node and, for each breakpoint whose
+// styles.borderRadius is a number or a unit-less numeric string, coerce it to
+// "<n>px". Already-valid strings (contain a letter or %) pass through untouched.
+// ---------------------------------------------------------------------------
+
+/** True when s is a plain number-string with no CSS unit (e.g. "16", "0"). */
+function isUnitless(s: string): boolean {
+  return /^\s*-?\d+(\.\d+)?\s*$/.test(s);
+}
+
+/** Walk a tree node and coerce numeric/unit-less borderRadius to "<n>px" in-place (mutates). */
+function normalizeBorderRadius(node: any): void {
+  if (!node || typeof node !== "object") return;
+  for (const bp of ["desktop", "mobile"] as const) {
+    const styles = node.responsive?.[bp]?.styles;
+    if (!styles || typeof styles !== "object") continue;
+    const br = styles.borderRadius;
+    if (typeof br === "number" && Number.isFinite(br)) {
+      styles.borderRadius = `${br}px`;
+    } else if (typeof br === "string" && isUnitless(br)) {
+      styles.borderRadius = `${parseFloat(br)}px`;
+    }
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) normalizeBorderRadius(child);
+  }
+}
+
+/** Apply all post-expand normalizations to every node in a page source. */
 function normalizeSource(source: any): any {
   if (!source || typeof source !== "object") return source;
   for (const arr of ["page", "popup", "dynamic_pages"] as const) {
     if (Array.isArray((source as any)[arr])) {
-      for (const node of (source as any)[arr]) normalizeImageBlocks(node);
+      for (const node of (source as any)[arr]) {
+        normalizeImageBlocks(node);
+        normalizeBorderRadius(node);
+      }
     }
   }
   return source;
