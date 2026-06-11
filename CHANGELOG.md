@@ -6,6 +6,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.63] - 2026-06-11
+
+### Added
+- `create_page` now auto-publishes after a successful create: builds the rendered app via the build host and calls the editor's `publish_html` route so the new page's preview renders immediately; a failed auto-publish never fails the create — `result.publish` carries the outcome and retry hint.
+- `create_page` accepts a new `publish` parameter (default `true`); set `false` to create source-only and skip auto-publishing.
+- `editor_url` returned by `create_page`, `update_page`, and `add_section` is now a self-logging-in link (routed through the builder's `/transport` endpoint with the caller's JWT), so the page owner can open it without first logging in to Webcake.
+- `publish_page` result now includes a `live` boolean (`true` when the `publish_html` route ran and the `PagePublishedV2` record was written).
+- Draft cache TTL extended from 30 minutes to 2 hours; now overridable via the `WEBCAKE_DRAFT_TTL_MS` environment variable.
+
+### Changed
+- `patch_page` tool description (and related error hints in `create_page`, `add_section`, and `validate_page` output) now explicitly states that `op:'update'` merges and cannot delete an existing key — schema `additionalProperties` errors require `op:'replace'` with a clean node.
+- `create_page` failure hint now detects transient backend 404/5xx errors and advises against dropping `organization_id` when retrying, to prevent pages from landing in the wrong workspace.
+- Server instructions updated to document the auto-publish behavior, the `editor_url` self-sign-in constraint (share with the page owner only), the ~10-minute preview link expiry, and the need to run `publish_page` after edits to rebuild the rendered app.
+
+### Fixed
+- `publish_page` now correctly calls the editor's `publish_html` route (which creates/updates the `PagePublishedV2` record that all public serving paths read) instead of the legacy `/edit/publish` route that only saved a version without making the page live; the publish payload now matches the editor's `PublishModal` format (`data_node`, `settings`, `render_type`, `auto:false`).
+- Schema error messages from `validate_page` (and every tool that invokes it) now name the enclosing element's `id` and `type`, the offending property key (for `additionalProperties` errors), and the actual bad value (for `enum`/`type` errors), so the model can target the correct element on the first fix attempt.
+- The expand pipeline (called by `create_page`, `update_page`, `add_section`, `validate_page`, and `patch_page`) now automatically relocates `responsive.<bp>.animation` into `responsive.<bp>.config.animation` when the two are confused, silently correcting the most common "must NOT have additional properties" schema error before validation.
+
 ## [1.0.62] - 2026-06-11
 
 ### Added
