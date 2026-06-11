@@ -90,7 +90,7 @@ When touching the model, preserve these (they live in the schema, the guide, and
 - Top-level: `{ page: [sections], popup: [popups], settings, options: {currency, mobileOnly, versionID}, cartConfigs }`. **Popups are a separate top-level array**, never nested in `page`.
 - Absolute-positioning canvas (not flexbox): every child carries numeric `top/left/width/height` in px per breakpoint; sections own a `height` and have no `top/left`. Canvas width is fixed (desktop 960, mobile 420).
 - Visible content lives in `specials` (`text`, `src`, `field_name`…), never in `styles`. Colors are `rgba()`. Form inputs need a unique `specials.field_name`.
-- `validate_page` **errors block** persistence; **warnings** (dangling event target, missing `field_name`, off-canvas bounds) are advisory.
+- `validate_page` **errors block** persistence; **warnings** (text-overlap collisions, off-canvas bounds, empty bands, dangling event target, missing `field_name`) don't block but are treated as a fix list — `warningsField()` (src/mcp/response.ts) attaches a `warnings_notice` directive to every tool response carrying warnings so the model fixes them and re-validates instead of ignoring them.
 
 ## Conventions that bite
 

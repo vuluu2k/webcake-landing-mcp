@@ -57,7 +57,7 @@ validate_page({ source })
 → { ok: false, errors: [...], warnings: [...] }
 ```
 
-`validate_page` **errors là chặn**; warnings (event target lửng lơ, thiếu `field_name`) chỉ là khuyến cáo.
+`validate_page` **errors là chặn**; warnings (chữ tràn đè phần tử bên dưới, vượt canvas, dải trống cuối section, event target lửng lơ, thiếu `field_name`) không chặn lưu nhưng là **lỗi hiển thị phải sửa** — mọi response có warnings đều kèm `warnings_notice` yêu cầu model sửa và validate lại đến khi danh sách rỗng (chỉ được giữ lại warning chứng minh được là false positive).
 
 ### Bước 5: Lưu — `list_organizations` / `create_page` / `update_page`
 

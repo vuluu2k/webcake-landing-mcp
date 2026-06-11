@@ -142,7 +142,7 @@ WORKFLOW (recommended)
 3. Optionally call new_element to get a correct skeleton, then fill specials + coordinates.
 3b. For every image the page needs (hero, product, about, feature, gallery): if the slot has a source image (user-supplied or from the reference HTML/URL), upload_images it and use the returned Webcake URL; otherwise call search_images and put a returned URL into specials.src / gallery item.link. Use placehold.co ONLY when search_images returns ok:false.
 4. Assemble { page, popup, settings, options, cartConfigs }.
-5. Call validate_page and fix every error.
+5. Call validate_page and fix every error AND every warning — warnings are visible defects (text spilling onto the element below, off-canvas boxes, empty bands at a section's bottom, missing field_name, dead event targets), not advisory polish. Re-validate until the warning list is empty; only a demonstrably false positive may remain (tell the user which and why).
 6. To save: call list_organizations. If the account has EXACTLY ONE organization, create_page will auto-select it — no need to ask. If there are MULTIPLE organizations, show them to the user and ask which to use (highlight is_default as the suggested default); pass the chosen organization_id to create_page. If the user explicitly wants to save without any organization, pass organization_id:"personal". Then create_page (dry_run first, then dry_run:false). Note: create_page itself enforces this — it refuses to guess between multiple orgs and returns the org list asking you to pick.
 
 EDITING an existing page

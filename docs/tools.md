@@ -57,7 +57,7 @@ validate_page({ source })
 → { ok: false, errors: [...], warnings: [...] }
 ```
 
-`validate_page` **errors are blocking**; warnings (dangling event target, missing `field_name`) are advisory.
+`validate_page` **errors are blocking**; warnings (text spilling onto the element below, off-canvas bounds, empty bands, dangling event target, missing `field_name`) don't block the save but are **visible defects the agent must fix too** — every response carrying warnings includes a `warnings_notice` directive telling the model to fix and re-validate until the list is empty (only a demonstrably false positive may remain).
 
 ### Step 5: Persist — `list_organizations` / `create_page` / `update_page`
 

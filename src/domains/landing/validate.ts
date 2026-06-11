@@ -78,6 +78,27 @@ function num(v: unknown): number | undefined {
 }
 
 /**
+ * Estimated rendered height (px) of a text-block's specials.text at a given
+ * fontSize/width — the guide's TEXT HEIGHT MATH (lines ≈ ceil(chars × fontSize
+ * × 0.55 / width), height ≈ lines × fontSize × 1.4; lines counted per explicit
+ * <br> segment). Returns undefined for empty text or template variables
+ * ({{…}}) whose rendered length is unknown.
+ */
+function estTextHeight(rawText: string, fs: number, w: number): number | undefined {
+  if (rawText.includes("{{") || !(fs > 0) || !(w > 0)) return undefined;
+  const segments = rawText
+    .split(/<br\s*\/?>/i)
+    .map((s) => s.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/g, " ").trim())
+    .filter((s) => s !== "");
+  if (segments.length === 0) return undefined;
+  const lines = segments.reduce(
+    (acc, seg) => acc + Math.max(1, Math.ceil((seg.length * fs * 0.55) / w)),
+    0
+  );
+  return Math.round(lines * fs * 1.4);
+}
+
+/**
  * True when a CSS color string carries real hue — i.e. NOT white/black/grey/
  * transparent. Used to flag a page that ships with no color at all (every band
  * white/neutral, no accent), which renders flat/"colorless". A gradient or image
@@ -357,35 +378,22 @@ export function validatePage(input: unknown): ValidationResult {
         // Wrapped-text overflow: live text height is AUTO — text that wraps to
         // more lines than the declared box spills DOWN and overlaps the element
         // below (the classic "2-line card title over the card body" defect).
-        // Rough estimate: avg glyph width ≈ fontSize × 0.55, line height ≈
-        // fontSize × 1.4; lines counted per explicit <br> segment. Warn only when
-        // the estimate exceeds the declared height by MORE than one full line
-        // (keeps the heuristic from flagging well-sized paragraphs). Skip text
-        // with template variables ({{…}}) — rendered length is unknown.
-        if (!rawText.includes("{{")) {
-          const segments = rawText
-            .split(/<br\s*\/?>/i)
-            .map((s) => s.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/g, " ").trim())
-            .filter((s) => s !== "");
-          if (segments.length > 0) {
-            for (const bp of ["desktop", "mobile"] as const) {
-              const styles = node.responsive?.[bp]?.styles;
-              const w = num(styles?.width);
-              const h = num(styles?.height);
-              const fs = num(styles?.fontSize) ?? 16;
-              if (!w || !h || w <= 0 || fs <= 0) continue;
-              const lines = segments.reduce(
-                (acc, seg) => acc + Math.max(1, Math.ceil((seg.length * fs * 0.55) / w)),
-                0
-              );
-              const lineH = fs * 1.4;
-              const est = Math.round(lines * lineH);
-              if (est > h + lineH) {
-                warnings.push(
-                  `${path} (text-block) [${bp}]: text wraps to ~${lines} lines (~${est}px) but the box is only ${h}px tall — live text height is AUTO, so it will spill down and overlap the element below. Set height ≈ ${est}px and push the elements below down (estimate: lines ≈ ceil(chars × fontSize × 0.55 / width), height ≈ lines × fontSize × 1.4).`
-                );
-              }
-            }
+        // Slack is capped at 24px: a full-line slack on a 40px heading (56px)
+        // is exactly what lets the most common defect — a 2-line H2 on a
+        // 1-line-tall box — slip through, while body text (16px → 22px line)
+        // keeps its old tolerance against the rough estimate.
+        for (const bp of ["desktop", "mobile"] as const) {
+          const styles = node.responsive?.[bp]?.styles;
+          const w = num(styles?.width);
+          const h = num(styles?.height);
+          const fs = num(styles?.fontSize) ?? 16;
+          if (!w || !h) continue;
+          const est = estTextHeight(rawText, fs, w);
+          if (est == null) continue;
+          if (est > h + Math.min(fs * 1.4, 24)) {
+            warnings.push(
+              `${path} (text-block) [${bp}]: text wraps to ~${est}px but the box is only ${h}px tall — live text height is AUTO, so it will spill down and overlap the element below. Set height ≈ ${est}px and push the elements below down (estimate: lines ≈ ceil(chars × fontSize × 0.55 / width), height ≈ lines × fontSize × 1.4).`
+            );
           }
         }
       }
@@ -781,6 +789,86 @@ export function validatePage(input: unknown): ValidationResult {
       num(ms.height) ?? DEFAULT_SECTION_HEIGHT,
       `page[${i}]`
     );
+  });
+
+  // 3c) Wrapped-text collision — live text height is AUTO, so a text-block whose
+  //     content wraps past its declared box spills DOWN. When the declared layout
+  //     puts a sibling directly below (boxes NOT overlapping — overlapping boxes
+  //     are intentional layering), the spill lands ON that sibling: the classic
+  //     broken-looking page of a 2-line H2 over its subheading or a wrapped card
+  //     title over the card body. The own-box check (section 1) flags the text
+  //     block itself; this geometric pass names the VICTIM and the exact fix.
+  let overlapWarnings = 0;
+  const MAX_OVERLAP_WARNINGS = 12;
+  const checkTextOverlap = (container: any, path: string) => {
+    if (!container || !Array.isArray(container.children)) return;
+    const kids = container.children;
+    kids.forEach((child: any, idx: number) => {
+      if (!child || typeof child !== "object") return;
+      const cpath = `${path}.children[${idx}]`;
+      const rawText = child.type === "text-block" ? child.specials?.text : undefined;
+      if (typeof rawText === "string") {
+        for (const bp of ["desktop", "mobile"] as const) {
+          if (overlapWarnings >= MAX_OVERLAP_WARNINGS) break;
+          const s = child.responsive?.[bp]?.styles;
+          const top = num(s?.top);
+          const left = num(s?.left) ?? 0;
+          const w = num(s?.width);
+          const h = num(s?.height);
+          const fs = num(s?.fontSize) ?? 16;
+          if (top == null || h == null || !w) continue;
+          const est = estTextHeight(rawText, fs, w);
+          if (est == null || est <= h) continue;
+          const estBottom = top + est;
+          // nearest sibling the declared layout places below this text block
+          let hit: { p: string; t: number; type: string } | undefined;
+          kids.forEach((sib: any, j: number) => {
+            if (j === idx || !sib || typeof sib !== "object") return;
+            const ss = sib.responsive?.[bp]?.styles;
+            const st = num(ss?.top);
+            const sl = num(ss?.left) ?? 0;
+            const sw = num(ss?.width);
+            if (st == null || sw == null) return;
+            if (st < top + h) return; // declared boxes overlap or sibling is above → layering, skip
+            if (sl + sw <= left || sl >= left + w) return; // no horizontal intersection
+            if (estBottom > st + 4 && (!hit || st < hit.t)) hit = { p: `${path}.children[${j}]`, t: st, type: sib.type ?? "?" };
+          });
+          if (hit) {
+            warnings.push(
+              `${cpath} (text-block) [${bp}]: wrapped text renders ~${est}px tall (declared ${h}px) and will spill onto ${hit.p} (${hit.type}, top=${hit.t}) below it. Set this block's height ≈ ${est} and move the elements below to top ≥ ${estBottom + 8}.`
+            );
+            overlapWarnings++;
+          }
+        }
+      }
+      if (Array.isArray(child.children) && child.children.length > 0) checkTextOverlap(child, cpath);
+    });
+  };
+  topList.forEach((sec, i) => checkTextOverlap(sec, `page[${i}]`));
+
+  // 3d) Trailing dead space — a section far taller than its lowest content
+  //     renders as a big empty band, which reads as a broken/unfinished page.
+  //     Threshold is generous (320px) since text auto-grow and bottom padding
+  //     are legitimate; advisory only.
+  topList.forEach((sec, i) => {
+    if (!sec || !Array.isArray(sec.children) || sec.children.length === 0) return;
+    for (const bp of ["desktop", "mobile"] as const) {
+      const sh = num(sec.responsive?.[bp]?.styles?.height);
+      if (sh == null) continue;
+      let maxBottom: number | undefined;
+      for (const child of sec.children) {
+        const s = child?.responsive?.[bp]?.styles;
+        const t = num(s?.top);
+        const h = num(s?.height);
+        if (t == null || h == null) continue;
+        if (maxBottom == null || t + h > maxBottom) maxBottom = t + h;
+      }
+      if (maxBottom != null && sh > maxBottom + 320) {
+        warnings.push(
+          `page[${i}] (section) [${bp}]: height=${sh} but the lowest child ends at ${maxBottom} — ~${sh - maxBottom}px of empty band at the bottom of the section. Reduce the section height to ≈ ${maxBottom + 80} (or move content down into the band).`
+        );
+      }
+    }
   });
 
   // 3b) Page margin axis — every band (header included) should put its

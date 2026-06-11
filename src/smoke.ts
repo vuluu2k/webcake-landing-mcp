@@ -15,6 +15,7 @@ import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
 import { parseHtml } from "./persistence/html-ingest.js";
+import { warningsField } from "./mcp/response.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
 import { toEditorUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
@@ -1105,6 +1106,57 @@ console.log("== text-block styles.background warning (gradient-text-fill mode) =
     !rNoBg2.warnings.some((w) => w.includes("gradient text-fill")),
     rNoBg2.warnings
   );
+}
+
+console.log("== warningsField: warnings ship with the fix-list directive ==");
+{
+  const withW = warningsField(["page[0]: something"]) as any;
+  check("warningsField: non-empty warnings carry warnings_notice", Array.isArray(withW.warnings) && typeof withW.warnings_notice === "string" && withW.warnings_notice.includes("FIX THESE WARNINGS"), withW);
+  check("warningsField: empty list adds nothing", Object.keys(warningsField([])).length === 0 && Object.keys(warningsField(undefined)).length === 0);
+}
+
+console.log("== validator: wrapped-text collision + trailing dead space ==");
+{
+  const tb = (id: string, top: number, height: number, text: string, fontSize: number, extra: any = {}) => ({
+    id, type: "text-block",
+    responsive: {
+      desktop: { styles: { top, left: 80, width: 560, height, fontSize, ...extra } },
+      mobile: { styles: { top, left: 20, width: 380, height, fontSize: Math.round(fontSize * 0.7), ...extra } },
+    },
+    specials: { text, tag: "p" },
+  });
+  const sect = (children: any[], height = 800) => ({
+    page: [{ id: "csec", type: "section", responsive: { desktop: { styles: { height } }, mobile: { styles: { height } } }, children }],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  const headline = "The challenges every hotel faces today"; // wraps to 2 lines at 40px/560w
+
+  // 2-line H2 on a 1-line box with the subheading right under the declared box → both checks fire
+  const rClash = validatePage(expandSource(sect([tb("h2", 120, 50, headline, 40), tb("sub", 180, 60, "Guests reach out from everywhere and teams are stretched thin.", 16)]), createElement));
+  check("collision: 2-line H2 over subheading warned (names the victim)", rClash.warnings.some((w) => w.includes("spill onto") && w.includes("children[1]")), rClash.warnings);
+  check("own-box: 2-line H2 on 1-line box no longer slips the one-line slack", rClash.warnings.some((w) => w.includes("children[0]") && w.includes("spill down")), rClash.warnings);
+
+  // properly sized heading + subheading pushed below the estimated bottom → silent
+  const rOk = validatePage(expandSource(sect([tb("h2", 120, 112, headline, 40), tb("sub", 260, 60, "Guests reach out from everywhere and teams are stretched thin.", 16)]), createElement));
+  check("collision: sized heading + pushed-down subheading → no overlap warning", !rOk.warnings.some((w) => w.includes("spill")), rOk.warnings);
+
+  // layered background rectangle (declared boxes overlap) must NOT count as a victim
+  const card = {
+    id: "card", type: "group",
+    responsive: { desktop: { styles: { top: 100, left: 80, width: 280, height: 300 } }, mobile: { styles: { top: 100, left: 20, width: 280, height: 300 } } },
+    children: [
+      { id: "bg", type: "rectangle", responsive: { desktop: { styles: { top: 0, left: 0, width: 280, height: 300 } }, mobile: { styles: { top: 0, left: 0, width: 280, height: 300 } } } },
+      tb("title", 24, 30, "Guests who book once and disappear forever", 22, { left: 24, width: 232 }),
+    ],
+  };
+  const rCard = validatePage(expandSource(sect([card]), createElement));
+  check("collision: layered card background is not a victim", !rCard.warnings.some((w) => w.includes("spill onto") && w.includes("rectangle")), rCard.warnings);
+
+  // trailing dead space: section 900 tall, content ends at 300
+  const rDead = validatePage(expandSource(sect([tb("h2", 200, 100, "Short", 40)], 900), createElement));
+  check("dead space: 600px empty band at section bottom warned", rDead.warnings.some((w) => w.includes("empty band")), rDead.warnings);
+  const rTight = validatePage(expandSource(sect([tb("h2", 200, 100, "Short", 40)], 500), createElement));
+  check("dead space: 200px bottom padding not flagged", !rTight.warnings.some((w) => w.includes("empty band")), rTight.warnings);
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

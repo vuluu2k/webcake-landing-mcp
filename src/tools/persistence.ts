@@ -12,7 +12,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
-import { text } from "../mcp/response.js";
+import { text, warningsField } from "../mcp/response.js";
 import { readConfig, configFromHeaders } from "../persistence/config.js";
 import {
   buildRequestRedacted,
@@ -136,7 +136,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           created: false,
           reason: "validation_failed",
           errors: result.errors,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
             "Do NOT rebuild the whole source — it is cached as draft_id. Fix ONLY the listed elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged tree and creates the page. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' } (run list_elements/get_element if unsure of the exact type name). The draft expires in ~30 min.",
@@ -178,7 +178,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
         return text({
           dry_run: true,
-          validation: { valid: true, warnings: result.warnings, stats: result.stats },
+          validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
           ...(largePageAdvisory ? { large_page_advisory: largePageAdvisory } : {}),
           env_ready: missing.length === 0,
           missing_env: missing,
@@ -275,7 +275,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         return text({
           created: true,
           ...outcome,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
           ...(organizationAutoSelected ? { organization_auto_selected: true } : {}),
           ...(organizationNote ? { note: organizationNote } : {}),
         });
@@ -285,7 +285,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       return text({
         created: false,
         ...outcome,
-        warnings: result.warnings,
+        ...warningsField(result.warnings),
         draft_id: existingDraftId,
         hint: `Create failed — source is cached. Retry via create_page({ draft_id: "${existingDraftId}", dry_run: false }) or fix elements via patch_page({ draft_id: "${existingDraftId}", patches:[…], dry_run:false }). The draft expires in ~30 min.`,
       });
@@ -450,7 +450,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           updated: false,
           reason: "validation_failed",
           errors: result.errors,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint: `Fix the errors, then retry update_page({ draft_id: "${existingDraftId}", dry_run:false }) — no need to re-send source. Or use patch_page({ page_id: "${resolvedPageId}", patches:[…] }) for surgical fixes.`,
         });
@@ -469,7 +469,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         return text({
           dry_run: true,
           page_id: resolvedPageId,
-          validation: { valid: true, warnings: result.warnings, stats: result.stats },
+          validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
           env_ready: missing.length === 0,
           missing_env: missing,
           draft_id: existingDraftId,
@@ -491,13 +491,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const outcome = await updatePageSource(config, resolvedPageId, parsed);
       if (outcome.ok) {
         deleteDraft(existingDraftId);
-        return text({ updated: true, ...outcome, warnings: result.warnings });
+        return text({ updated: true, ...outcome, ...warningsField(result.warnings) });
       }
       updateDraft(existingDraftId, expanded);
       return text({
         updated: false,
         ...outcome,
-        warnings: result.warnings,
+        ...warningsField(result.warnings),
         draft_id: existingDraftId,
         hint: `Update failed — source is cached. Retry via update_page({ draft_id: "${existingDraftId}", dry_run: false }) or fix elements via patch_page({ page_id: "${resolvedPageId}", patches:[…] }). The draft expires in ~30 min.`,
       });
@@ -642,7 +642,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           added: false,
           reason: "validation_failed",
           errors: result.errors,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
             "Do NOT rebuild the section batch — it is cached as draft_id. Fix ONLY the listed elements with patch_page({ draft_id, patches:[…], dry_run:false }); it re-validates the merged shell and appends the sections. A wrong element type → { op:'update', id:'<element id>', type:'<allowed type>' }. The draft expires in ~30 min.",
@@ -672,7 +672,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           page_id,
           sections_added: newSections.length,
           section_labels: labels,
-          validation: { valid: true, warnings: result.warnings, stats: result.stats },
+          validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
           draft_id: existingDraftId,
           request: buildAppendRequestRedacted(config, page_id, newSections),
           note: "The backend appends these to the END of `page` and rejects duplicate element ids across the live tree.",
@@ -705,7 +705,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           preview_url: outcome.preview_url,
           status: outcome.status,
           error: outcome.error,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
           ...(outcome.ok ? {} : {
             draft_id: existingDraftId,
             hint: "Append failed — the section batch is still cached. Fix the listed error (e.g. a duplicate id vs the live tree can be changed via patch_page({ draft_id, patches:[{op:'replace',id:'<old-id>',element:{…,id:'<new-id>'}}] })) then retry add_section({ page_id, draft_id, dry_run:false }).",
@@ -743,7 +743,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           added: false,
           reason: "validation_failed",
           errors: mergedResult.errors,
-          warnings: mergedResult.warnings,
+          ...warningsField(mergedResult.warnings),
           page_section_count: counts,
           hint: "Fix the section(s) — duplicate ids vs existing sections are a common cause — then retry.",
         });
@@ -762,7 +762,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         preview_url: fbOutcome.preview_url,
         status: fbOutcome.status,
         error: fbOutcome.error,
-        warnings: mergedResult.warnings,
+        ...warningsField(mergedResult.warnings),
       });
     }
   );
@@ -1009,7 +1009,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             patched: false,
             reason: "validation_failed",
             errors: result.errors,
-            warnings: result.warnings,
+            ...warningsField(result.warnings),
             patches_applied: applied,
             draft_id,
             hint: "Still invalid — fix the remaining errors with another patch_page({ draft_id, patches:[…] }). Your applied fixes are kept in the draft.",
@@ -1036,7 +1036,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
               draft_id,
               page_id: targetPageId,
               patches_applied: applied,
-              validation: { valid: true, warnings: result.warnings, stats: result.stats },
+              validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
               env_ready: missing.length === 0,
               missing_env: missing,
               request: config
@@ -1066,7 +1066,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             preview_url: outcome.preview_url,
             status: outcome.status,
             error: outcome.error,
-            warnings: result.warnings,
+            ...warningsField(result.warnings),
             ...(outcome.ok ? {} : { draft_id, hint: `Append failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
           });
         }
@@ -1090,7 +1090,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
               draft_id,
               page_id: targetPageId,
               patches_applied: applied,
-              validation: { valid: true, warnings: result.warnings, stats: result.stats },
+              validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
               env_ready: missing.length === 0,
               missing_env: missing,
               request: config
@@ -1119,7 +1119,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             preview_url: outcome.preview_url,
             status: outcome.status,
             error: outcome.error,
-            warnings: result.warnings,
+            ...warningsField(result.warnings),
             ...(outcome.ok ? {} : { draft_id, hint: `Update failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
           });
         }
@@ -1131,7 +1131,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             dry_run: true,
             draft_id,
             patches_applied: applied,
-            validation: { valid: true, warnings: result.warnings, stats: result.stats },
+            validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
             env_ready: missing.length === 0,
             missing_env: missing,
             request: config
@@ -1162,7 +1162,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           preview_url: outcome.preview_url,
           status: outcome.status,
           error: outcome.error,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
           ...(outcome.ok ? {} : { draft_id, hint: `Create failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) or resolve the error first.` }),
         });
       }
@@ -1173,7 +1173,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           patched: false,
           reason: "validation_failed",
           errors: result.errors,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
           patches_applied: applied,
           hint: "The edit produced an invalid tree — fix the listed errors in your ops, then retry.",
         });
@@ -1189,7 +1189,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           dry_run: true,
           page_id,
           patches_applied: applied,
-          validation: { valid: true, warnings: result.warnings, stats: result.stats },
+          validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
           draft_id: liveDraftId,
           request: buildUpdateRequestRedacted(config!, page_id!, parsed),
           hint: `Re-run patch_page({ draft_id: "${liveDraftId}", dry_run: false }) — no need to re-send patches. Or re-run with page_id + dry_run:false.`,
@@ -1206,7 +1206,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           editor_url: outcome.editor_url,
           preview_url: outcome.preview_url,
           status: outcome.status,
-          warnings: result.warnings,
+          ...warningsField(result.warnings),
         });
       }
       // Network failure / timeout: keep the update draft for retry.
@@ -1217,7 +1217,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         page_id: outcome.page_id ?? page_id,
         status: outcome.status,
         error: outcome.error,
-        warnings: result.warnings,
+        ...warningsField(result.warnings),
         draft_id: liveDraftId,
         hint: `Save failed — the patched source is cached. Retry via patch_page({ draft_id: "${liveDraftId}", dry_run: false }) with no patches. The draft expires in ~30 min.`,
       });
