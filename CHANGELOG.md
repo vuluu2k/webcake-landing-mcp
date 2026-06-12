@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.65] - 2026-06-12
+
+### Added
+- `validate_page` now warns when a single-line `text-block` label sitting on a rounded `rectangle` (the badge/pill pattern) is vertically or horizontally off-center: it uses real per-character font metrics to locate the rendered line box and the pill's geometric center, and reports the exact corrected `top` and `left` values when the offset exceeds a few pixels.
+- `validate_page` also warns when the badge label text is wider than its pill rectangle and suggests the correct pill width with standard horizontal padding.
+- Generation guide (`get_generation_guide`) now includes a BADGE/PILL authoring recipe: build the pattern as two elements — a rounded `rectangle` (pill) plus a `text-block` layered on top — size the pill from the estimated text width, and center the LINE BOX (not `styles.height`) because the renderer draws `text-block` height as auto from `top`; also documents that applying `styles.background` to a `text-block` enables gradient-text-fill mode (the renderer sets `-webkit-text-fill-color:transparent`), making the glyphs invisible instead of adding a backdrop.
+
 ## [1.0.64] - 2026-06-12
 
 ### Added
