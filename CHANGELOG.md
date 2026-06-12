@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.64] - 2026-06-12
+
+### Added
+- `validate_page` now warns when a `rectangle` element's `svgMask` is misconfigured: placed in `specials` or `styles` instead of `responsive.<bp>.config` (where the renderer reads it), set on only one breakpoint, not starting with `<svg`, missing a `viewBox`, containing no drawable shape elements, or lacking a visible `styles.background` (the SVG is only a mask — visible color comes entirely from `styles.background`).
+- Generation guide (`get_generation_guide`) and server instructions now embed the full element type catalog (all types grouped by category) so the model always sees the complete menu of available types without a `list_elements` call.
+
+### Changed
+- `validate_page` text-overflow checks (own-box and sibling-collision) now use real per-character font advance widths with greedy word-wrap, honoring `fontWeight`, `letterSpacing`, `textTransform`, and `lineHeight`; the previous flat `chars × fontSize × 0.55 / width` approximation under-counted UPPERCASE and bold headings, allowing overlaps to slip through undetected.
+- Text height estimation guidance in `get_generation_guide` updated to recommend a wider character factor (0.7) for ALL-CAPS/uppercase headings and to note that `validate_page` re-checks box sizing with real font metrics.
+
 ## [1.0.63] - 2026-06-11
 
 ### Added
