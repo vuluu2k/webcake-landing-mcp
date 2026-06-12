@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import Ajv2020Module from "ajv/dist/2020.js";
 import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
 import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
+import { estTextHeightPx } from "./text-metrics.js";
 import type { ValidationResult } from "../../core/domain.js";
 
 export type { ValidationResult };
@@ -77,25 +78,27 @@ function num(v: unknown): number | undefined {
   return undefined;
 }
 
+// Text height is estimated with REAL per-character font metrics + greedy
+// word-wrap (./text-metrics.ts — honors fontWeight, letterSpacing,
+// textTransform, lineHeight and the page's settings.fontGeneral). The old flat
+// `chars × fontSize × 0.55 / width` guess under-counted UPPERCASE/bold
+// headings and let hero-title overlaps slip through.
+
 /**
- * Estimated rendered height (px) of a text-block's specials.text at a given
- * fontSize/width — the guide's TEXT HEIGHT MATH (lines ≈ ceil(chars × fontSize
- * × 0.55 / width), height ≈ lines × fontSize × 1.4; lines counted per explicit
- * <br> segment). Returns undefined for empty text or template variables
- * ({{…}}) whose rendered length is unknown.
+ * True when a CSS background value paints SOMETHING (any color, gradient or
+ * image — unlike isVividColor, neutrals count). Used by the svgMask check: a
+ * mask over a background that paints nothing renders invisible.
  */
-function estTextHeight(rawText: string, fs: number, w: number): number | undefined {
-  if (rawText.includes("{{") || !(fs > 0) || !(w > 0)) return undefined;
-  const segments = rawText
-    .split(/<br\s*\/?>/i)
-    .map((s) => s.replace(/<[^>]*>/g, "").replace(/&nbsp;|&#160;/g, " ").trim())
-    .filter((s) => s !== "");
-  if (segments.length === 0) return undefined;
-  const lines = segments.reduce(
-    (acc, seg) => acc + Math.max(1, Math.ceil((seg.length * fs * 0.55) / w)),
-    0
-  );
-  return Math.round(lines * fs * 1.4);
+function isVisibleBackground(v: unknown): boolean {
+  if (typeof v !== "string") return false;
+  const s = v.trim().toLowerCase();
+  if (!s || s === "none" || s === "transparent" || s === "inherit" || s === "initial" || s === "unset") return false;
+  const rgba = s.match(/^rgba?\(([^)]+)\)$/);
+  if (rgba) {
+    const parts = rgba[1].split(",").map((x) => parseFloat(x.trim()));
+    if (parts.length >= 4 && Number.isFinite(parts[3]) && parts[3] <= 0.05) return false;
+  }
+  return true;
 }
 
 /**
@@ -222,6 +225,9 @@ export function validatePage(input: unknown): ValidationResult {
   // Whether ANY element (section, button, text…) carries real color on either
   // breakpoint. A page where this stays false renders flat/colorless (warned once).
   let anyVividColor = false;
+
+  // Page font for the real-metrics text measurement (per-element styles.fontFamily wins).
+  const pageFont = page?.settings?.fontGeneral;
 
   const topList: any[] = Array.isArray(page?.page)
     ? page.page
@@ -443,11 +449,11 @@ export function validatePage(input: unknown): ValidationResult {
           const h = num(styles?.height);
           const fs = num(styles?.fontSize) ?? 16;
           if (!w || !h) continue;
-          const est = estTextHeight(rawText, fs, w);
+          const est = estTextHeightPx(rawText, styles, pageFont);
           if (est == null) continue;
           if (est > h + Math.min(fs * 1.4, 24)) {
             warnings.push(
-              `${path} (text-block) [${bp}]: text wraps to ~${est}px but the box is only ${h}px tall — live text height is AUTO, so it will spill down and overlap the element below. Set height ≈ ${est}px and push the elements below down (estimate: lines ≈ ceil(chars × fontSize × 0.55 / width), height ≈ lines × fontSize × 1.4).`
+              `${path} (text-block) [${bp}]: text wraps to ~${est}px but the box is only ${h}px tall — live text height is AUTO, so it will spill down and overlap the element below. Set height ≈ ${est}px and push the elements below down (measured with real font metrics — UPPERCASE/bold text wraps to more lines than it looks).`
             );
           }
         }
@@ -463,6 +469,68 @@ export function validatePage(input: unknown): ValidationResult {
         warnings.push(
           `${path} (editor-blog): specials.html appears to contain escaped HTML ('&lt;' found) — the publisher injects html RAW so escaped markup will render as literal '&lt;p&gt;' text on the live page. Store raw HTML (e.g. '<p>Hello</p>' not '&lt;p&gt;Hello&lt;/p&gt;').`
         );
+      }
+    }
+
+    // rectangle + config.svgMask: the SVG is only a MASK — the renderer (build
+    // host exportCss.js AND the editor's Rectangle.vue) base64-encodes it into
+    // -webkit-mask-image and paints styles.background through it. The SVG's own
+    // fill/stroke colors are IGNORED, so an icon-rectangle without a visible
+    // styles.background renders INVISIBLE (the #1 "my icon doesn't show" bug).
+    // Each breakpoint's config is read separately with NO fallback.
+    if (type === "rectangle") {
+      const maskD = node.responsive?.desktop?.config?.svgMask;
+      const maskM = node.responsive?.mobile?.config?.svgMask;
+      // svgMask put where the renderer never reads it (specials / styles).
+      if (!maskD && !maskM) {
+        const stray =
+          (node.specials?.svgMask && "specials") ||
+          (node.responsive?.desktop?.styles?.svgMask && "responsive.desktop.styles") ||
+          (node.responsive?.mobile?.styles?.svgMask && "responsive.mobile.styles");
+        if (stray) {
+          warnings.push(
+            `${path} (rectangle): svgMask found in ${stray} — the renderer ONLY reads responsive.<bp>.config.svgMask (per breakpoint), so this shows a plain rectangle. Move it into BOTH desktop and mobile config.`
+          );
+        }
+      }
+      if (maskD || maskM) {
+        // Malformed / non-painting SVG → the mask fails and the icon is invisible.
+        for (const bp of ["desktop", "mobile"] as const) {
+          const mask = node.responsive?.[bp]?.config?.svgMask;
+          if (typeof mask !== "string" || mask === "") continue;
+          if (!mask.startsWith("<svg")) {
+            warnings.push(
+              `${path} (rectangle) [${bp}]: config.svgMask must start EXACTLY with '<svg' — the renderer splices preserveAspectRatio into the first characters, so leading whitespace or an '<?xml' prolog corrupts the SVG and the mask fails (icon renders INVISIBLE). Trim it to start with '<svg'.`
+            );
+            continue;
+          }
+          if (!/viewBox\s*=/i.test(mask)) {
+            warnings.push(
+              `${path} (rectangle) [${bp}]: config.svgMask has no viewBox — without it the SVG cannot scale to the element box (icon renders cropped or blank). Add viewBox='0 0 <w> <h>' to the <svg> tag.`
+            );
+          }
+          if (!/<(path|rect|circle|ellipse|polygon|polyline|line|use|text)\b/i.test(mask)) {
+            warnings.push(
+              `${path} (rectangle) [${bp}]: config.svgMask contains no shape element (path/rect/circle/polygon/…) — an SVG that paints nothing masks everything away (icon renders INVISIBLE). Use an SVG whose shapes are filled or stroked.`
+            );
+          }
+        }
+        if (!!maskD !== !!maskM) {
+          const has = maskD ? "desktop" : "mobile";
+          const missing = maskD ? "mobile" : "desktop";
+          warnings.push(
+            `${path} (rectangle): config.svgMask is set on ${has} only — the renderer reads each breakpoint's config separately (no fallback), so ${missing} shows a plain rectangle instead of the icon. Copy the same svgMask into responsive.${missing}.config.`
+          );
+        }
+        for (const bp of ["desktop", "mobile"] as const) {
+          if (!node.responsive?.[bp]?.config?.svgMask) continue;
+          const bg = node.responsive?.[bp]?.styles?.background;
+          if (!isVisibleBackground(bg)) {
+            warnings.push(
+              `${path} (rectangle) [${bp}]: config.svgMask is set but styles.background is ${typeof bg === "string" && bg.trim() ? `"${bg}"` : "missing"} — the SVG is only a MASK: visible pixels come entirely from styles.background (the SVG's own fill/stroke is ignored), so this icon renders INVISIBLE. Set styles.background to the icon color (e.g. rgba(34,197,94,1) or a gradient).`
+            );
+          }
+        }
       }
     }
 
@@ -870,9 +938,8 @@ export function validatePage(input: unknown): ValidationResult {
           const left = num(s?.left) ?? 0;
           const w = num(s?.width);
           const h = num(s?.height);
-          const fs = num(s?.fontSize) ?? 16;
           if (top == null || h == null || !w) continue;
-          const est = estTextHeight(rawText, fs, w);
+          const est = estTextHeightPx(rawText, s, pageFont);
           if (est == null || est <= h) continue;
           const estBottom = top + est;
           // nearest sibling the declared layout places below this text block

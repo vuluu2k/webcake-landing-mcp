@@ -54,7 +54,7 @@ CENTERING & ALIGNMENT (do the math — do NOT eyeball \`left\`; off-center layou
 
 TEXT HEIGHT MATH (the #2 layout defect — wrapped text overlapping the element below; do the math, don't eyeball)
 - On the live page a text-block's height is AUTO: text that wraps to more lines than you assumed spills DOWN and overlaps whatever you placed below it (classic symptom: a 2-line card title overlapping the card body, or a name line clipping the card's bottom edge).
-- Estimate BEFORE placing the next element: lines ≈ ceil(chars × fontSize × 0.55 / width) — count the longest run between explicit <br>s; bold/heading glyphs are wider (use 0.6). Needed height ≈ lines × fontSize × 1.4.
+- Estimate BEFORE placing the next element: lines ≈ ceil(chars × fontSize × 0.55 / width) — count the longest run between explicit <br>s; bold/heading glyphs are wider (use 0.6), and ALL-CAPS/uppercase headings are wider still (use 0.7 — UPPERCASE wraps to more lines than it looks). Needed height ≈ lines × fontSize × 1.4. validate_page re-checks this with REAL per-character font metrics (fontWeight/letterSpacing/textTransform aware), so an under-sized box WILL be flagged — size it right the first time.
 - Set the text-block's height to that estimate, and place the NEXT element's top ≥ this element's top + height + gap (≥8px).
 - EQUAL CARDS: if ANY card's title wraps to 2 lines, give EVERY card in the row the 2-line title height so all bodies start at the same top — never let one card's body ride up under its title.
 - COMPOSED VALUES: render "2.400+" / "94%" / a number with its suffix as ONE string in ONE text-block — never split the number and its suffix/icon into separately positioned elements (they drift apart and the suffix orphans onto its own line).

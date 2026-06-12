@@ -1215,11 +1215,88 @@ console.log("== validator: wrapped-text collision + trailing dead space ==");
   const rCard = validatePage(expandSource(sect([card]), createElement));
   check("collision: layered card background is not a victim", !rCard.warnings.some((w) => w.includes("spill onto") && w.includes("rectangle")), rCard.warnings);
 
+  // UPPERCASE bold hero heading — the case the old 0.55-per-char heuristic
+  // under-counted (real Roboto 700 caps are ~0.66em): declared 2-line box,
+  // really wraps to 3 lines and spills onto the subtitle below.
+  const rCaps = validatePage(expandSource(sect([
+    tb("hero", 120, 140, "ÁO VEST NỮ CÔNG SỞ CAO CẤP", 48, { fontWeight: 700, width: 350 }),
+    tb("subtitle", 270, 30, "Chất liệu cao cấp — Dáng chuẩn Âu", 18, { width: 350 }),
+  ]), createElement));
+  check("metrics: UPPERCASE bold heading on a 2-line box → own-box warned", rCaps.warnings.some((w) => w.includes("children[0]") && w.includes("spill down")), rCaps.warnings);
+  check("metrics: UPPERCASE heading spill names the subtitle victim", rCaps.warnings.some((w) => w.includes("spill onto") && w.includes("children[1]")), rCaps.warnings);
+
+  // same copy in lowercase regular weight on the same box → fits, stays silent
+  const rLower = validatePage(expandSource(sect([
+    tb("hero", 120, 140, "Áo vest nữ công sở cao cấp", 48, { width: 350 }),
+    tb("subtitle", 270, 30, "Chất liệu cao cấp — Dáng chuẩn Âu", 18, { width: 350 }),
+  ]), createElement));
+  check("metrics: lowercase regular heading on the same box → no overflow warning", !rLower.warnings.some((w) => w.includes("spill")), rLower.warnings);
+
   // trailing dead space: section 900 tall, content ends at 300
   const rDead = validatePage(expandSource(sect([tb("h2", 200, 100, "Short", 40)], 900), createElement));
   check("dead space: 600px empty band at section bottom warned", rDead.warnings.some((w) => w.includes("empty band")), rDead.warnings);
   const rTight = validatePage(expandSource(sect([tb("h2", 200, 100, "Short", 40)], 500), createElement));
   check("dead space: 200px bottom padding not flagged", !rTight.warnings.some((w) => w.includes("empty band")), rTight.warnings);
+}
+
+console.log("== validator: rectangle svgMask needs a visible background ==");
+{
+  const SVG = "<svg viewBox='0 0 24 24'><path fill='black' d='M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z'/></svg>";
+  const rectIcon = (styles: { desktop: any; mobile: any }, mask: { desktop?: string; mobile?: string }) => ({
+    page: [{
+      id: "msec", type: "section",
+      responsive: { desktop: { styles: { height: 400 } }, mobile: { styles: { height: 400 } } },
+      children: [{
+        id: "icon1", type: "rectangle",
+        responsive: {
+          desktop: { styles: { top: 40, left: 80, width: 48, height: 48, ...styles.desktop }, config: mask.desktop ? { svgMask: mask.desktop } : {} },
+          mobile: { styles: { top: 40, left: 20, width: 48, height: 48, ...styles.mobile }, config: mask.mobile ? { svgMask: mask.mobile } : {} },
+        },
+      }],
+    }],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+
+  // mask on both breakpoints, no background anywhere → invisible on both
+  const rNoBg = validatePage(expandSource(rectIcon({ desktop: {}, mobile: {} }, { desktop: SVG, mobile: SVG }), createElement));
+  check("svgMask: no styles.background → warned per breakpoint", rNoBg.warnings.filter((w) => w.includes("INVISIBLE")).length === 2, rNoBg.warnings);
+
+  // mask + solid background on both → silent
+  const bg = { background: "rgba(34,197,94,1)" };
+  const rOkIcon = validatePage(expandSource(rectIcon({ desktop: bg, mobile: bg }, { desktop: SVG, mobile: SVG }), createElement));
+  check("svgMask: visible background on both breakpoints → no warning", !rOkIcon.warnings.some((w) => w.includes("svgMask")), rOkIcon.warnings);
+
+  // transparent background counts as invisible
+  const tbg = { background: "rgba(34,197,94,0)" };
+  const rTransp = validatePage(expandSource(rectIcon({ desktop: tbg, mobile: bg }, { desktop: SVG, mobile: SVG }), createElement));
+  check("svgMask: rgba alpha 0 background → warned on that breakpoint", rTransp.warnings.some((w) => w.includes("INVISIBLE") && w.includes("[desktop]")), rTransp.warnings);
+
+  // mask on desktop only → breakpoint-mismatch warning
+  const rOneBp = validatePage(expandSource(rectIcon({ desktop: bg, mobile: bg }, { desktop: SVG }), createElement));
+  check("svgMask: desktop-only mask → mobile fallback warning", rOneBp.warnings.some((w) => w.includes("desktop only")), rOneBp.warnings);
+
+  // leading whitespace / xml prolog corrupts the renderer's preserveAspectRatio splice
+  const rLead = validatePage(expandSource(rectIcon({ desktop: bg, mobile: bg }, { desktop: ` ${SVG}`, mobile: `<?xml version='1.0'?>${SVG}` }), createElement));
+  check("svgMask: not starting with '<svg' → warned on both breakpoints", rLead.warnings.filter((w) => w.includes("start EXACTLY with '<svg'")).length === 2, rLead.warnings);
+
+  // no viewBox → cannot scale to the box
+  const NOVB = "<svg width='24' height='24'><path fill='black' d='M12 1L3 5v6z'/></svg>";
+  const rNoVb = validatePage(expandSource(rectIcon({ desktop: bg, mobile: bg }, { desktop: NOVB, mobile: NOVB }), createElement));
+  check("svgMask: missing viewBox → warned", rNoVb.warnings.some((w) => w.includes("no viewBox")), rNoVb.warnings);
+
+  // no shape elements → mask paints nothing
+  const EMPTY = "<svg viewBox='0 0 24 24'><defs></defs></svg>";
+  const rEmpty = validatePage(expandSource(rectIcon({ desktop: bg, mobile: bg }, { desktop: EMPTY, mobile: EMPTY }), createElement));
+  check("svgMask: no shape element → warned", rEmpty.warnings.some((w) => w.includes("no shape element")), rEmpty.warnings);
+
+  // valid SVG passes all the new shape checks silently
+  check("svgMask: well-formed icon SVG → no malformed-SVG warnings", !rOkIcon.warnings.some((w) => w.includes("'<svg'") || w.includes("no viewBox") || w.includes("no shape element")), rOkIcon.warnings);
+
+  // svgMask in the wrong place (specials / styles) → placement warning
+  const straySrc = rectIcon({ desktop: bg, mobile: bg }, {});
+  (straySrc.page[0].children[0] as any).specials = { svgMask: SVG };
+  const rStray = validatePage(expandSource(straySrc, createElement));
+  check("svgMask: placed in specials → placement warning", rStray.warnings.some((w) => w.includes("ONLY reads responsive.<bp>.config.svgMask")), rStray.warnings);
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

@@ -48,6 +48,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "fontkit": "^2.0.4",
     "typescript": "^5.6.0"
   }
 }
