@@ -23,8 +23,10 @@
  *              Commit path: update_page({draft_id, dry_run:false}) or
  *              patch_page({draft_id, patches?, dry_run:false}).
  *
- * Bounded + TTL'd; a lost draft (process restart, eviction, expiry) just means the
- * model falls back to re-sending the full source — never a failure.
+ * Bounded + TTL'd (SLIDING: every get/update refreshes the clock, so a draft being
+ * actively worked on never expires mid-workflow); a lost draft (process restart,
+ * eviction, expiry) just means the model falls back to re-sending the full source —
+ * never a failure.
  * Process-global, but draft_ids are random/unguessable AND persisting still uses the
  * CALLER's own creds, so a draft only ever yields a page in the caller's account.
  */
@@ -40,7 +42,7 @@ export interface PageDraft {
   /** For kind='sections': the live page id the sections will be appended to.
    *  For kind='update': the live page id to overwrite. */
   page_id?: string;
-  created: number; // ms; refreshed on each patch so an actively-edited draft stays alive
+  created: number; // ms; refreshed on EVERY touch (get/update) — sliding TTL, so a draft never expires mid-workflow
 }
 
 /** Draft lifetime — default 2 hours. Override via WEBCAKE_DRAFT_TTL_MS env. */
@@ -85,10 +87,13 @@ export function updateDraft(id: string, source: any): void {
   }
 }
 
-/** Fetch a live (non-expired) draft, or null if missing/expired. */
+/** Fetch a live (non-expired) draft, or null if missing/expired. Refreshes the TTL (sliding expiration) so an in-progress workflow never loses its draft. */
 export function getDraft(id: string): PageDraft | null {
-  sweep(Date.now());
-  return store.get(id) ?? null;
+  const now = Date.now();
+  sweep(now);
+  const d = store.get(id);
+  if (d) d.created = now;
+  return d ?? null;
 }
 
 export function deleteDraft(id: string): void {

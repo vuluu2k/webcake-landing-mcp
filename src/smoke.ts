@@ -418,6 +418,116 @@ check("widgets: matching css rules attached", !!w0?.css?.includes(".phone-mockup
 check("widgets: none on plain sections", widgetAst.sections[1]?.widgets === undefined, widgetAst.sections[1]);
 check("widgets: compact mode emits none", parseHtml(widgetHtml, "compact").sections.every((s) => s.widgets === undefined));
 
+console.log("== ingest: absolute-canvas (LadiPage-family) mode ==");
+// Synthetic fixture modeled on a real LadiPage export: bare positioned divs,
+// per-id CSS geometry, lazyload style, data-URI arrow rule AFTER the real
+// background (must not clobber it), event-data JSON, popup band, fixed CTA.
+const ladiHtml = `<!DOCTYPE html><html><head><title>Ladi Test</title>
+<style id="style_page">.ladi-wraper { margin: 0 auto; width: 420px; }</style>
+<style id="style_element">
+#SECTION1 { height: 700.4px; }
+#SECTION1 > .ladi-section-background { background-size: cover; background-image: url("https://w.ladicdn.com/s768x703/abc/bg.jpg"); background-position: center top; }
+#SECTION1 .ladi-section-arrow-down { background-image: url("data:image/svg+xml;utf8,%3Csvg%3B%3C/svg%3E"); }
+#HEADLINE10 { width: 296px; top: 117.6px; left: 9px; }
+#HEADLINE10 > .ladi-headline { color: rgb(37, 22, 199); font-size: 22px; font-weight: bold; text-align: center; line-height: 1.2; }
+#IMAGE20 { width: 154.6px; height: 117.9px; top: 168px; left: 50px; }
+#IMAGE20 > .ladi-image > .ladi-image-background { width: 188px; height: 125px; top: -27px; left: -24px; background-image: url("https://w.ladicdn.com/s500x450/abc/photo.png"); }
+#BOX95 { width: 60px; height: 60px; top: 200px; left: 5px; }
+#BOX95 > .ladi-box { border-style: solid; border-color: rgb(232, 58, 48); border-radius: 999px; }
+#BOX95.ladi-animation > .ladi-box { animation-name: pulse; -webkit-animation-name: pulse; animation-delay: 1s; animation-duration: 1s; animation-iteration-count: infinite; }
+#SPINLUCKY100 { width: 276px; height: 276px; top: 122px; left: 72px; }
+#BUTTON30 { width: 240px; height: 40px; top: auto; left: 10px; bottom: 10px; position: fixed; z-index: 90000050; }
+#BUTTON30 > .ladi-button > .ladi-button-background { background-color: rgb(232, 58, 48); }
+#BUTTON_TEXT30 { width: 241px; top: 9px; left: 0px; }
+#GROUP40 { width: 225px; height: 76px; top: 374px; left: 68px; }
+#SHAPE50 { width: 20px; height: 20px; top: 5px; left: 5px; }
+#SHAPE50 svg:last-child { fill: rgba(255, 188, 1, 1.0); }
+#SECTION2 { height: 454px; }
+#FORM60 { width: 299px; height: 261px; top: 80px; left: 32px; }
+#FORM_ITEM61 { width: 299px; height: 43px; top: 0px; left: 0px; }
+#LIST_PARAGRAPH80 { width: 379px; top: 69px; left: 21px; }
+#COUNTDOWN90 { width: 225px; height: 51px; top: 10px; left: 0px; }
+#POPUP70 { width: 420px; height: 516px; top: 0px; left: 0px; }
+#HEADLINE71 { width: 266px; top: 5px; left: 77px; }
+</style>
+<style id="style_lazyload">.ladi-section-background, .ladi-image-background { background-image: none !important; }</style>
+</head><body><div class="ladi-wraper">
+<div id="SECTION1" class="ladi-section"><div class="ladi-section-background"></div><div class="ladi-container">
+  <div id="HEADLINE10" class="ladi-element"><h3 class="ladi-headline">SẠCH TRƠN LÔNG SÁNG MỊN</h3></div>
+  <div id="IMAGE20" class="ladi-element"><div class="ladi-image"><div class="ladi-image-background"></div></div></div>
+  <div data-action="true" id="BUTTON30" class="ladi-element"><div class="ladi-button"><div class="ladi-button-background"></div><div id="BUTTON_TEXT30" class="ladi-element"><p class="ladi-headline">NHẬN ƯU ĐÃI NGAY</p></div></div></div>
+  <div id="GROUP40" class="ladi-element"><div class="ladi-group">
+    <div id="SHAPE50" class="ladi-element"><div class="ladi-shape"><svg viewBox="0 0 24 24" fill="rgba(255,188,1,1)"><path d="M0 0h24v24z"></path></svg></div></div>
+  </div></div>
+  <div id="BOX95" class="ladi-element ladi-animation"><div class="ladi-box"></div></div>
+</div></div>
+<div id="SECTION2" class="ladi-section"><div class="ladi-container">
+  <div id="FORM60" class="ladi-element"><form method="post" class="ladi-form">
+    <div id="FORM_ITEM61" class="ladi-element"><div class="ladi-form-item-container"><div class="ladi-form-item"><input name="phone" required type="tel" placeholder="Số điện thoại"></div></div></div>
+  </form></div>
+  <div id="LIST_PARAGRAPH80" class="ladi-element"><div class="ladi-list-paragraph"><ul><li>Thành phần thiên nhiên</li><li>Không đau rát</li></ul></div></div>
+  <div id="COUNTDOWN90" class="ladi-element"><div class="ladi-countdown"><span>00</span></div></div>
+</div></div>
+<div id="SECTION_POPUP" class="ladi-section"><div class="ladi-container">
+  <div id="POPUP70" class="ladi-element"><div class="ladi-popup"><div class="ladi-popup-background"></div>
+    <div id="HEADLINE71" class="ladi-element"><h3 class="ladi-headline">VÒNG QUAY MAY MẮN</h3></div>
+    <div id="SPINLUCKY100" class="ladi-element"><div class="ladi-spin-lucky"><div class="ladi-spin-lucky-screen"></div></div></div>
+  </div></div>
+</div></div>
+</div>
+<script id="script_event_data" type="application/json">{"BUTTON30":{"type":"button","option.data_event":[{"type":"popup","action":"POPUP70","action_type":"action"}],"mobile.option.sticky":true,"mobile.option.sticky_position":"bottom_left"},"POPUP70":{"type":"popup","option.show_popup_welcome_page":true,"option.delay_popup_welcome_page":6},"COUNTDOWN90":{"type":"countdown","option.countdown_type":"countdown","option.countdown_minute":360},"SPINLUCKY100":{"type":"spinlucky","option.spinlucky_setting.list_value":["${Buffer.from("Mất lượt|Mất lượt|0%", "utf8").toString("base64")}","${Buffer.from("FreeShip|FreeShip|100%", "utf8").toString("base64")}"],"option.spinlucky_setting.max_turn":1}}</script>
+<script>window.LadiPageScript.runtime.is_mobile_only = true;</script>
+</body></html>`;
+const ladi = parseHtml(ladiHtml);
+check("ladi: canvas payload detected", !!ladi.canvas, Object.keys(ladi));
+const cv = ladi.canvas!;
+check("ladi: builder/width/mobile_only", cv.builder === "ladi" && cv.width === 420 && cv.mobile_only === true, cv);
+check("ladi: 2 page sections (popup band separated)", cv.sections.length === 2, cv.sections.map((s) => s.id));
+check("ladi: section height from per-id css", cv.sections[0].height === 700, cv.sections[0].height);
+check("ladi: section bg survives data-URI arrow rule + size prefix stripped", cv.sections[0].background?.["background-image"] === "https://w.ladicdn.com/abc/bg.jpg", cv.sections[0].background);
+const ladiEls = cv.sections[0].elements;
+const ladiH = ladiEls.find((e) => e.id === "HEADLINE10");
+check("ladi: headline box geometry (px, rounded)", ladiH?.box?.width === 296 && ladiH?.box?.top === 118 && ladiH?.box?.left === 9, ladiH?.box);
+check("ladi: headline text + typography style", ladiH?.text === "SẠCH TRƠN LÔNG SÁNG MỊN" && ladiH?.style?.["font-size"] === "22px", ladiH);
+const ladiImg = ladiEls.find((e) => e.id === "IMAGE20");
+check("ladi: image src from bg rule, full-size original", ladiImg?.src === "https://w.ladicdn.com/abc/photo.png", ladiImg);
+const ladiBtn = ladiEls.find((e) => e.id === "BUTTON30");
+check("ladi: fixed button → box.fixed + sticky position", ladiBtn?.box?.fixed === true && ladiBtn?.sticky === "bottom_left", ladiBtn);
+check("ladi: button event → open popup", ladiBtn?.events?.[0]?.type === "popup" && ladiBtn?.events?.[0]?.action === "POPUP70", ladiBtn?.events);
+check("ladi: button_text nested as child", ladiBtn?.children?.[0]?.id === "BUTTON_TEXT30" && ladiBtn?.children?.[0]?.text === "NHẬN ƯU ĐÃI NGAY", ladiBtn?.children);
+const ladiGrp = ladiEls.find((e) => e.id === "GROUP40");
+check("ladi: group nests shape with svg + fill", ladiGrp?.children?.[0]?.type === "shape" && !!ladiGrp?.children?.[0]?.svg && ladiGrp?.children?.[0]?.style?.fill === "rgba(255, 188, 1, 1.0)", ladiGrp?.children);
+const ladiForm = cv.sections[1].elements.find((e) => e.id === "FORM60");
+check("ladi: form_item input facts captured", ladiForm?.children?.[0]?.input?.name === "phone" && ladiForm?.children?.[0]?.input?.input_type === "tel" && ladiForm?.children?.[0]?.input?.required === true, ladiForm?.children?.[0]);
+const ladiList = cv.sections[1].elements.find((e) => e.id === "LIST_PARAGRAPH80");
+check("ladi: list items joined as text", ladiList?.type === "list" && ladiList?.text === "Thành phần thiên nhiên\nKhông đau rát", ladiList);
+const ladiCd = cv.sections[1].elements.find((e) => e.id === "COUNTDOWN90");
+check("ladi: countdown config from event data", ladiCd?.config?.["countdown_minute"] === 360, ladiCd);
+check("ladi: popup separated top-level w/ config", cv.popups?.[0]?.id === "POPUP70" && cv.popups?.[0]?.config?.["delay_popup_welcome_page"] === 6, cv.popups);
+check("ladi: popup keeps its own children", cv.popups?.[0]?.children?.[0]?.text === "VÒNG QUAY MAY MẮN", cv.popups?.[0]?.children);
+check("ladi: role sections still emitted with css size_hint", ladi.sections.length === 2 && ladi.sections[0].size_hint?.height === 700 && ladi.sections[0].size_hint?.basis === "css", ladi.sections);
+check("ladi: form role propagated to role section", ladi.sections[1].role === "form", ladi.sections.map((s) => s.role));
+check("ladi: classic html gets no canvas", parseHtml(sampleHtml).canvas === undefined);
+check("ladi: image crop (offset/zoom inner layer) captured", ladiImg?.crop?.width === 188 && ladiImg?.crop?.top === -27 && ladiImg?.crop?.left === -24, ladiImg?.crop);
+const ladiBox = ladiEls.find((e) => e.id === "BOX95");
+check("ladi: animation captured from .ladi-animation rule", ladiBox?.animation?.["name"] === "pulse" && ladiBox?.animation?.["iteration-count"] === "infinite", ladiBox?.animation);
+check("ladi: animation rule does not pollute base style", ladiBox?.style?.["border-radius"] === "999px" && (ladiBox?.style as any)?.["animation-name"] === undefined, ladiBox?.style);
+const ladiSpin = cv.popups?.[0]?.children?.find((e) => e.id === "SPINLUCKY100");
+check("ladi: spin-wheel prizes decoded from base64", (ladiSpin?.config?.["prizes"] as any)?.[0]?.label === "Mất lượt" && (ladiSpin?.config?.["prizes"] as any)?.[1]?.chance === "100%", ladiSpin?.config);
+check("ladi: spin-wheel max_turn kept", ladiSpin?.config?.["spinlucky_setting.max_turn"] === 1, ladiSpin?.config);
+const onlyS2 = parseHtml(ladiHtml, "compact", { sections: ["SECTION2"] }).canvas;
+check("ladi: sections filter → only SECTION2, no popups", onlyS2?.sections.length === 1 && onlyS2?.sections[0].id === "SECTION2" && onlyS2?.popups === undefined, onlyS2?.sections.map((s) => s.id));
+const onlyPopup = parseHtml(ladiHtml, "compact", { sections: ["SECTION_POPUP"] }).canvas;
+check("ladi: sections filter → SECTION_POPUP selects popups only", onlyPopup?.sections.length === 0 && onlyPopup?.popups?.[0]?.id === "POPUP70", { sections: onlyPopup?.sections.length, popups: onlyPopup?.popups?.map((p) => p.id) });
+
+console.log("== ingest: mojibake repair (UTF-8 mis-read as Latin-1) ==");
+const vietText = "TẨY LÔNG – Kem tẩy lông Huyền Phi sạch trơn sáng mịn an toàn hiệu quả nhanh chóng";
+const garbled = Buffer.from(vietText, "utf8").toString("latin1");
+const mojibakeAst = parseHtml(`<!DOCTYPE html><html><head><title>${garbled}</title></head><body><section><h1>${garbled}</h1><p>${garbled}. ${garbled}.</p></section><section><h2>${garbled}</h2><p>${garbled}</p></section></body></html>`);
+check("mojibake: title repaired", mojibakeAst.title === vietText, mojibakeAst.title);
+check("mojibake: repair warning emitted", (mojibakeAst.warnings ?? []).some((w) => w.includes("encoding repaired")), mojibakeAst.warnings);
+check("mojibake: genuine Vietnamese untouched", parseHtml(`<html><head><title>${vietText}</title></head><body><p>${vietText} ${vietText} ${vietText}</p></body></html>`).title === vietText);
+
 console.log("== ingest: nested-grid block detection (depth > 1) ==");
 // section > .grid-wrapper > .card  — blocks must be found even though cards are not direct children
 const nestedGridHtml = `<!DOCTYPE html><html lang="en"><head><title>T</title></head><body>
@@ -745,6 +855,28 @@ console.log("== draft-cache: page draft round-trip (create_page failure flow) ==
 
   deleteDraft(draftId);
   check("page draft: deleteDraft removes entry", getDraft(draftId) === null, getDraft(draftId));
+}
+
+console.log("== draft-cache: sliding TTL (every touch refreshes the clock) ==");
+{
+  const id = putDraft({ source: { page: [] } });
+  const entry = getDraft(id)!;
+  // Backdate the entry (getDraft returns the live object), then touch it again:
+  // the read must refresh `created` to ~now so an active workflow never expires.
+  entry.created = Date.now() - 10_000;
+  const touched = getDraft(id);
+  check("sliding TTL: getDraft refreshes created", touched != null && Date.now() - touched.created < 2_000, touched && Date.now() - touched.created);
+  // updateDraft refreshes too.
+  touched!.created = Date.now() - 10_000;
+  updateDraft(id, { page: [] });
+  check("sliding TTL: updateDraft refreshes created", Date.now() - getDraft(id)!.created < 2_000);
+  deleteDraft(id);
+  // An UNTOUCHED draft must still expire (default TTL 2h; skip when overridden).
+  if (!process.env.WEBCAKE_DRAFT_TTL_MS) {
+    const stale = putDraft({ source: { page: [] } });
+    getDraft(stale)!.created = Date.now() - 3 * 60 * 60 * 1000;
+    check("sliding TTL: untouched draft still expires", getDraft(stale) === null);
+  }
 }
 
 console.log("== draft-cache: sections draft round-trip (add_section dry_run / failure flow) ==");
