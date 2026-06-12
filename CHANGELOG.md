@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.67] - 2026-06-12
+
+### Added
+- `upload_images` now accepts local file paths in the `urls` parameter — absolute POSIX paths (`/…`), home-directory paths (`~/…`), `file://` URIs, and Windows drive paths (`C:\…`) — so the AI can re-host images directly from the user's machine without routing them through a third-party service; local paths are only permitted when the server runs in stdio mode and are rejected per-entry on the remote HTTP transport.
+- Per-image size limit for `upload_images` raised from 8 MB to 200 MB, matching the backend's multipart `Plug.Parsers` limit.
+
+### Changed
+- `upload_images` now sends images via multipart/form-data upload instead of base64-encoded JSON, improving transfer efficiency for large images; local file MIME type is determined by magic-byte sniffing (with extension as fallback).
+- Generation guide (`get_generation_guide`) and server instructions updated to document that local file paths from the user's machine can be passed directly to `upload_images` without going through a third-party upload host.
+
 ## [1.0.66] - 2026-06-12
 
 ### Changed
