@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.68] - 2026-06-12
+
+### Added
+- `ingest_html` and `ingest_url` now auto-detect absolute-canvas builder exports (LadiPage-family pages and Webcake-published HTML): bare positioned-div layouts whose geometry lives in per-id CSS rules are parsed element-by-element and returned as a `canvas` payload — `builder`, `width` (420 mobile / 960 desktop, matching the Webcake canvas so geometry transfers 1:1), `mobile_only`, `sections[].{id,height,background,elements}`, and `popups`; each element carries `type` (decoded from the builder's id prefix), `box` (`top`/`left`/`width`/`height` in px; `fixed:true` for pinned elements), `text`, `src` (full-size image URL with CDN size prefix stripped), `crop`, `style`, `animation` (entrance/attention effects from the builder), `input`, `events`, `sticky`, and `config` (spin-wheel prizes decoded to `{label,chance}`, countdown minutes, popup delay); when `canvas` is present the model rebuilds the page from it element-by-element and keeps popups in the top-level array.
+- `ingest_html` and `ingest_url` accept a new `sections` parameter (array of canvas section ids from a prior call's `canvas.sections[].id`; `"SECTION_POPUP"` selects popups) to re-fetch specific sections in full untrimmed detail when `canvas.truncated:true`, pairing naturally with incremental section-by-section builds via `add_section`.
+- `ingest_html` and `ingest_url` now auto-repair garbled Vietnamese text caused by UTF-8 bytes mis-decoded as Latin-1 (mojibake), common in saved-to-disk LadiPage exports, and include a `warning` in the result describing the repair when it applies.
+
+### Fixed
+- Draft cache now implements true sliding expiration: `getDraft` refreshes the TTL on every read in addition to every write, so an actively-worked draft never expires mid-workflow regardless of how many read-only fix rounds it goes through before `patch_page` commits it.
+
 ## [1.0.67] - 2026-06-12
 
 ### Added
