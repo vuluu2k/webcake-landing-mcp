@@ -21,6 +21,7 @@ import { toEditorUrl, toEditorLoginUrl, toPreviewUrl, buildPublishRequestRedacte
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
+import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -1341,6 +1342,82 @@ console.log("== validator: pill/badge label alignment ==");
   // label painted wider than the pill → spills past the rounded ends
   const rWide = validatePage(expandSource(badge(108, 330, 300, { fontSize: 16, fontWeight: 700 }, { width: 220, left: 370 }), createElement));
   check("pill: label wider than pill → spill warning", rWide.warnings.some((w) => w.includes("spills past")), rWide.warnings);
+}
+
+console.log("== upload_images: local-path detector (pure, offline) ==");
+{
+  // isLocalPath: recognised forms
+  check("localPath: absolute POSIX /…", isLocalPath("/home/user/photo.jpg"));
+  check("localPath: home-dir ~/…", isLocalPath("~/Pictures/logo.png"));
+  check("localPath: file:// URI", isLocalPath("file:///tmp/img.png"));
+  check("localPath: Windows drive C:\\…", isLocalPath("C:\\Users\\user\\img.jpg"));
+  check("localPath: Windows drive C:/…", isLocalPath("C:/Users/user/img.jpg"));
+  // isLocalPath: things that must NOT match
+  check("localPath: http URL → false", !isLocalPath("https://example.com/img.jpg"));
+  check("localPath: data URI → false", !isLocalPath("data:image/png;base64,abc"));
+  check("localPath: relative path → false", !isLocalPath("images/photo.jpg"));
+
+  // resolveLocalPath
+  const home = (await import("node:os")).homedir();
+  check("resolveLocalPath: ~/… expands homedir", resolveLocalPath("~/foo/bar.jpg") === home + "/foo/bar.jpg");
+  check("resolveLocalPath: /abs passes through", resolveLocalPath("/abs/path.jpg") === "/abs/path.jpg");
+  // file:// resolution is handled by fileURLToPath; test the passthrough for absolute paths
+  check("resolveLocalPath: Windows C:\\ passes through", resolveLocalPath("C:\\Users\\x.jpg") === "C:\\Users\\x.jpg");
+}
+
+console.log("== upload_images: magic-byte sniffer (pure, offline) ==");
+{
+  // JPEG: FF D8 FF
+  const jpegBuf = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+  check("sniff: JPEG magic → image/jpeg", sniffMime(jpegBuf) === "image/jpeg");
+
+  // PNG: 89 50 4E 47
+  const pngBuf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d]);
+  check("sniff: PNG magic → image/png", sniffMime(pngBuf) === "image/png");
+
+  // GIF: 47 49 46 38
+  const gifBuf = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39]);
+  check("sniff: GIF magic → image/gif", sniffMime(gifBuf) === "image/gif");
+
+  // BMP: 42 4D
+  const bmpBuf = Buffer.from([0x42, 0x4d, 0x00, 0x00, 0x00]);
+  check("sniff: BMP magic → image/bmp", sniffMime(bmpBuf) === "image/bmp");
+
+  // WEBP: RIFF????WEBP
+  const webpBuf = Buffer.from([
+    0x52, 0x49, 0x46, 0x46,  // RIFF
+    0x00, 0x00, 0x00, 0x00,  // file size (ignored)
+    0x57, 0x45, 0x42, 0x50,  // WEBP
+  ]);
+  check("sniff: WEBP magic → image/webp", sniffMime(webpBuf) === "image/webp");
+
+  // unknown bytes
+  const unknownBuf = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+  check("sniff: unknown bytes → undefined", sniffMime(unknownBuf) === undefined);
+
+  // too-short buffer
+  check("sniff: 2-byte buffer → undefined", sniffMime(Buffer.from([0xff, 0xd8])) === undefined);
+}
+
+console.log("== upload_images: localContentType (ext + magic, pure offline) ==");
+{
+  const jpegBuf = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+  const pngBuf  = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d]);
+  const unknownBuf = Buffer.from([0x00, 0x01, 0x02, 0x03]);
+
+  // magic wins over extension when they agree
+  check("localContentType: .jpg + JPEG magic → image/jpeg", localContentType("jpg", jpegBuf) === "image/jpeg");
+  check("localContentType: .png + PNG magic → image/png",   localContentType("png", pngBuf)  === "image/png");
+
+  // magic wins over (wrong) extension
+  check("localContentType: .png ext but JPEG magic → image/jpeg (magic wins)", localContentType("png", jpegBuf) === "image/jpeg");
+
+  // extension fallback when magic is unknown
+  check("localContentType: unknown magic + .png ext → image/png (ext fallback)", localContentType("png", unknownBuf) === "image/png");
+  check("localContentType: unknown magic + .svg ext → image/svg+xml (ext fallback)", localContentType("svg", unknownBuf) === "image/svg+xml");
+
+  // both unknown → undefined
+  check("localContentType: unknown magic + unknown ext → undefined", localContentType("xyz", unknownBuf) === undefined);
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

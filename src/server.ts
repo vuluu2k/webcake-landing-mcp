@@ -11,7 +11,13 @@ import { landingDomain } from "./domains/landing/index.js";
 import { registerTools } from "./tools/index.js";
 import { ICON_DATA_URI, ICON_MIME, BRAND } from "./branding.js";
 
-export function createServer(): McpServer {
+/**
+ * Create the MCP server.
+ * @param allowLocalFiles Set to false in remote HTTP (serve) mode to prevent
+ *   upload_images from reading arbitrary files off the host filesystem.
+ *   Defaults to true (stdio / single-user mode on the user's own machine).
+ */
+export function createServer({ allowLocalFiles = true }: { allowLocalFiles?: boolean } = {}): McpServer {
   const server = new McpServer(
     {
       name: "webcake-landing",
@@ -24,6 +30,6 @@ export function createServer(): McpServer {
     },
     { instructions: landingDomain.instructions }
   );
-  registerTools(server, landingDomain);
+  registerTools(server, landingDomain, { allowLocalFiles });
   return server;
 }

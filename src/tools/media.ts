@@ -2,8 +2,15 @@
  * Media tools: fetch REAL stock images for a page instead of grey placeholders.
  * `search_images` queries the Pexels API and returns ready-to-hotlink URLs the
  * agent drops into an image element's `specials.src` (or a gallery item's `link`).
- * `upload_images` converts external image URLs (or data: URIs) into Webcake-hosted
- * URLs (statics.pancake.vn) so generated pages don't hotlink third-party hosts.
+ * `upload_images` converts external image URLs (or data: URIs) OR LOCAL FILE PATHS
+ * (absolute POSIX, ~/…, file://, Windows drive paths) into Webcake-hosted URLs
+ * (statics.pancake.vn) so generated pages don't hotlink third-party hosts and the
+ * AI never needs to proxy the user's files through a third-party service.
+ * Uses multipart/form-data upload (200 MB backend limit).
+ *
+ * LOCAL FILE PATHS are only allowed on the stdio transport (server running on the
+ * user's own machine). On the remote HTTP transport (serve mode, multi-user) every
+ * local-path entry is rejected per-entry to prevent arbitrary-file-read attacks.
  *
  * The Pexels API key is a secret resolved per request: the `x-pexels-key` header
  * (remote / multi-user) wins, else the `PEXELS_API_KEY` env var (stdio). With a key
@@ -16,6 +23,9 @@
  * public). Defaults to dry_run=true.
  */
 import { z } from "zod";
+import { promises as fs } from "node:fs";
+import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { text } from "../mcp/response.js";
 import {
@@ -25,7 +35,7 @@ import {
   resolvePexelsProxyBase,
   pexelsKeyFromHeaders,
 } from "../persistence/pexels-client.js";
-import { uploadImageBase64 } from "../persistence/webcake-client.js";
+import { uploadImageMultipart } from "../persistence/webcake-client.js";
 import { configFromHeaders, ENVIRONMENTS, stripTrailingSlash } from "../persistence/config.js";
 
 /** Resolve just the API base (no JWT required) from per-request headers → env → WEBCAKE_ENV preset → prod default. */
@@ -43,8 +53,8 @@ function resolveApiBase(headers: Record<string, string | string[] | undefined> |
   return ENVIRONMENTS.prod.apiBase;
 }
 
-const UPLOAD_TIMEOUT_MS = 20_000;
-const UPLOAD_MAX_BYTES = 8 * 1024 * 1024; // 8 MB
+const UPLOAD_FETCH_TIMEOUT_MS = 60_000; // 60 s — large bodies can be slow to transfer
+const UPLOAD_MAX_BYTES = 200_000_000; // 200 MB — mirrors the backend multipart Plug.Parsers limit
 
 /** Map a content_type to its canonical file extension. */
 function extFromContentType(ct: string): string {
@@ -75,7 +85,91 @@ function extFromUrl(url: string): string {
   return "jpg";
 }
 
-export function registerMediaTools(server: McpServer) {
+// ---------------------------------------------------------------------------
+// Local-path helpers (exported for smoke-test coverage)
+// ---------------------------------------------------------------------------
+
+/** Windows drive-letter path pattern, e.g. C:\…  or  C:/… */
+const WIN_DRIVE_RE = /^[A-Za-z]:[\\/]/;
+
+/**
+ * Return true when `entry` looks like a local file path (not a URL / data URI).
+ * Recognised forms: file://, absolute POSIX (/…), home-dir (~/…), Windows drive (C:\…).
+ * Exported so the smoke test can assert the pure logic without a transport.
+ */
+export function isLocalPath(entry: string): boolean {
+  return (
+    entry.startsWith("file://") ||
+    entry.startsWith("/") ||
+    entry.startsWith("~/") ||
+    WIN_DRIVE_RE.test(entry)
+  );
+}
+
+/**
+ * Resolve a local-path entry to an absolute POSIX path.
+ * - file://… → fileURLToPath
+ * - ~/…      → expand homedir
+ * - /…       → unchanged
+ * - C:\…     → unchanged (Windows absolute)
+ */
+export function resolveLocalPath(entry: string): string {
+  if (entry.startsWith("file://")) return fileURLToPath(entry);
+  if (entry.startsWith("~/")) return homedir() + entry.slice(1);
+  return entry;
+}
+
+/** Map a file extension (lowercased, no dot) to its MIME type. */
+const EXT_TO_MIME: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+  avif: "image/avif",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  tiff: "image/tiff",
+  tif: "image/tiff",
+};
+
+/**
+ * Sniff the MIME type of a Buffer from its magic bytes.
+ * Returns undefined when the signature isn't recognised.
+ * Exported for smoke-test coverage.
+ */
+export function sniffMime(buf: Buffer): string | undefined {
+  if (buf.length < 4) return undefined;
+  // JPEG: FF D8 FF
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
+  // PNG: 89 50 4E 47
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "image/png";
+  // GIF: 47 49 46 38 (GIF87a / GIF89a)
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) return "image/gif";
+  // BMP: 42 4D
+  if (buf[0] === 0x42 && buf[1] === 0x4d) return "image/bmp";
+  // WEBP: RIFF????WEBP  (bytes 0-3 = RIFF, bytes 8-11 = WEBP)
+  if (buf.length >= 12 &&
+      buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50) {
+    return "image/webp";
+  }
+  return undefined;
+}
+
+/**
+ * Derive the content-type for a local file: sniff magic bytes first, then fall
+ * back to the extension. Returns undefined when both fail (unrecognised format).
+ * Exported for smoke-test coverage.
+ */
+export function localContentType(ext: string, buf: Buffer): string | undefined {
+  const sniffed = sniffMime(buf);
+  const fromExt = EXT_TO_MIME[ext.toLowerCase()] as string | undefined;
+  // Prefer sniffed (more reliable); fall back to extension when sniff fails.
+  return sniffed ?? fromExt;
+}
+
+export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
   // 13) Search images ---------------------------------------------------------
   server.tool(
     "search_images",
@@ -149,100 +243,169 @@ export function registerMediaTools(server: McpServer) {
   // 14) Upload images to Webcake -----------------------------------------------
   server.tool(
     "upload_images",
-    "Converts external image URLs (typically collected from ingest_html/ingest_url results) or data: URIs into Webcake-hosted URLs (statics.pancake.vn) by downloading each image and re-uploading it to the Webcake backend. Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone) or the user supplies their own image URLs: reference images are the user's assets, so re-host and reuse them rather than replacing them with stock photos, and never hotlink third-party hosts that may block hotlinking or disappear. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 URLs per call in parallel, with an 8 MB per-image cap. No Webcake credentials required (the upload endpoint is public). DEFAULTS to dry_run=true (returns a preview of what would be uploaded, no network calls); set dry_run=false to actually upload. Use search_images instead when you need stock photos.",
+    "Converts external image URLs (typically collected from ingest_html/ingest_url results), data: URIs, or LOCAL FILE PATHS from the user's computer into Webcake-hosted URLs (statics.pancake.vn) by reading/downloading each image and re-uploading it to the Webcake backend via multipart upload (200 MB backend limit). Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone), the user supplies their own image URLs, OR the user provides local image files from their machine — pass the path directly in `urls`; NEVER upload a user's local file to a third-party host (catbox, imgur, transfer.sh…) to obtain a URL first. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 entries per call in parallel, with a 200 MB per-image cap. No Webcake credentials required (the upload endpoint is public). DEFAULTS to dry_run=true (returns a preview of what would be processed, no network calls); set dry_run=false to actually upload. Use search_images instead when you need stock photos. Local file paths are only permitted when the MCP server runs locally (stdio mode); on the remote HTTP transport they are rejected per-entry.",
     {
       urls: z
         .array(z.string())
         .min(1)
         .max(20)
-        .describe("External http(s) image URLs or data:image/...;base64,... URIs to upload. 1–20 per call."),
+        .describe(
+          "Image sources to upload — 1–20 per call. Accepted formats:\n" +
+          "• http(s) URLs (remote images to download and re-host)\n" +
+          "• data:image/...;base64,... URIs (inline image data)\n" +
+          "• Local file paths from the user's machine: absolute POSIX paths (/home/user/photo.jpg), home-dir paths (~/Pictures/logo.png), file:// URIs, or Windows drive paths (C:\\Users\\…). Local paths are only allowed when the server runs in stdio mode (the user's own machine); they are rejected on the remote HTTP transport.\n" +
+          "Up to 200 MB per image (the backend multipart limit)."
+        ),
       dry_run: z
         .boolean()
         .optional()
-        .describe("Default TRUE — return a preview of the endpoint and URLs that WOULD be processed, without any network activity. Set false to actually download and upload."),
+        .describe("Default TRUE — return a preview of the endpoint and entries that WOULD be processed, without any network or filesystem activity (local paths: reports whether the file exists and its size). Set false to actually read/download and upload."),
     },
     { title: "Upload Images to Webcake", readOnlyHint: false, openWorldHint: true },
     async ({ urls, dry_run }, extra) => {
       const isDry = dry_run !== false;
       const base = resolveApiBase(extra?.requestInfo?.headers);
 
-      // Deduplicate input URLs.
+      // Stdio transport: extra.requestInfo is undefined (no HTTP request headers).
+      // HTTP transport: extra.requestInfo is always present.
+      // We derive allowLocalFiles from the parameter passed into registerMediaTools
+      // (true for stdio, false for the HTTP serve mode — see registerTools / http.ts).
+      const localAllowed = allowLocalFiles;
+
+      // Deduplicate input entries while preserving original strings as keys.
       const deduped = [...new Set(urls)];
 
       if (isDry) {
+        // For local paths: stat the file so the model catches typos before the real call.
+        const urlsInfo = await Promise.all(
+          deduped.map(async (entry) => {
+            if (isLocalPath(entry)) {
+              if (!localAllowed) {
+                return { entry, local: true, allowed: false, error: "Local file paths are only supported when the MCP server runs locally (stdio). Send a public URL or data: URI instead." };
+              }
+              try {
+                const resolved = resolveLocalPath(entry);
+                const st = await fs.stat(resolved);
+                return { entry, local: true, allowed: true, exists: true, size_bytes: st.size, exceeds_limit: st.size > UPLOAD_MAX_BYTES, limit_bytes: UPLOAD_MAX_BYTES };
+              } catch {
+                return { entry, local: true, allowed: true, exists: false };
+              }
+            }
+            return { entry, local: false };
+          })
+        );
         return text({
           ok: true,
           dry_run: true,
           endpoint: `${base}/external/upload_file`,
-          urls_to_upload: deduped,
-          hint: "Re-call with dry_run:false to actually download and upload these images.",
+          urls_to_upload: urlsInfo,
+          hint: "Re-call with dry_run:false to actually read/download and upload these images.",
         });
       }
 
-      // Process each URL in parallel; per-URL failures don't fail the whole call.
+      // Process each entry in parallel; per-entry failures don't fail the whole call.
       const results = await Promise.all(
-        deduped.map(async (originalUrl): Promise<[string, { ok: true; url: string } | { ok: false; error: string }]> => {
+        deduped.map(async (originalEntry): Promise<[string, { ok: true; url: string } | { ok: false; error: string }]> => {
           try {
-            let b64: string;
+            let bytes: Buffer;
             let contentType: string;
 
-            if (originalUrl.startsWith("data:")) {
-              // data:image/<subtype>;base64,<data>
-              const match = originalUrl.match(/^data:(image\/[^;,]+);base64,(.+)$/s);
+            if (isLocalPath(originalEntry)) {
+              // --- LOCAL FILE PATH ---
+              if (!localAllowed) {
+                return [originalEntry, { ok: false, error: "Local file paths are only supported when the MCP server runs locally (stdio). Send a public URL or data: URI instead." }];
+              }
+              const resolved = resolveLocalPath(originalEntry);
+
+              // Stat first — size check before reading the whole file.
+              let stat: Awaited<ReturnType<typeof fs.stat>>;
+              try {
+                stat = await fs.stat(resolved);
+              } catch (e: any) {
+                const msg = (e?.code === "ENOENT") ? `File not found: ${resolved}` : `Cannot read file: ${e?.message ?? e}`;
+                return [originalEntry, { ok: false, error: msg }];
+              }
+              if (stat.size > UPLOAD_MAX_BYTES) {
+                return [originalEntry, { ok: false, error: `Image exceeds the 200 MB backend limit (file size: ${stat.size} bytes)` }];
+              }
+
+              // Read file contents.
+              let fileBuf: Buffer;
+              try {
+                fileBuf = await fs.readFile(resolved);
+              } catch (e: any) {
+                return [originalEntry, { ok: false, error: `Cannot read file: ${e?.message ?? e}` }];
+              }
+
+              // Derive extension from path, sniff MIME from bytes.
+              const dotIdx = resolved.lastIndexOf(".");
+              const extRaw = dotIdx >= 0 ? resolved.slice(dotIdx + 1).replace(/[?#].*$/, "").toLowerCase() : "";
+              const ct = localContentType(extRaw, fileBuf);
+              if (!ct) {
+                return [originalEntry, { ok: false, error: `Not a recognized image file: ${resolved}` }];
+              }
+              contentType = ct;
+              bytes = fileBuf;
+
+            } else if (originalEntry.startsWith("data:")) {
+              // --- DATA URI ---
+              const match = originalEntry.match(/^data:(image\/[^;,]+);base64,(.+)$/s);
               if (!match) {
-                return [originalUrl, { ok: false, error: "Malformed data: URI — expected data:image/<type>;base64,<data>" }];
+                return [originalEntry, { ok: false, error: "Malformed data: URI — expected data:image/<type>;base64,<data>" }];
               }
               contentType = match[1].toLowerCase();
-              b64 = match[2];
+              bytes = Buffer.from(match[2], "base64");
+
             } else {
-              // Fetch the remote image.
+              // --- REMOTE HTTP(S) URL ---
               let res: Response;
               try {
-                res = await fetch(originalUrl, {
-                  signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+                res = await fetch(originalEntry, {
+                  signal: AbortSignal.timeout(UPLOAD_FETCH_TIMEOUT_MS),
                   headers: {
                     "User-Agent": "Mozilla/5.0 (compatible; webcake-landing-mcp/1.0; +https://webcake.io)",
                   },
                 });
               } catch (e: any) {
-                return [originalUrl, { ok: false, error: `Fetch failed: ${e?.message ?? e}` }];
+                return [originalEntry, { ok: false, error: `Fetch failed: ${e?.message ?? e}` }];
               }
               if (!res.ok) {
-                return [originalUrl, { ok: false, error: `Remote returned HTTP ${res.status}` }];
+                return [originalEntry, { ok: false, error: `Remote returned HTTP ${res.status}` }];
               }
 
               // Reject oversized images early via Content-Length.
               const cl = res.headers.get("content-length");
               if (cl && parseInt(cl, 10) > UPLOAD_MAX_BYTES) {
-                return [originalUrl, { ok: false, error: `Image exceeds 8 MB limit (Content-Length: ${cl})` }];
+                return [originalEntry, { ok: false, error: `Image exceeds the 200 MB backend limit (Content-Length: ${cl})` }];
               }
 
               // Determine content-type; reject non-images (also catches html error pages).
               const rawCt = res.headers.get("content-type") ?? "";
-              contentType = rawCt.split(";")[0].trim().toLowerCase() || `image/${extFromUrl(originalUrl)}`;
+              contentType = rawCt.split(";")[0].trim().toLowerCase() || `image/${extFromUrl(originalEntry)}`;
               if (!contentType.startsWith("image/")) {
-                return [originalUrl, { ok: false, error: `Not an image — content-type: ${contentType || "(empty)"}` }];
+                return [originalEntry, { ok: false, error: `Not an image — content-type: ${contentType || "(empty)"}` }];
               }
 
               const buf = await res.arrayBuffer();
               if (buf.byteLength > UPLOAD_MAX_BYTES) {
-                return [originalUrl, { ok: false, error: `Image exceeds 8 MB limit (actual: ${buf.byteLength} bytes)` }];
+                return [originalEntry, { ok: false, error: `Image exceeds the 200 MB backend limit (actual: ${buf.byteLength} bytes)` }];
               }
-              b64 = Buffer.from(buf).toString("base64");
+              bytes = Buffer.from(buf);
             }
 
             if (!contentType.startsWith("image/")) {
-              return [originalUrl, { ok: false, error: `Not an image — content-type: ${contentType}` }];
+              return [originalEntry, { ok: false, error: `Not an image — content-type: ${contentType}` }];
             }
 
             const ext = extFromContentType(contentType);
-            const result = await uploadImageBase64(base, b64, ext, contentType);
+            const filename = `upload.${ext}`;
+            const result = await uploadImageMultipart(base, bytes, filename, contentType);
             if (!result.ok) {
-              return [originalUrl, { ok: false, error: result.error ?? "Upload failed" }];
+              return [originalEntry, { ok: false, error: result.error ?? "Upload failed" }];
             }
-            return [originalUrl, { ok: true, url: result.url! }];
+            return [originalEntry, { ok: true, url: result.url! }];
           } catch (e: any) {
-            return [originalUrl, { ok: false, error: `Unexpected error: ${e?.message ?? e}` }];
+            return [originalEntry, { ok: false, error: `Unexpected error: ${e?.message ?? e}` }];
           }
         })
       );
@@ -250,8 +413,8 @@ export function registerMediaTools(server: McpServer) {
       const images: Record<string, { ok: true; url: string } | { ok: false; error: string }> = {};
       let uploaded = 0;
       let failed = 0;
-      for (const [url, result] of results) {
-        images[url] = result;
+      for (const [entry, result] of results) {
+        images[entry] = result;
         if (result.ok) uploaded++;
         else failed++;
       }

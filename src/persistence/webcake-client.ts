@@ -667,6 +667,65 @@ export async function uploadImageBase64(
   return { ok: true, url: hostedUrl, status: res.status };
 }
 
+/** Timeout used for multipart uploads — generous to accommodate large files. */
+const UPLOAD_MULTIPART_TIMEOUT_MS = 120_000;
+
+/**
+ * Upload an image to the Webcake backend via multipart/form-data.
+ * The /external/upload_file endpoint is public — no JWT required.
+ * The backend derives `ext` from the last dot segment of `filename` and uses
+ * `file.content_type` from the part headers — so `filename` must carry the
+ * correct extension and `contentType` must be set explicitly.
+ * Supports up to 200 MB (the backend's multipart Plug.Parsers limit).
+ * Returns `{ ok: true, url }` on success or `{ ok: false, error }` on failure.
+ */
+export async function uploadImageMultipart(
+  base: string,
+  bytes: Uint8Array | Buffer,
+  filename: string,
+  contentType: string
+): Promise<{ ok: boolean; url?: string; status?: number; error?: string }> {
+  const url = `${base.replace(/\/+$/, "")}${UPLOAD_FILE_ENDPOINT}`;
+  const form = new FormData();
+  // Attach the blob with an explicit content type so the backend picks it up
+  // from file.content_type, and a filename so it can derive the extension.
+  form.append("file", new Blob([bytes], { type: contentType }), filename);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      // Do NOT set Content-Type manually — fetch sets it with the correct
+      // multipart boundary when the body is a FormData instance.
+      headers: { Accept: "application/json" },
+      body: form,
+      signal: timeoutSignal(UPLOAD_MULTIPART_TIMEOUT_MS),
+    });
+  } catch (e: any) {
+    const e2 = timeoutOrNetworkError(url, e);
+    return { ok: false, status: e2.status, error: e2.error };
+  }
+  const rawText = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    /* non-JSON */
+  }
+  if (!res.ok || json?.success === false) {
+    const reason = json?.reason ?? json?.message ?? (json ? undefined : rawText.slice(0, 200));
+    return {
+      ok: false,
+      status: res.status,
+      error: `Backend returned ${res.status}${reason ? `: ${reason}` : ""}`,
+    };
+  }
+  const hostedUrl: string | undefined = typeof json?.data === "string" ? json.data : undefined;
+  if (!hostedUrl) {
+    return { ok: false, status: res.status, error: "Backend returned success but no URL in data field" };
+  }
+  return { ok: true, url: hostedUrl, status: res.status };
+}
+
 /**
  * POST to a host-scoped route. Node's fetch cannot reach `*.localhost` hosts
  * (browsers special-case .localhost; Node's DNS does not, and undici forbids a

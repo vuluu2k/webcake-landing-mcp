@@ -187,7 +187,7 @@ server, the `login` browser flow (+ backend contract), and how to grab a JWT by 
 |-------|-------|-------|
 | **Reference** | `get_generation_guide` · `list_elements` · `get_element` · `get_page_schema` | nothing |
 | **Generation** | `new_element` · `new_page_skeleton` · `validate_page` | nothing |
-| **Media** | `search_images` (real Pexels stock photos) · `upload_images` (re-host external images) | nothing |
+| **Media** | `search_images` (real Pexels stock photos) · `upload_images` (re-host external images, data: URIs, or local file paths from the user's machine) | nothing |
 | **Ingest** | `ingest_html` · `ingest_url` (recreate an existing page) | nothing |
 | **Persistence** | `list_organizations` · `create_page` · `list_pages` · `find_pages` · `get_page` · `update_page` · `add_section` · `patch_page` · `publish_page` | `WEBCAKE_API_BASE` + `WEBCAKE_JWT` |
 

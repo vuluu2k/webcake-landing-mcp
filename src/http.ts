@@ -217,7 +217,7 @@ export async function startHttpServer(port: number): Promise<void> {
           transport.onclose = () => {
             if (transport.sessionId) transports.delete(transport.sessionId);
           };
-          const server = createServer();
+          const server = createServer({ allowLocalFiles: false });
           await server.connect(transport);
           await transport.handleRequest(req, res, body);
           return;
