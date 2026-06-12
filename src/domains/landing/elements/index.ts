@@ -40,6 +40,16 @@ export const LIBRARY = buildCatalog(ELEMENTS);
 /** Every supported element type, in catalog order. */
 export const ELEMENT_TYPES = ELEMENTS.map((d) => d.type);
 
+/**
+ * One-line, name-only catalog grouped by category, for embedding in the
+ * always-on instructions/guide — the model sees the FULL menu of types without
+ * a list_elements round-trip (fixes the unknown-unknowns gap where it can't
+ * get_element a type it doesn't know exists). Derived, so it never drifts.
+ */
+export const CATALOG_SUMMARY = [...new Set(ELEMENTS.map((d) => d.category))]
+  .map((c) => `${c}: ${ELEMENTS.filter((d) => d.category === c).map((d) => d.type).join(", ")}`)
+  .join(" · ");
+
 /** Types that can hold `children` (derived from the container flag). */
 export const CONTAINER_TYPES = deriveContainerTypes(ELEMENTS);
 
