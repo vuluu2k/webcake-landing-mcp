@@ -243,7 +243,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
   // 14) Upload images to Webcake -----------------------------------------------
   server.tool(
     "upload_images",
-    "Converts external image URLs (typically collected from ingest_html/ingest_url results), data: URIs, or LOCAL FILE PATHS from the user's computer into Webcake-hosted URLs (statics.pancake.vn) by reading/downloading each image and re-uploading it to the Webcake backend via multipart upload (200 MB backend limit). Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone), the user supplies their own image URLs, OR the user provides local image files from their machine — pass the path directly in `urls`; NEVER upload a user's local file to a third-party host (catbox, imgur, transfer.sh…) to obtain a URL first. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 entries per call in parallel, with a 200 MB per-image cap. No Webcake credentials required (the upload endpoint is public). DEFAULTS to dry_run=true (returns a preview of what would be processed, no network calls); set dry_run=false to actually upload. Use search_images instead when you need stock photos. Local file paths are only permitted when the MCP server runs locally (stdio mode); on the remote HTTP transport they are rejected per-entry.",
+    "Converts external image URLs (typically collected from ingest_html/ingest_url results), data: URIs, or LOCAL FILE PATHS from the user's computer into Webcake-hosted URLs (statics.pancake.vn) by reading/downloading each image and re-uploading it to the Webcake backend via multipart upload (200 MB backend limit). Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone), the user supplies their own image URLs, OR the user provides local image files from their machine — pass the path directly in `urls`; NEVER upload a user's local file to a third-party host (catbox, imgur, transfer.sh…) to obtain a URL first. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 entries per call in parallel, with a 200 MB per-image cap. No Webcake credentials required (the upload endpoint is public). DEFAULTS to dry_run=true (returns a preview of what would be processed, no network calls — NO images are uploaded and NO hosted URLs are returned); in a REAL build flow call it with dry_run:false and wait for the returned images map (original URL → hosted URL) BEFORE assembling the page — never fall back to a placeholder for a slot whose upload succeeded. Use search_images instead when you need stock photos. Local file paths are only permitted when the MCP server runs locally (stdio mode); on the remote HTTP transport they are rejected per-entry.",
     {
       urls: z
         .array(z.string())
@@ -299,7 +299,8 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
           dry_run: true,
           endpoint: `${base}/external/upload_file`,
           urls_to_upload: urlsInfo,
-          hint: "Re-call with dry_run:false to actually read/download and upload these images.",
+          action_required:
+            "DRY RUN ONLY — nothing was uploaded and NO hosted URLs exist yet. Do NOT build the page and do NOT fall back to placeholders: re-call upload_images with dry_run:false NOW (batch >20 entries into multiple calls) and WAIT for the returned images map before filling any specials.src / gallery link / background.",
         });
       }
 
@@ -419,7 +420,15 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         else failed++;
       }
 
-      return text({ ok: true, images, uploaded, failed });
+      return text({
+        ok: true,
+        images,
+        uploaded,
+        failed,
+        usage:
+          "Put images[<original>].url into EVERY element that used <original> (image specials.src, gallery item.link, section/box background url(...)). Slots whose entry uploaded ok MUST use the hosted URL — never a placeholder. Only for entries marked ok:false, fall back to the image-source chain (search_images → your own web search + re-upload → placeholder LAST)." +
+          (failed > 0 ? ` ${failed} entr${failed === 1 ? "y" : "ies"} failed — handle them via that fallback chain now.` : ""),
+      });
     }
   );
 }
