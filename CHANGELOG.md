@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.66] - 2026-06-12
+
+### Changed
+- Generation guide (`get_generation_guide`) and server instructions now prescribe a four-step image sourcing priority: (1) re-host user-supplied or reference-HTML images via `upload_images`; (2) call `search_images` for empty slots; (3) if `search_images` returns `ok:false`, is unreachable, or has no fitting photo, find a real image independently using whatever web-search or fetch capability is available then re-host it via `upload_images`; (4) use a `placehold.co` placeholder only as the last resort after both (2) and (3) fail — the guide explicitly prohibits jumping straight from a failed search to a placeholder.
+
 ## [1.0.65] - 2026-06-12
 
 ### Added
