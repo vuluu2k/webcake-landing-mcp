@@ -71,37 +71,50 @@ function measurePx(text: string, fs: number, t: WeightTable, letterSpacing: numb
   return (units / 1000) * fs + letterSpacing * Math.max(0, count - 1);
 }
 
-/** Greedy word-wrap: number of rendered lines for one explicit-break segment. */
-function wrapLines(seg: string, width: number, fs: number, t: WeightTable, ls: number): number {
+/** Greedy word-wrap of one explicit-break segment: line count + widest painted line. */
+function wrapLines(seg: string, width: number, fs: number, t: WeightTable, ls: number): { lines: number; maxW: number } {
   const spaceW = (charMille(t, " ") / 1000) * fs + ls;
   let lines = 1;
   let lineW = 0; // width consumed on the current line; 0 = fresh line
+  let maxW = 0;
   const placeOnFreshLine = (wordW: number) => {
     // a word wider than the box breaks across lines (≈ break-word; close
     // enough for estimation — it pushes content down either way).
     const extra = Math.max(0, Math.ceil(wordW / width) - 1);
     lines += extra;
     lineW = wordW - extra * width;
+    maxW = Math.max(maxW, Math.min(wordW, width));
   };
   for (const word of seg.split(/\s+/).filter(Boolean)) {
     const wordW = measurePx(word, fs, t, ls);
     if (lineW === 0) placeOnFreshLine(wordW);
-    else if (lineW + spaceW + wordW <= width) lineW += spaceW + wordW;
-    else {
+    else if (lineW + spaceW + wordW <= width) {
+      lineW += spaceW + wordW;
+      maxW = Math.max(maxW, lineW);
+    } else {
       lines++;
       placeOnFreshLine(wordW);
     }
   }
-  return lines;
+  return { lines, maxW };
+}
+
+export interface TextBlockMeasure {
+  /** Rendered line count at this width. */
+  lines: number;
+  /** Painted width of the widest line (px, ≤ box width). */
+  maxLineWidthPx: number;
+  /** One line box in px (fontSize × lineHeight, or the explicit px lineHeight). */
+  lineHeightPx: number;
 }
 
 /**
- * Estimated rendered height (px) of a text-block's specials.text given its
- * breakpoint styles and the page font (settings.fontGeneral). Returns
- * undefined for empty text or template variables ({{…}}) whose rendered
- * length is unknown — same contract as the old heuristic.
+ * Measure a text-block's specials.text against its breakpoint styles using the
+ * real font tables: rendered line count, widest painted line, and the line box.
+ * Returns undefined for empty text or template variables ({{…}}) whose
+ * rendered length is unknown.
  */
-export function estTextHeightPx(rawText: string, styles: any, pageFont?: unknown): number | undefined {
+export function measureTextBlock(rawText: string, styles: any, pageFont?: unknown): TextBlockMeasure | undefined {
   const fs = num(styles?.fontSize) ?? 16;
   const width = num(styles?.width);
   if (rawText.includes("{{") || !(fs > 0) || !width || !(width > 0)) return undefined;
@@ -132,8 +145,20 @@ export function estTextHeightPx(rawText: string, styles: any, pageFont?: unknown
     : fs * lhRaw;
 
   let lines = 0;
+  let maxLineWidthPx = 0;
   for (const seg of segments) {
-    lines += wrapLines(upper ? seg.toUpperCase() : seg, width, fs, table, ls);
+    const r = wrapLines(upper ? seg.toUpperCase() : seg, width, fs, table, ls);
+    lines += r.lines;
+    maxLineWidthPx = Math.max(maxLineWidthPx, r.maxW);
   }
-  return Math.round(lines * lineHeightPx);
+  return { lines, maxLineWidthPx, lineHeightPx };
+}
+
+/**
+ * Estimated rendered height (px) of a text-block's specials.text — same
+ * contract as the old heuristic (undefined for empty/template text).
+ */
+export function estTextHeightPx(rawText: string, styles: any, pageFont?: unknown): number | undefined {
+  const m = measureTextBlock(rawText, styles, pageFont);
+  return m ? Math.round(m.lines * m.lineHeightPx) : undefined;
 }

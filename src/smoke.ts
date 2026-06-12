@@ -1299,5 +1299,49 @@ console.log("== validator: rectangle svgMask needs a visible background ==");
   check("svgMask: placed in specials → placement warning", rStray.warnings.some((w) => w.includes("ONLY reads responsive.<bp>.config.svgMask")), rStray.warnings);
 }
 
+console.log("== validator: pill/badge label alignment ==");
+{
+  const badge = (textTop: number, textLeft: number, textW: number, textOpts: any = {}, pillOpts: any = {}) => ({
+    page: [{
+      id: "psec", type: "section",
+      responsive: { desktop: { styles: { height: 400 } }, mobile: { styles: { height: 400 } } },
+      children: [
+        {
+          id: "pill", type: "rectangle",
+          responsive: {
+            desktop: { styles: { top: 100, left: 330, width: 300, height: 36, borderRadius: "999px", background: "rgba(59,130,246,0.15)", ...pillOpts } },
+            mobile: { styles: { top: 100, left: 60, width: 300, height: 36, borderRadius: "999px", background: "rgba(59,130,246,0.15)", ...pillOpts } },
+          },
+        },
+        {
+          id: "label", type: "text-block",
+          responsive: {
+            desktop: { styles: { top: textTop, left: textLeft, width: textW, height: 20, fontSize: 14, fontWeight: 600, textAlign: "center", ...textOpts } },
+            mobile: { styles: { top: textTop, left: textLeft - 270, width: textW, height: 20, fontSize: 14, fontWeight: 600, textAlign: "center", ...textOpts } },
+          },
+          specials: { text: "ĐỐI TÁC VẬN CHUYỂN TOÀN QUỐC", tag: "p" },
+        },
+      ],
+    }],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+
+  // label top eyeballed too low → glyph row sits below the pill center
+  const rLow = validatePage(expandSource(badge(115, 340, 280), createElement));
+  check("pill: label below pill center → warned with exact top", rLow.warnings.some((w) => w.includes("BELOW") && w.includes("set top = 108")), rLow.warnings);
+
+  // line-box-centered label → silent
+  const rMid = validatePage(expandSource(badge(108, 340, 280), createElement));
+  check("pill: centered label → no badge warnings", !rMid.warnings.some((w) => w.includes("badge label")), rMid.warnings);
+
+  // label box center 30px right of the pill center
+  const rOff = validatePage(expandSource(badge(108, 370, 280), createElement));
+  check("pill: label off-center horizontally → warned", rOff.warnings.some((w) => w.includes("badge label") && w.includes("RIGHT")), rOff.warnings);
+
+  // label painted wider than the pill → spills past the rounded ends
+  const rWide = validatePage(expandSource(badge(108, 330, 300, { fontSize: 16, fontWeight: 700 }, { width: 220, left: 370 }), createElement));
+  check("pill: label wider than pill → spill warning", rWide.warnings.some((w) => w.includes("spills past")), rWide.warnings);
+}
+
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);
 process.exit(failures === 0 ? 0 : 1);

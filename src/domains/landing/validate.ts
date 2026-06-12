@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import Ajv2020Module from "ajv/dist/2020.js";
 import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
 import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
-import { estTextHeightPx } from "./text-metrics.js";
+import { estTextHeightPx, measureTextBlock } from "./text-metrics.js";
 import type { ValidationResult } from "../../core/domain.js";
 
 export type { ValidationResult };
@@ -967,6 +967,89 @@ export function validatePage(input: unknown): ValidationResult {
     });
   };
   topList.forEach((sec, i) => checkTextOverlap(sec, `page[${i}]`));
+
+  // 3c2) Pill/badge alignment — the classic "background hugging a label"
+  //      pattern is a rounded rectangle with a single-line text-block layered
+  //      on top. The renderer draws text-blocks with height:AUTO from `top`
+  //      (declared height is ignored), so the glyph row sits at top + lineBox/2
+  //      — models that eyeball `top` against the pill leave the text visibly
+  //      off-center. With real font metrics we can check both axes and name
+  //      the exact corrected coordinates.
+  let pillWarnings = 0;
+  const MAX_PILL_WARNINGS = 12;
+  const isPillRect = (sib: any, bp: "desktop" | "mobile") => {
+    if (sib?.type !== "rectangle") return false;
+    if (sib.responsive?.[bp]?.config?.svgMask) return false; // icon, not a pill
+    const ss = sib.responsive?.[bp]?.styles;
+    const br = ss?.borderRadius;
+    const hasRadius = br != null && String(br).trim() !== "" && parseFloat(String(br)) !== 0;
+    const h = num(ss?.height);
+    const w = num(ss?.width);
+    return hasRadius && h != null && h <= 88 && w != null && w <= 600;
+  };
+  const checkPillAlignment = (container: any, path: string) => {
+    if (!container || !Array.isArray(container.children)) return;
+    const kids = container.children;
+    kids.forEach((child: any, idx: number) => {
+      if (!child || typeof child !== "object") return;
+      const cpath = `${path}.children[${idx}]`;
+      const rawText = child.type === "text-block" ? child.specials?.text : undefined;
+      if (typeof rawText === "string") {
+        for (const bp of ["desktop", "mobile"] as const) {
+          if (pillWarnings >= MAX_PILL_WARNINGS) break;
+          const s = child.responsive?.[bp]?.styles;
+          const top = num(s?.top);
+          const left = num(s?.left);
+          const w = num(s?.width);
+          if (top == null || left == null || !w) continue;
+          const m = measureTextBlock(rawText, s, pageFont);
+          if (!m || m.lines !== 1) continue; // pill labels are single-line
+          // the pill: a rounded rectangle sibling whose box contains the text row
+          const pill = kids.find((sib: any, j: number) => {
+            if (j === idx || !isPillRect(sib, bp)) return false;
+            const ss = sib.responsive[bp].styles;
+            const rt = num(ss?.top), rl = num(ss?.left), rw = num(ss?.width), rh = num(ss?.height);
+            if (rt == null || rl == null || !rw || !rh) return false;
+            return top >= rt - 2 && top < rt + rh && left >= rl - rw * 0.25 && left + w <= rl + rw * 1.25;
+          });
+          if (!pill) continue;
+          const ps = pill.responsive[bp].styles;
+          const pTop = num(ps.top)!, pLeft = num(ps.left)!, pW = num(ps.width)!, pH = num(ps.height)!;
+
+          // vertical: glyph row center vs pill center
+          const dy = Math.round(top + m.lineHeightPx / 2 - (pTop + pH / 2));
+          if (Math.abs(dy) > 4) {
+            warnings.push(
+              `${cpath} (text-block) [${bp}]: badge label sits ~${Math.abs(dy)}px ${dy > 0 ? "BELOW" : "ABOVE"} the center of its pill (${pill.id}) — text-blocks render with height:auto from \`top\` (declared height is ignored), so center the LINE BOX, not the styles.height: set top = ${Math.round(pTop + (pH - m.lineHeightPx) / 2)} (pill top ${pTop} + (pill height ${pH} − line box ${Math.round(m.lineHeightPx)})/2).`
+            );
+            pillWarnings++;
+          }
+
+          // text wider than the pill → spills out both ends
+          if (m.maxLineWidthPx > pW - 8) {
+            warnings.push(
+              `${cpath} (text-block) [${bp}]: badge label is ~${Math.round(m.maxLineWidthPx)}px wide but its pill (${pill.id}) is only ${pW}px — the text spills past the rounded background. Set the pill width ≈ ${Math.ceil(m.maxLineWidthPx + 32)} (text + 16px padding each side) and re-center it.`
+            );
+            pillWarnings++;
+          } else {
+            // horizontal: painted text center vs pill center
+            const centered = typeof s?.textAlign === "string" && /center/i.test(s.textAlign);
+            const tCx = centered ? left + w / 2 : left + m.maxLineWidthPx / 2;
+            const dx = Math.round(tCx - (pLeft + pW / 2));
+            if (Math.abs(dx) > 6) {
+              const fixLeft = centered ? Math.round(pLeft + pW / 2 - w / 2) : Math.round(pLeft + (pW - m.maxLineWidthPx) / 2);
+              warnings.push(
+                `${cpath} (text-block) [${bp}]: badge label is ~${Math.abs(dx)}px ${dx > 0 ? "RIGHT" : "LEFT"} of its pill's center (${pill.id}) — set left = ${fixLeft}${centered ? "" : " (or add textAlign:'center' and center the box on the pill)"}.`
+              );
+              pillWarnings++;
+            }
+          }
+        }
+      }
+      if (Array.isArray(child.children) && child.children.length > 0) checkPillAlignment(child, cpath);
+    });
+  };
+  topList.forEach((sec, i) => checkPillAlignment(sec, `page[${i}]`));
 
   // 3d) Trailing dead space — a section far taller than its lowest content
   //     renders as a big empty band, which reads as a broken/unfinished page.
