@@ -377,6 +377,56 @@ check("ingest: hero bg image URL captured", ssAst.background_images?.some((u) =>
 check("ingest: Google Font extracted into fonts", ssAst.fonts?.some((f) => f.toLowerCase().includes("poppins")) === true, ssAst.fonts);
 check("ingest: stylesheet colors merged into colors", (ssAst.colors?.length ?? 0) > 0, ssAst.colors);
 
+console.log("== ingest: Tailwind-config design system (Google Stitch / Tailwind-CDN) ==");
+// Stitch puts the WHOLE design system in tailwind.config (NOT in CSS) and wraps
+// content sections in <main> with <header>/<footer> as siblings.
+const stitchHtml = `<!DOCTYPE html><html lang="vi"><head>
+  <title>Little Posh</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300..700&family=Source+Sans+3&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap" rel="stylesheet"/>
+  <script id="tailwind-config">
+    tailwind.config = { theme: { extend: {
+      "colors": { "primary": "#a43b38", "secondary": "#735c00", "surface-container-low": "#f3f3f3", "on-surface-variant": "#574240", "secondary-container": "#fcd664" },
+      "borderRadius": { "DEFAULT": "1rem", "lg": "2rem", "full": "9999px" },
+      "spacing": { "xl": "80px", "lg": "48px", "gutter": "24px", "margin-desktop": "40px" },
+      "fontFamily": { "display-lg": ["Quicksand"], "body-md": ["Source Sans 3"] },
+      "fontSize": { "display-lg": ["48px", {"lineHeight": "56px", "fontWeight": "700"}], "label-sm": ["12px", {"lineHeight": "16px"}] }
+    } } }
+  </script>
+  <style>body { background-color: #f9f9f9; }</style>
+</head><body class="font-body-md text-on-surface">
+  <header class="sticky top-0"><a class="text-primary" href="#">Little Posh</a><nav><a class="text-on-surface-variant" href="#">New In</a><a class="text-on-surface-variant" href="#">Sale</a></nav></header>
+  <main>
+    <section class="relative bg-surface-container-low"><img src="https://x/hero.jpg" alt="hero"/><h1 class="text-primary">Nơi Phong Cách</h1><p>Thời trang trẻ em cao cấp cho bé yêu.</p><a class="bg-primary" href="#shop">Mua Ngay</a></section>
+    <section><h2 class="text-primary">Ưu Đãi Chớp Nhoáng</h2>
+      <div class="group"><img src="https://x/p1.jpg"/><h3>Váy Xòe Pastel</h3><p class="text-primary">450.000đ</p></div>
+      <div class="group"><img src="https://x/p2.jpg"/><h3>Set Đồ Ngôi Sao</h3><p class="text-primary">380.000đ</p></div>
+      <div class="group"><img src="https://x/p3.jpg"/><h3>Mũ Cói Vành Rộng</h3><p class="text-primary">195.000đ</p></div>
+    </section>
+    <section><h2 class="text-primary">Đăng Ký Nhận Ưu Đãi</h2>
+      <form><input name="name" placeholder="Họ và tên"/><input name="email" type="email" placeholder="Email"/><button type="submit" class="bg-primary">Đăng Ký Ngay</button></form>
+    </section>
+  </main>
+  <footer class="bg-surface-container-low"><h2 class="text-secondary">Little Posh</h2><a href="#">Về Chúng Tôi</a></footer>
+</body></html>`;
+const tw = parseHtml(stitchHtml, "compact");
+check("stitch: tailwind config palette extracted by token", tw.palette?.["primary"] === "#a43b38" && tw.palette?.["secondary-container"] === "#fcd664", tw.palette);
+check("stitch: design_tokens.spacing resolved to px", tw.design_tokens?.spacing?.["xl"] === "80px" && tw.design_tokens?.spacing?.["gutter"] === "24px", tw.design_tokens?.spacing);
+check("stitch: design_tokens.font_size resolved to px (array value, nested keys skipped)", tw.design_tokens?.font_size?.["display-lg"] === "48px" && tw.design_tokens?.font_size?.["label-sm"] === "12px", tw.design_tokens?.font_size);
+check("stitch: design_tokens.radius extracted", tw.design_tokens?.radius?.["full"] === "9999px", tw.design_tokens?.radius);
+check("stitch: design_tokens.font_family first family of array", tw.design_tokens?.font_family?.["display-lg"] === "Quicksand", tw.design_tokens?.font_family);
+check("stitch: colors usage-ranked from utility classes (primary on top)", tw.colors?.[0] === "#a43b38", tw.colors);
+check("stitch: icon webfont (Material Symbols) excluded from fonts", !(tw.fonts ?? []).some((f) => /material symbols/i.test(f)), tw.fonts);
+check("stitch: content fonts kept (Quicksand + Source Sans 3)", (tw.fonts ?? []).some((f) => /quicksand/i.test(f)) && (tw.fonts ?? []).some((f) => /source sans/i.test(f)), tw.fonts);
+const twRoles = tw.sections.map((s) => s.role);
+check("stitch: <main> flattened — sections NOT collapsed (>=5)", tw.sections.length >= 5, twRoles);
+check("stitch: header + footer survive <main> flattening", twRoles.includes("header") && twRoles.includes("footer"), twRoles);
+check("stitch: hero inside <main> detected", twRoles.includes("hero"), twRoles);
+check("stitch: form inside <main> detected", twRoles.includes("form"), twRoles);
+// A page with NO tailwind config must not gain design_tokens (no regression).
+check("ingest: design_tokens absent without a tailwind config", parseHtml(stylesheetHtml, "compact").design_tokens === undefined);
+
 console.log("== ingest: full mode — blocks detection, gradients, images-as-objects ==");
 const fullAst = parseHtml(stylesheetHtml, "full");
 check("ingest: full mode palette present", fullAst.palette?.["primary"] === "#0A7C6E", fullAst.palette);
@@ -1614,6 +1664,28 @@ console.log("== rehost: external-image URL collect + rewrite (pure, offline) =="
   check("rehost: extension-less URL not rehostable as a plain field", !isRehostableImageUrl("https://w.ladicdn.com/x/noext"));
   check("rehost: .jpg URL rehostable", isRehostableImageUrl("https://w.ladicdn.com/x/p.jpg"));
   check("rehost: ?query after ext still rehostable", isRehostableImageUrl("https://cdn.x/p.png?v=2"));
+  // Stitch ↔ webcake bridge: Google Stitch images live on googleusercontent with
+  // NO extension — host-recognized so a Stitch clone's specials.src auto-hosts.
+  check("rehost: Stitch googleusercontent image (no ext) IS rehostable", isRehostableImageUrl("https://lh3.googleusercontent.com/aida/AP1WRLvcUnHkKPA0hJFi2Yx2"));
+  check("rehost: Stitch aida-public image (no ext) IS rehostable", isRehostableImageUrl("https://lh3.googleusercontent.com/aida-public/AB6AXuAh6CcIJ1kE5WUS"));
+  check("rehost: extensionless host-recognition is HOST-gated, not blanket", !isRehostableImageUrl("https://example.com/some/path-no-ext"));
+
+  // Collect a Stitch-shaped source (image src with no extension) end-to-end.
+  {
+    const stitchSrc = {
+      page: [{
+        id: "S", type: "section",
+        children: [
+          { id: "HERO", type: "image", specials: { src: "https://lh3.googleusercontent.com/aida/AP1WRLhero" } },
+          { id: "AV", type: "image", specials: { src: "https://lh3.googleusercontent.com/aida-public/AB6AXuAvatar" } },
+        ],
+      }],
+    };
+    const su = collectExternalImageUrls(stitchSrc);
+    check("rehost: collects both extensionless Stitch image URLs", su.length === 2 && su.every((u) => u.includes("googleusercontent.com")), su);
+    const sout: any = rewriteImageUrls(stitchSrc, new Map([["https://lh3.googleusercontent.com/aida/AP1WRLhero", "https://statics.pancake.vn/web_content/HERO.jpg"]]));
+    check("rehost: rewrites the extensionless Stitch hero src", sout.page[0].children[0].specials.src === "https://statics.pancake.vn/web_content/HERO.jpg");
+  }
 
   // rewrite: deep-clone + replace everywhere, leave original untouched
   const map = new Map([

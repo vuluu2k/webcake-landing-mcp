@@ -29,6 +29,16 @@ const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|svg|bmp|avif|ico|tiff?)(?:[?#]|$)/i;
 /** All `url( … )` tokens in a CSS value (handles optional quotes; stops at `)`). */
 const CSS_URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
 
+/**
+ * Image CDNs that serve images WITHOUT a file extension in the path, so the
+ * extension test alone would miss them. Google usercontent backs Google Stitch's
+ * generated images (`lh3.googleusercontent.com/aida…` and `…/aida-public…`) — a
+ * Stitch clone carries those bare URLs into specials.src, and without this they'd
+ * be hotlinked into the saved page (and the ephemeral `aida/` ones soon 404)
+ * instead of being re-hosted to the Webcake CDN like every other clone image.
+ */
+const EXTENSIONLESS_IMAGE_HOSTS = ["googleusercontent.com", "ggpht.com"];
+
 function hostOf(url: string): string | undefined {
   try {
     return new URL(url).host.toLowerCase();
@@ -37,7 +47,12 @@ function hostOf(url: string): string | undefined {
   }
 }
 
-/** http(s), not already-hosted/placeholder/data, and image-looking by extension. */
+/** A CDN that serves images without an extension (Google usercontent / Stitch). */
+function isExtensionlessImageHost(host: string): boolean {
+  return EXTENSIONLESS_IMAGE_HOSTS.some((h) => host === h || host.endsWith("." + h));
+}
+
+/** http(s), not already-hosted/placeholder/data, and image-looking — by extension OR a known extensionless image host. */
 export function isRehostableImageUrl(url: string): boolean {
   if (typeof url !== "string") return false;
   const u = url.trim();
@@ -51,7 +66,7 @@ export function isRehostableImageUrl(url: string): boolean {
   } catch {
     return false;
   }
-  return IMAGE_EXT_RE.test(pathname);
+  return IMAGE_EXT_RE.test(pathname) || isExtensionlessImageHost(host);
 }
 
 /** Re-hostable if http(s) and not on a skip host — used for `url(...)` inners (a background image even without an extension). */

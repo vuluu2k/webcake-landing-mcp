@@ -89,8 +89,22 @@ export type IngestedAst = {
   sections: IngestedSection[];
   colors?: string[];
   fonts?: string[];
-  /** full & compact: named CSS custom-property colors (design palette by name) */
+  /** full & compact: named design-palette colors by token name — from CSS custom-properties AND, when the page is built on the Tailwind CDN with a `tailwind.config` (Google Stitch / Pancake-style output), the config's resolved `colors` map (e.g. primary→#a43b38, surface-container-low→#f3f3f3). Map utility classes (text-primary, bg-surface-container-low) back to these. */
   palette?: Record<string, string>;
+  /**
+   * full & compact: the design system lifted from a `tailwind.config` block when
+   * present (Google Stitch / Tailwind-CDN pages put the WHOLE design system here,
+   * not in CSS). Reproduce the page from these tokens — they're the spacing grid,
+   * corner radii, and TYPE SCALE the original was laid out on. `font_size`/`spacing`
+   * values are concrete px/rem (e.g. display-lg→48px, xl→80px), so a class like
+   * `text-display-lg`/`py-xl` resolves to a real size.
+   */
+  design_tokens?: {
+    spacing?: Record<string, string>;
+    radius?: Record<string, string>;
+    font_size?: Record<string, string>;
+    font_family?: Record<string, string>;
+  };
   /** full & compact: background-image URLs found in stylesheets + inline styles */
   background_images?: string[];
   /** full mode only */
@@ -223,6 +237,96 @@ function extractGradients(stylesheets: string[]): string[] {
   return [...seen];
 }
 
+// ─── Tailwind-config design system (Google Stitch / Tailwind-CDN pages) ──────
+//
+// Stitch (and Pancake-style) exports load the Tailwind CDN and put the ENTIRE
+// design system in a `tailwind.config = { theme: { extend: { colors, spacing,
+// borderRadius, fontFamily, fontSize } } }` <script> — NOTHING in CSS. So the
+// stylesheet-based color/font extractors above see almost nothing (just a body
+// bg + a hero gradient), and every `text-primary` / `py-xl` / `text-display-lg`
+// utility class is meaningless without the config. This lifts that config so the
+// model rebuilds from the real palette + spacing grid + type scale.
+
+export type TailwindConfig = {
+  colors: Record<string, string>;
+  spacing: Record<string, string>;
+  borderRadius: Record<string, string>;
+  fontFamily: Record<string, string>;
+  fontSize: Record<string, string>;
+};
+
+/** Brace-match the object literal assigned to `key:` inside `text` (from the first `{` after the key). */
+function sliceObjectLiteral(text: string, key: string): string | undefined {
+  const re = new RegExp(`(?:["']${key}["']|\\b${key})\\s*:\\s*\\{`);
+  const m = re.exec(text);
+  if (!m) return undefined;
+  let i = m.index + m[0].length - 1; // at the opening '{'
+  let depth = 0;
+  for (let j = i; j < text.length; j++) {
+    const c = text[j];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) return text.slice(i + 1, j);
+    }
+  }
+  return undefined;
+}
+
+/** name → first quoted value. arrayValued=true requires `[` before the quote (skips nested {lineHeight} keys). */
+function parseTokenPairs(objText: string, arrayValued: boolean): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = arrayValued
+    ? /(?:"([\w-]+)"|'([\w-]+)'|([\w-]+))\s*:\s*\[\s*["']([^"']+)["']/g
+    : /(?:"([\w-]+)"|'([\w-]+)'|([\w-]+))\s*:\s*["']([^"']+)["']/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(objText)) !== null) {
+    const name = (m[1] ?? m[2] ?? m[3])?.trim();
+    const val = m[4]?.trim();
+    if (name && val) out[name] = val;
+  }
+  return out;
+}
+
+/** Lift the Tailwind config design system from a Stitch/Tailwind-CDN page; null when there's no config. */
+function extractTailwindConfig(html: string): TailwindConfig | null {
+  if (!/tailwind\.config\s*=/.test(html) && !/id=["']tailwind-config["']/.test(html)) return null;
+  // Narrow to the config script for accuracy; fall back to the whole document.
+  const scriptRe = /<script[^>]*>([\s\S]*?tailwind\.config[\s\S]*?)<\/script>/i;
+  const scope = scriptRe.exec(html)?.[1] ?? html;
+  const colors = parseTokenPairs(sliceObjectLiteral(scope, "colors") ?? "", false);
+  const spacing = parseTokenPairs(sliceObjectLiteral(scope, "spacing") ?? "", false);
+  const borderRadius = parseTokenPairs(sliceObjectLiteral(scope, "borderRadius") ?? "", false);
+  const fontFamily = parseTokenPairs(sliceObjectLiteral(scope, "fontFamily") ?? "", true);
+  const fontSize = parseTokenPairs(sliceObjectLiteral(scope, "fontSize") ?? "", true);
+  if (!Object.keys(colors).length && !Object.keys(fontSize).length && !Object.keys(spacing).length) return null;
+  return { colors, spacing, borderRadius, fontFamily, fontSize };
+}
+
+// Tailwind color-utility prefixes whose token after the dash names a color.
+const TW_COLOR_PREFIXES = ["text", "bg", "border", "from", "to", "via", "ring", "decoration", "divide", "fill", "stroke", "outline", "accent", "caret", "placeholder"];
+const TW_PREFIX_RE = new RegExp(`^(?:${TW_COLOR_PREFIXES.join("|")})-(.+)$`);
+const TW_KNOWN = { white: "#ffffff", black: "#000000" };
+
+/** Rank the config colors ACTUALLY used by utility classes in the body → resolved hex list (usage-weighted). */
+function resolveTailwindColors(body: HTMLElement, colors: Record<string, string>): string[] {
+  const counts = new Map<string, number>();
+  body.querySelectorAll("[class]").forEach((el) => {
+    const cls = el.getAttribute("class");
+    if (!cls) return;
+    for (const raw of cls.split(/\s+/)) {
+      if (!raw) continue;
+      const util = raw.includes(":") ? raw.slice(raw.lastIndexOf(":") + 1) : raw; // drop md:/dark:/hover: variants
+      const pm = TW_PREFIX_RE.exec(util);
+      if (!pm) continue;
+      const token = pm[1].split("/")[0]; // drop /80 opacity modifier
+      const hex = colors[token] ?? (TW_KNOWN as Record<string, string>)[token];
+      if (hex) counts.set(hex.toLowerCase(), (counts.get(hex.toLowerCase()) ?? 0) + 1);
+    }
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([k]) => k);
+}
+
 // ─── main parse entry point ──────────────────────────────────────────────────
 
 export type ParseHtmlOptions = {
@@ -249,6 +353,7 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
   // Stylesheet extraction (fast, regex-level, done on raw HTML before DOM parse).
   const styleBlocks = extractStyleBlocks(html);
   const googleFonts = extractGoogleFonts(html);
+  const tw = extractTailwindConfig(html);
 
   const root = parse(html, { lowerCaseTagName: true });
 
@@ -268,7 +373,7 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
   // match the Webcake canvas. Return a `canvas` payload that transfers 1:1.
   const canvas = parseAbsoluteCanvas(html, root, styleBlocks, opts.sections);
   if (canvas) {
-    const hints = brandHints(body, styleBlocks, googleFonts);
+    const hints = brandHints(body, styleBlocks, googleFonts, tw);
     const bg = [...new Set(hints.background_images.map(stripCdnSizePrefix))];
     return {
       title,
@@ -280,6 +385,7 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
       colors: hints.colors.length ? hints.colors : undefined,
       fonts: hints.fonts.length ? hints.fonts : undefined,
       palette: hints.palette,
+      design_tokens: hints.design_tokens,
       background_images: bg.length ? bg : undefined,
       warnings: warnings.length ? warnings : undefined,
     };
@@ -311,8 +417,8 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
     return sec;
   });
 
-  // Brand hints from stylesheets + inline styles (both modes).
-  const hints = brandHints(body, styleBlocks, googleFonts);
+  // Brand hints from stylesheets + inline styles + Tailwind config (both modes).
+  const hints = brandHints(body, styleBlocks, googleFonts, tw);
 
   const base: IngestedAst = {
     title,
@@ -323,6 +429,7 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
     colors: hints.colors.length ? hints.colors : undefined,
     fonts: hints.fonts.length ? hints.fonts : undefined,
     palette: hints.palette,
+    design_tokens: hints.design_tokens,
     background_images: hints.background_images.length ? hints.background_images : undefined,
     warnings: warnings.length ? warnings : undefined,
   };
@@ -374,16 +481,24 @@ function findSections(body: HTMLElement): HTMLElement[] {
     BLOCK_TAGS.has(c.tagName?.toLowerCase() ?? "")
   );
 
-  if (allTopLevel.length >= 2) return allTopLevel;
-
-  // If body has a single <main>, look inside it.
-  const main = body.querySelector("main");
-  if (main) {
-    const inside = elementChildren(main).filter((c) =>
-      BLOCK_TAGS.has(c.tagName?.toLowerCase() ?? "")
-    );
-    if (inside.length >= 2) return inside;
+  // <main> is a semantic WRAPPER, not a content section — expand it into its own
+  // block-level children in place. Standard pages (and every Google Stitch
+  // export) wrap the content sections in <main> with <header>/<footer> as
+  // siblings; without this the whole <main> classifies as ONE section and the
+  // hero/features/testimonials/etc. inside it are lost.
+  const flattened: HTMLElement[] = [];
+  for (const el of allTopLevel) {
+    if (el.tagName?.toLowerCase() === "main") {
+      const inside = elementChildren(el).filter((c) => BLOCK_TAGS.has(c.tagName?.toLowerCase() ?? ""));
+      if (inside.length >= 1) {
+        flattened.push(...inside);
+        continue;
+      }
+    }
+    flattened.push(el);
   }
+
+  if (flattened.length >= 2) return flattened;
 
   // Single section — the whole body.
   return [body];
@@ -1010,14 +1125,16 @@ function mergeTopN(ranked: string[], n: number): string[] {
   return out;
 }
 
-/** Deduplicate font names (case-insensitive), take top n, skip generic family names. */
+/** Deduplicate font names (case-insensitive), take top n, skip generic + icon-font family names. */
 const GENERIC_FONTS = new Set(["sans-serif", "serif", "monospace", "cursive", "fantasy", "system-ui", "ui-sans-serif", "inherit", "initial", "unset"]);
+// Icon webfonts (Stitch always links Material Symbols) — never a content font.
+const ICON_FONT_RE = /^material (symbols|icons)\b|\bfont ?awesome\b|^(bootstrap|remix) ?icons?\b/i;
 function mergeTopNFonts(ranked: string[], n: number): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const f of ranked) {
     const k = f.toLowerCase();
-    if (!seen.has(k) && !GENERIC_FONTS.has(k)) { seen.add(k); out.push(f); }
+    if (!seen.has(k) && !GENERIC_FONTS.has(k) && !ICON_FONT_RE.test(k)) { seen.add(k); out.push(f); }
     if (out.length >= n) break;
   }
   return out;
@@ -1025,21 +1142,38 @@ function mergeTopNFonts(ranked: string[], n: number): string[] {
 
 // ─── brand hints (shared by the role path and the canvas path) ───────────────
 
-function brandHints(body: HTMLElement, styleBlocks: string[], googleFonts: string[]) {
+function brandHints(body: HTMLElement, styleBlocks: string[], googleFonts: string[], tw?: TailwindConfig | null) {
   const styleAttrs: string[] = [];
   body.querySelectorAll("[style]").forEach((el) => {
     const s = el.getAttribute("style");
     if (s) styleAttrs.push(s);
   });
-  const colors = mergeTopN([...extractStylesheetColors(styleBlocks), ...topColors(styleAttrs, 20)], 5);
-  const fonts = mergeTopNFonts([...googleFonts, ...extractStylesheetFonts(styleBlocks), ...topFonts(styleAttrs, 10)], 4);
-  const background_images = extractBackgroundImages([...styleBlocks, ...styleAttrs]);
+  const cssColors = [...extractStylesheetColors(styleBlocks), ...topColors(styleAttrs, 20)];
   const paletteRaw = extractCssVarPalette(styleBlocks);
+  // When the page carries a Tailwind config (Stitch/Tailwind-CDN), the design
+  // system lives there, not in CSS: rank the colors actually used by utility
+  // classes FIRST (they reflect real intent), name the palette by token, and
+  // surface the spacing/radius/type-scale tokens for a faithful rebuild.
+  const twColors = tw ? resolveTailwindColors(body, tw.colors) : [];
+  const colors = mergeTopN([...twColors, ...cssColors], 6);
+  const twFonts = tw ? Object.values(tw.fontFamily) : [];
+  const fonts = mergeTopNFonts([...googleFonts, ...twFonts, ...extractStylesheetFonts(styleBlocks), ...topFonts(styleAttrs, 10)], 4);
+  const background_images = extractBackgroundImages([...styleBlocks, ...styleAttrs]);
+  const palette = tw ? { ...tw.colors, ...paletteRaw } : paletteRaw;
+  const design_tokens = tw
+    ? {
+        ...(Object.keys(tw.spacing).length ? { spacing: tw.spacing } : {}),
+        ...(Object.keys(tw.borderRadius).length ? { radius: tw.borderRadius } : {}),
+        ...(Object.keys(tw.fontSize).length ? { font_size: tw.fontSize } : {}),
+        ...(Object.keys(tw.fontFamily).length ? { font_family: tw.fontFamily } : {}),
+      }
+    : undefined;
   return {
     colors,
     fonts,
     background_images,
-    palette: Object.keys(paletteRaw).length ? paletteRaw : undefined,
+    palette: Object.keys(palette).length ? palette : undefined,
+    design_tokens: design_tokens && Object.keys(design_tokens).length ? design_tokens : undefined,
   };
 }
 
