@@ -437,6 +437,8 @@ const ladiHtml = `<!DOCTYPE html><html><head><title>Ladi Test</title>
 #BOX95 > .ladi-box { border-style: solid; border-color: rgb(232, 58, 48); border-radius: 999px; }
 #BOX95.ladi-animation > .ladi-box { animation-name: pulse; -webkit-animation-name: pulse; animation-delay: 1s; animation-duration: 1s; animation-iteration-count: infinite; }
 #SPINLUCKY100 { width: 276px; height: 276px; top: 122px; left: 72px; }
+#SPINLUCKY100 .ladi-spin-lucky-screen:before { background-image: url("https://w.ladicdn.com/s500x500/abc/wheel-face.svg"); }
+#SPINLUCKY100 .ladi-spin-lucky-start { background-image: url("https://w.ladicdn.com/source/spin-btn.svg"); }
 #BUTTON30 { width: 240px; height: 40px; top: auto; left: 10px; bottom: 10px; position: fixed; z-index: 90000050; }
 #BUTTON30 > .ladi-button > .ladi-button-background { background-color: rgb(232, 58, 48); }
 #BUTTON_TEXT30 { width: 241px; top: 9px; left: 0px; }
@@ -516,6 +518,12 @@ check("ladi: animation rule does not pollute base style", ladiBox?.style?.["bord
 const ladiSpin = cv.popups?.[0]?.children?.find((e) => e.id === "SPINLUCKY100");
 check("ladi: spin-wheel prizes decoded from base64", (ladiSpin?.config?.["prizes"] as any)?.[0]?.label === "Mất lượt" && (ladiSpin?.config?.["prizes"] as any)?.[1]?.chance === "100%", ladiSpin?.config);
 check("ladi: spin-wheel max_turn kept", ladiSpin?.config?.["spinlucky_setting.max_turn"] === 1, ladiSpin?.config);
+check(
+  "ladi: spin-wheel face + button images captured separately (no collision, CDN prefix stripped)",
+  ladiSpin?.config?.["wheelImage"] === "https://w.ladicdn.com/abc/wheel-face.svg" &&
+    ladiSpin?.config?.["buttonImage"] === "https://w.ladicdn.com/source/spin-btn.svg",
+  { wheelImage: ladiSpin?.config?.["wheelImage"], buttonImage: ladiSpin?.config?.["buttonImage"] }
+);
 const onlyS2 = parseHtml(ladiHtml, "compact", { sections: ["SECTION2"] }).canvas;
 check("ladi: sections filter → only SECTION2, no popups", onlyS2?.sections.length === 1 && onlyS2?.sections[0].id === "SECTION2" && onlyS2?.popups === undefined, onlyS2?.sections.map((s) => s.id));
 const onlyPopup = parseHtml(ladiHtml, "compact", { sections: ["SECTION_POPUP"] }).canvas;
@@ -583,6 +591,12 @@ const cPop: any = cloneSrc.popup[0];
 check("clone: popup openInPage + delay from event data", cPop?.type === "popup" && cPop.specials.openInPage === true && cPop.specials.delayPopup === 6, cPop?.specials);
 const cSpin = cPop?.children?.find((c: any) => c.id === "spinlucky100");
 check("clone: spin-wheel prizes encoded, percents kept (sum 100)", cSpin?.type === "spin-wheel" && cSpin.specials.code === "PRIZE1|Mất lượt|0\nPRIZE2|FreeShip|100", cSpin?.specials?.code);
+check(
+  "clone: spin-wheel uses the ORIGINAL wheel + button art (not the editor default)",
+  cSpin?.specials?.background === "https://w.ladicdn.com/abc/wheel-face.svg" &&
+    cSpin?.specials?.backgroundBtn === "https://w.ladicdn.com/source/spin-btn.svg",
+  { background: cSpin?.specials?.background, backgroundBtn: cSpin?.specials?.backgroundBtn }
+);
 
 console.log("== expand: image-block published background derives from specials.src (placeholder seed must not win) ==");
 {

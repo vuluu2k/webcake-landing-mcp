@@ -1197,6 +1197,13 @@ type LadiRules = {
   child: Map<string, Record<string, string>>;
   /** `#ID.ladi-animation …` rules — the builder's entrance/attention animations. */
   anim: Map<string, Record<string, string>>;
+  /**
+   * Spin-wheel artwork, kept SEPARATE because both live in `#ID <descendant>`
+   * rules and would otherwise collide on `background-image` in `child`:
+   * `wheel` = `.ladi-spin-lucky-screen:before` (the wheel face),
+   * `button` = `.ladi-spin-lucky-start` (the center spin button).
+   */
+  spin: Map<string, { wheel?: string; button?: string }>;
 };
 
 type LadiCtx = { rules: LadiRules; events: Map<string, LadiEventInfo>; count: number; truncated: boolean };
@@ -1245,10 +1252,21 @@ function mergeLadiDecls(map: Map<string, Record<string, string>>, id: string, de
  * `child` = every `#ID <descendant> { … }` rule merged (visual styling).
  * Pseudo/state variants like `#ID.ladi-animation > …` are skipped on purpose.
  */
+/** First http(s) background-image url in a raw declaration block, or undefined. */
+function bgUrlFromDecls(declsRaw: string): string | undefined {
+  for (const d of splitDeclarations(declsRaw)) {
+    const i = d.indexOf(":");
+    if (i <= 0) continue;
+    if (d.slice(0, i).trim().toLowerCase() === "background-image") return urlFromCss(d.slice(i + 1));
+  }
+  return undefined;
+}
+
 function buildLadiRules(styleBlocks: string[]): LadiRules {
   const own = new Map<string, Record<string, string>>();
   const child = new Map<string, Record<string, string>>();
   const anim = new Map<string, Record<string, string>>();
+  const spin = new Map<string, { wheel?: string; button?: string }>();
   const ruleRe = /([^{}]+)\{([^{}]*)\}/g;
   for (const css of styleBlocks) {
     ruleRe.lastIndex = 0;
@@ -1266,11 +1284,23 @@ function buildLadiRules(styleBlocks: string[]): LadiRules {
         }
         const lead = /^#([\w-]+)( .+)?$/.exec(sel);
         if (!lead) continue;
+        // Spin-wheel face + button images live in distinct descendant rules that
+        // both set background-image — capture them separately before they collide.
+        const rest = lead[2] ?? "";
+        if (/ladi-spin-lucky-screen|ladi-spin-lucky-start/.test(rest)) {
+          const u = bgUrlFromDecls(declsRaw);
+          if (u) {
+            const rec = spin.get(lead[1]) ?? {};
+            if (/ladi-spin-lucky-screen/.test(rest)) rec.wheel = u;
+            else rec.button = u;
+            spin.set(lead[1], rec);
+          }
+        }
         mergeLadiDecls(lead[2] ? child : own, lead[1], declsRaw);
       }
     }
   }
-  return { own, child, anim };
+  return { own, child, anim, spin };
 }
 
 function pxValue(v?: string): number | undefined {
@@ -1480,6 +1510,16 @@ function buildCanvasElement(el: HTMLElement, id: string, ctx: LadiCtx): CanvasEl
 
   const evt = ctx.events.get(id);
   if (evt) Object.assign(node, evt);
+
+  // spin-wheel: carry the original wheel-face + center-button images (kept separate
+  // in rules.spin so they don't collide) so the clone uses the real art, not a default.
+  const spinImgs = ctx.rules.spin.get(id);
+  if (spinImgs && (spinImgs.wheel || spinImgs.button)) {
+    const cfg: Record<string, unknown> = { ...(node.config ?? {}) };
+    if (spinImgs.wheel) cfg["wheelImage"] = stripCdnSizePrefix(spinImgs.wheel);
+    if (spinImgs.button) cfg["buttonImage"] = stripCdnSizePrefix(spinImgs.button);
+    node.config = cfg;
+  }
 
   const children = collectCanvasElements(el, ctx);
   if (children.length) node.children = children;

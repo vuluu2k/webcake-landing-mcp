@@ -504,13 +504,19 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       lines = ["PRIZE1|Giải may mắn|50", "MISS|Chúc may mắn lần sau|50"];
       ctx.notes.push(`${e.id}: spin-wheel had no recoverable prize list — seeded a default; edit specials.code.`);
     }
+    // Prefer the ORIGINAL wheel-face + center-button art (the parser kept them in
+    // config so they don't collide); fall back to the editor default only when they
+    // couldn't be recovered. The original urls auto-host on save like any image.
+    const wheelImg = e.config?.["wheelImage"] as string | undefined;
+    const btnImg = e.config?.["buttonImage"] as string | undefined;
+    if (!wheelImg) ctx.notes.push(`${e.id}: spin-wheel face image not recovered — using the editor default wheel.`);
     const node: SourceNode = {
       id: uniqueId(ctx, e.id),
       type: "spin-wheel",
       responsive: responsiveOf(ctx, e.box, mapStyles(style, "rectangle"), sectionH),
       specials: {
-        background: "https://cdn.webcake.co/editor/main/pickers/spin-wheel-default.png",
-        backgroundBtn: "https://cdn.webcake.co/editor/main/pickers/spin-wheel-btn-default.png",
+        background: wheelImg ?? "https://cdn.webcake.co/editor/main/pickers/spin-wheel-default.png",
+        backgroundBtn: btnImg ?? "https://cdn.webcake.co/editor/main/pickers/spin-wheel-btn-default.png",
         spin: String(e.config?.["spinlucky_setting.max_turn"] ?? "1"),
         rotate: "0",
         popup: "default",
