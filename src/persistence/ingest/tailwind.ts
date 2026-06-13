@@ -203,6 +203,48 @@ const TW_PREFIX_RE = new RegExp(`^(?:${TW_COLOR_PREFIXES.join("|")})-(.+)$`);
 // Tailwind's always-available keyword colors (present even without a config entry).
 const TW_KNOWN: Record<string, string> = { white: "#ffffff", black: "#000000" };
 
+/** Tailwind gradient direction utility → CSS gradient direction keyword. */
+const TW_GRADIENT_DIR: Record<string, string> = {
+  t: "to top", tr: "to top right", r: "to right", br: "to bottom right",
+  b: "to bottom", bl: "to bottom left", l: "to left", tl: "to top left",
+};
+
+/** Resolve a color token to a value: config token, keyword color, or an arbitrary `[#hex]`/`[rgb(...)]` value. */
+function resolveColorToken(tok: string, colors: Record<string, string>): string | undefined {
+  const t = tok.split("/")[0]; // drop /80 opacity modifier
+  const arb = /^\[(.+)\]$/.exec(t);
+  if (arb) return arb[1].replace(/_/g, " "); // arbitrary value: bg-[#ff7f78] / from-[rgb(0_0_0)]
+  return colors[t] ?? TW_KNOWN[t];
+}
+
+/**
+ * Reconstruct `linear-gradient(...)` strings from Tailwind gradient utilities
+ * (`bg-gradient-to-br from-primary via-x to-y`) — Stitch uses gradient CTAs and
+ * hero backgrounds heavily, and Play-CDN never emits the resolved CSS, so the
+ * gradient would otherwise be invisible to the rebuild. Stops are resolved
+ * through the same color map (config token / keyword / arbitrary [#hex]).
+ */
+export function resolveTailwindGradients(body: HTMLElement, colors: Record<string, string>): string[] {
+  const out = new Set<string>();
+  body.querySelectorAll("[class]").forEach((el) => {
+    const cls = el.getAttribute("class");
+    if (!cls) return;
+    const utils = cls.split(/\s+/).map((c) => (c.includes(":") ? c.slice(c.lastIndexOf(":") + 1) : c));
+    const dirCls = utils.find((u) => /^bg-gradient-to-(t|tr|r|br|b|bl|l|tl)$/.test(u));
+    if (!dirCls) return;
+    const dir = TW_GRADIENT_DIR[dirCls.replace("bg-gradient-to-", "")];
+    const stops = [
+      utils.map((u) => /^from-(.+)/.exec(u)?.[1]).find(Boolean),
+      utils.map((u) => /^via-(.+)/.exec(u)?.[1]).find(Boolean),
+      utils.map((u) => /^to-(.+)/.exec(u)?.[1]).find(Boolean),
+    ]
+      .map((t) => (t ? resolveColorToken(t, colors) : undefined))
+      .filter((v): v is string => !!v);
+    if (stops.length >= 2) out.add(`linear-gradient(${dir}, ${stops.join(", ")})`);
+  });
+  return [...out];
+}
+
 /** Rank the config colors ACTUALLY used by utility classes in the body → resolved value list (usage-weighted). */
 export function resolveTailwindColors(body: HTMLElement, colors: Record<string, string>): string[] {
   const counts = new Map<string, number>();

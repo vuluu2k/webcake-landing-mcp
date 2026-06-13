@@ -198,6 +198,34 @@ console.log("== validate: accepts JSON string input ==");
 const r3 = validatePage(JSON.stringify(good));
 check("string input parsed & valid", r3.valid, r3.errors);
 
+console.log("== validate: custom CSS/class/JS escape hatches (beyond-element capability) ==");
+{
+  const clone = () => JSON.parse(JSON.stringify(good));
+  // Proper usage: customAdvance + declarations-only custom_css + page settings.extra_css/script → valid, no escape-hatch warnings.
+  const okPage = clone();
+  okPage.page[0].children[0].specials = { text: "CTA", customAdvance: true, custom_css: "background:linear-gradient(to right,#0058bc,#0070eb);box-shadow:0 20px 40px rgba(0,0,0,.08);", custom_class: "cta-pill,glow" };
+  okPage.settings.extra_css = "#w-btn1{transition:transform .3s}#w-btn1:hover{transform:scale(1.05)}";
+  okPage.settings.extra_script = "console.log('hi')";
+  okPage.settings.bhet = "<link href='https://fonts.googleapis.com/css2?family=Inter&display=swap' rel='stylesheet'>";
+  okPage.settings.bbet = "<script src='https://widget.example.com/chat.js'></script>";
+  const okR = validatePage(okPage);
+  check("escape hatch: valid page with custom_css/class + extra_css/script + bhet/bbet passes", okR.valid, okR.errors);
+  check("escape hatch: no false warning when used correctly", !okR.warnings.some((w) => /custom_css|customAdvance/.test(w)), okR.warnings.filter((w) => /custom_css|customAdvance/.test(w)));
+
+  // custom_css set but customAdvance missing → silent no-op warning.
+  const noAdvance = clone();
+  noAdvance.page[0].children[0].specials = { text: "CTA", custom_css: "box-shadow:0 2px 8px rgba(0,0,0,.1);" };
+  const naR = validatePage(noAdvance);
+  check("escape hatch: warns custom_css without customAdvance", naR.warnings.some((w) => /customAdvance!==true/.test(w)), naR.warnings);
+
+  // custom_css containing a selector/:hover → declarations-only warning.
+  const selInCss = clone();
+  selInCss.page[0].children[0].specials = { text: "CTA", customAdvance: true, custom_css: "#w-btn1:hover{transform:scale(1.1)}" };
+  const selR = validatePage(selInCss);
+  check("escape hatch: warns selector/:hover inside custom_css", selR.warnings.some((w) => /declarations inside/.test(w)), selR.warnings);
+  check("escape hatch: declarations-only misuse does NOT block (warning, not error)", selR.valid, selR.errors);
+}
+
 console.log("== expand: hydrates sparse nodes ==");
 const sparse = {
   page: [
@@ -472,6 +500,39 @@ check("tw: palette names every flattened token", twAst.palette?.["gray-900"] ===
 check("tw: usage-ranked colors resolve nested + directional-border classes", (twAst.colors ?? []).includes("#2563eb") && (twAst.colors ?? []).includes("#111827") && (twAst.colors ?? []).includes("#3b82f6"), twAst.colors);
 check("tw: design_tokens carries the resolved type scale", twAst.design_tokens?.font_size?.["lg"] === "18px" && twAst.design_tokens?.radius?.["full"] === "9999px", twAst.design_tokens);
 check("tw: no config → extractTailwindConfig null", extractTailwindConfig("<div class='text-primary'>x</div>") === null);
+
+console.log("== tailwind: gradient utilities + hover/transition effects (Stitch fidelity) ==");
+const fxCfg = `<script id="tailwind-config">tailwind.config = { theme: { extend: { "colors": {
+  "primary": "#0058bc", "primary-container": "#0070eb", "secondary": "#fcd664", "surface": "#ffffff"
+} } } }</script>`;
+const fxPage = `<!DOCTYPE html><html><head>${fxCfg}</head><body>
+  <header class="bg-surface"><a class="text-primary hover:text-secondary transition-colors">Navigation menu link here</a></header>
+  <main>
+    <section class="bg-gradient-to-br from-primary to-primary-container"><h1 class="text-white">Join the affiliate program today</h1><p>Earn recurring commission from every referral you bring in.</p><a class="px-8 py-4 rounded-xl bg-gradient-to-br from-primary to-primary-container hover:scale-105 transition-transform" href="#">Get started now</a></section>
+    <section><h2 class="text-primary">Why partners choose us</h2>
+      <div class="group hover:-translate-y-1 transition-all"><img class="group-hover:scale-110" src="https://x/a.jpg"/><h3 class="group-hover:underline">Fast payouts</h3><p>Money in your account within days, not months.</p></div>
+      <div class="group hover:-translate-y-1 transition-all"><img class="group-hover:scale-110" src="https://x/b.jpg"/><h3>Real-time tracking</h3><p>Watch your referrals convert in a live dashboard.</p></div>
+      <div class="group hover:-translate-y-1 transition-all"><img class="group-hover:scale-110" src="https://x/c.jpg"/><h3>Dedicated support</h3><p>A partner manager helps you grow your revenue.</p></div>
+    </section>
+  </main>
+  <footer class="bg-primary"><a class="hover:opacity-80" href="#">Footer contact and company info link</a></footer>
+</body></html>`;
+const fxAst = parseHtml(fxPage, "compact");
+check("fx: gradient utility reconstructed with resolved color stops", (fxAst.gradients ?? []).includes("linear-gradient(to bottom right, #0058bc, #0070eb)"), fxAst.gradients);
+check("fx: gradients surfaced in COMPACT mode (design-critical)", (fxAst.gradients?.length ?? 0) >= 1, fxAst.gradients);
+const heroFx = fxAst.sections.find((s) => s.role === "hero");
+check("fx: hero hover scale captured", (heroFx?.hover_effects ?? []).includes("scale"), heroFx?.hover_effects);
+const featFx = fxAst.sections.find((s) => s.role === "features");
+check("fx: card lift captured", (featFx?.hover_effects ?? []).includes("lift"), featFx?.hover_effects);
+check("fx: image-zoom (group-hover scale) captured", (featFx?.hover_effects ?? []).includes("image-zoom"), featFx?.hover_effects);
+check("fx: underline (group-hover) captured", (featFx?.hover_effects ?? []).includes("underline"), featFx?.hover_effects);
+const headFx = fxAst.sections.find((s) => s.role === "header");
+check("fx: header hover text-color-change captured", (headFx?.hover_effects ?? []).includes("text-color-change"), headFx?.hover_effects);
+// arbitrary-value gradient stop resolves too.
+const arbGrad = parseHtml(`<!DOCTYPE html><html><head>${fxCfg}</head><body><main><section class="bg-gradient-to-r from-[#ff0000] to-primary"><h1>Heading text for the arbitrary gradient test case here</h1><p>Some descriptive paragraph text to clear the CSR shell threshold.</p></section></main></body></html>`, "compact");
+check("fx: arbitrary [#hex] gradient stop resolved", (arbGrad.gradients ?? []).includes("linear-gradient(to right, #ff0000, #0058bc)"), arbGrad.gradients);
+// no tailwind config → no gradients from this path, no hover noise on a plain page.
+check("fx: plain page (no config, no hover classes) has no gradients/hover", (() => { const a = parseHtml(stylesheetHtml, "compact"); return a.gradients === undefined && a.sections.every((s) => s.hover_effects === undefined); })());
 
 console.log("== ingest: full mode — blocks detection, gradients, images-as-objects ==");
 const fullAst = parseHtml(stylesheetHtml, "full");

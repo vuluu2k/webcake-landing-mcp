@@ -17,7 +17,7 @@ import { parse } from "node-html-parser";
 import type { IngestedAst, ParseHtmlOptions, FetchHtmlResult } from "./ingest/types.js";
 import { extractStyleBlocks, extractGoogleFonts, extractGradients, fixMojibake } from "./ingest/stylesheets.js";
 import { extractTailwindConfig } from "./ingest/tailwind.js";
-import { findSections, classifySection, computeSizeHint, detectWidgets, brandHints } from "./ingest/semantic.js";
+import { findSections, classifySection, computeSizeHint, detectWidgets, detectHoverEffects, brandHints } from "./ingest/semantic.js";
 import { parseAbsoluteCanvas, canvasRoleSections, stripCdnSizePrefix } from "./ingest/canvas.js";
 
 // Re-export the public surface so existing imports of "./persistence/html-ingest.js"
@@ -107,6 +107,8 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
   const sections = sectionEls.map((el) => {
     const sec = classifySection(el, detail);
     sec.size_hint = computeSizeHint(el, sec, styleBlocks);
+    const hover = detectHoverEffects(el);
+    if (hover.length) sec.hover_effects = hover;
     if (detail === "full") {
       const widgets = detectWidgets(el, styleBlocks);
       if (widgets.length) sec.widgets = widgets;
@@ -127,14 +129,19 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
     fonts: hints.fonts.length ? hints.fonts : undefined,
     palette: hints.palette,
     design_tokens: hints.design_tokens,
+    // Tailwind gradient utilities (Stitch CTA/hero backgrounds) reconstructed as
+    // linear-gradient strings — surfaced in BOTH modes since they're design-critical
+    // and the Play CDN never emits the resolved CSS.
+    gradients: hints.tailwind_gradients.length ? hints.tailwind_gradients : undefined,
     background_images: hints.background_images.length ? hints.background_images : undefined,
     warnings: warnings.length ? warnings : undefined,
   };
 
   if (detail !== "full") return base;
 
-  // Full mode extras.
-  const gradients = extractGradients(styleBlocks);
+  // Full mode extras: merge stylesheet gradients with the Tailwind ones (deduped).
+  const styleGradients = extractGradients(styleBlocks);
+  const gradients = [...new Set([...hints.tailwind_gradients, ...styleGradients])];
 
   const result: IngestedAst = {
     ...base,

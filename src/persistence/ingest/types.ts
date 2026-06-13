@@ -61,6 +61,18 @@ export type IngestedSection = {
   widgets?: IngestedWidget[];
   /** both modes: desktop height hint for the rebuilt Webcake section */
   size_hint?: IngestedSizeHint;
+  /**
+   * both modes: interaction effects detected in this section's hover/transition
+   * utility classes (Tailwind `hover:`/`group-hover:`/`active:`), normalized to
+   * the kinds Webcake can reproduce — "scale" (button grow), "image-zoom"
+   * (group-hover image scale), "lift" (hover translate-y), "slide", "fade",
+   * "underline", "shadow", "bg-color-change", "text-color-change",
+   * "border-color-change". REPRODUCE these on the rebuilt elements: a hover
+   * `change_color` event (change_color_type text/background/border) for the
+   * color changes + underline, the button's hovered* specials or `animation_hover`
+   * for scale/lift/zoom. Without this the cloned page is static (no hover).
+   */
+  hover_effects?: string[];
 };
 
 export type IngestedAst = {

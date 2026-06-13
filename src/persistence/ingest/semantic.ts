@@ -22,7 +22,7 @@ import {
   mergeTopN,
   mergeTopNFonts,
 } from "./stylesheets.js";
-import { type TailwindConfig, resolveTailwindColors } from "./tailwind.js";
+import { type TailwindConfig, resolveTailwindColors, resolveTailwindGradients } from "./tailwind.js";
 
 export const HEADING_TAGS = ["h1", "h2", "h3", "h4"];
 
@@ -270,7 +270,12 @@ function pickCtas(el: HTMLElement): IngestedCta[] {
   });
   el.querySelectorAll("a").forEach((a) => {
     const cls = (a.getAttribute("class") ?? "").toLowerCase();
-    if (/(btn|button|cta)/.test(cls)) {
+    // An <a> is a CTA when it's named like one, OR styled like a button —
+    // Tailwind/Stitch pill buttons carry NO btn/button/cta class, just utilities
+    // (`px-8 py-4 rounded-xl bg-… …`): rounded + a fill/border + padding.
+    const styledButton =
+      /\brounded(-|\b)/.test(cls) && /(\bbg-|bg-gradient|\bborder\b|\bborder-)/.test(cls) && /\b[pmg][xytrbl]?-/.test(cls);
+    if (/(btn|button|cta)/.test(cls) || styledButton) {
       const t = a.text.trim();
       const href = a.getAttribute("href") ?? undefined;
       if (t) out.push({ text: t, href });
@@ -671,11 +676,42 @@ export function brandHints(body: HTMLElement, styleBlocks: string[], googleFonts
         ...(Object.keys(tw.fontFamily).length ? { font_family: tw.fontFamily } : {}),
       }
     : undefined;
+  const tailwind_gradients = tw ? resolveTailwindGradients(body, tw.colors) : [];
   return {
     colors,
     fonts,
     background_images,
     palette: Object.keys(palette).length ? palette : undefined,
     design_tokens: design_tokens && Object.keys(design_tokens).length ? design_tokens : undefined,
+    tailwind_gradients,
   };
+}
+
+/**
+ * Interaction effects present in a section's hover/transition utility classes
+ * (`hover:`/`group-hover:`/`active:`), normalized to the kinds Webcake can
+ * reproduce. The static AST otherwise drops every hover, so the cloned page has
+ * none — this lets the rebuild wire the matching Webcake hover behavior.
+ */
+export function detectHoverEffects(el: HTMLElement): string[] {
+  const set = new Set<string>();
+  for (const node of el.querySelectorAll("[class]")) {
+    const cls = node.getAttribute("class");
+    if (!cls) continue;
+    for (const t of cls.split(/\s+/)) {
+      const group = t.startsWith("group-hover:");
+      const h = t.startsWith("hover:") ? t.slice(6) : group ? t.slice(12) : t.startsWith("active:") ? t.slice(7) : null;
+      if (h === null) continue;
+      if (/^scale-/.test(h)) set.add(group ? "image-zoom" : "scale");
+      else if (/^-?translate-y/.test(h)) set.add("lift");
+      else if (/^-?translate-x/.test(h)) set.add("slide");
+      else if (/^bg-/.test(h)) set.add("bg-color-change");
+      else if (/^text-/.test(h)) set.add("text-color-change");
+      else if (/^border/.test(h)) set.add("border-color-change");
+      else if (/^opacity-/.test(h)) set.add("fade");
+      else if (h === "underline") set.add("underline");
+      else if (/^shadow/.test(h)) set.add("shadow");
+    }
+  }
+  return [...set];
 }

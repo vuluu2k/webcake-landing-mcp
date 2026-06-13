@@ -322,6 +322,27 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
 
+    // custom CSS/class escape hatches (effects beyond an element's built-in specials).
+    // Renderer gates BOTH on specials.customAdvance===true (render/build/index.js
+    // custom_class + exportCss.js custom_css); without it they are silently dropped.
+    // And custom_css is injected as plain DECLARATIONS inside #w-<id>{…}, so a
+    // selector / :hover / @keyframes there corrupts the rule — those go in
+    // settings.extra_css (full stylesheet, injected raw into <head>).
+    {
+      const sp: any = node.specials;
+      if (sp && typeof sp === "object") {
+        const hasCustom =
+          (typeof sp.custom_css === "string" && sp.custom_css.trim() !== "") ||
+          (typeof sp.custom_class === "string" && sp.custom_class.trim() !== "");
+        if (hasCustom && sp.customAdvance !== true) {
+          warnings.push(`${path} (${type}): specials.custom_css/custom_class is set but specials.customAdvance!==true — the renderer ignores both. Set "customAdvance": true.`);
+        }
+        if (typeof sp.custom_css === "string" && /[{}]|@keyframes|:hover|:focus|::/.test(sp.custom_css)) {
+          warnings.push(`${path} (${type}): specials.custom_css is injected as plain declarations inside #w-${node.id}{…} — a selector/:hover/@keyframes/media-query there breaks the rule. Keep declarations only here (e.g. "box-shadow:0 20px 40px rgba(0,0,0,.08);backdrop-filter:blur(20px);"); put hover/keyframes/media rules in settings.extra_css targeting #w-${node.id} (or a specials.custom_class).`);
+        }
+      }
+    }
+
     // animation contract — checked per breakpoint
     // Source: landing_page_build/render/build/animate.js (animatable type list)
     //         landing_page_backend/assets/editor/main/traits/TraitAnimation.vue (name set)
