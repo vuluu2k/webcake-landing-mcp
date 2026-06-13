@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.70] - 2026-06-13
+
+### Changed
+- `upload_images` default changed from `dry_run:true` to `dry_run:false` — the tool now uploads images and returns the hosted URL map on every call without requiring an explicit `dry_run:false`; pass `dry_run:true` only to preview what would be processed without any network or filesystem activity.
+- Generation guide (`get_generation_guide`) and server instructions updated to document that `upload_images` uploads by default; `dry_run:true` is now the opt-in no-op preview, not the default.
+- `ingest_html` and `ingest_url` canvas element cap doubled from 500 to 1000, and canvas payload size cap raised from 80 000 to 1 000 000, allowing larger LadiPage and Webcake-published HTML exports to be fully parsed.
+
 ## [1.0.69] - 2026-06-12
 
 ### Changed
