@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.69] - 2026-06-12
+
+### Changed
+- `upload_images` dry-run response now returns an `action_required` field (replacing the previous soft `hint`) that explicitly blocks the model from assembling the page or falling back to placeholders before re-calling with `dry_run:false`.
+- `upload_images` successful-upload response now includes a `usage` field directing the model to place each hosted URL in every element that referenced the original (`specials.src`, gallery `item.link`, section background); for failed entries the fallback chain (`search_images` → web-search re-upload → placeholder last) is prescribed inline.
+- `upload_images` tool description, generation guide (`get_generation_guide`), and server instructions now explicitly state that the default `dry_run=true` uploads nothing and returns no hosted URLs; the model is required to call with `dry_run:false`, batch more than 20 entries across multiple calls, and wait for the returned images map before filling any `specials.src`, gallery link, or background.
+
 ## [1.0.68] - 2026-06-12
 
 ### Added
