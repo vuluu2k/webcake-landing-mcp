@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.72] - 2026-06-13
+
+### Fixed
+- When cloning a LadiPage or Webcake-published page via `ingest_html` / `ingest_url`, `html-box` elements' passthrough HTML content now has its source-builder class tokens renamed to Webcake-neutral equivalents (`ladi-html-code` → `webcake-html-box`; any other `ladi-*` → `webcake-*`), so cloned pages no longer ship LadiPage class names into the stored source; image CDN URL paths (`ladicdn.com`) are left intact.
+
 ## [1.0.71] - 2026-06-13
 
 ### Added
