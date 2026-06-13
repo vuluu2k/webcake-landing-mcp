@@ -53,6 +53,18 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+/**
+ * De-fingerprint raw html-box passthrough: rename the source builder's class
+ * tokens to a Webcake-neutral prefix so a clone doesn't ship LadiPage class names.
+ * Covers both `class="ladi-…"` attributes and inline `.ladi-…` CSS selectors.
+ * The known html-embed wrapper maps to Webcake's element name; any other `ladi-*`
+ * gets the `webcake-` prefix. The lookbehind avoids touching `ladicdn`/URL paths
+ * (no `ladi-` token there), so image links are left intact.
+ */
+function sanitizeBuilderClasses(html: string): string {
+  return html.replace(/ladi-html-code/g, "webcake-html-box").replace(/(?<![\w/])ladi-/g, "webcake-");
+}
+
 const BG_URL_RE = /url\(\s*["']?(https?:\/\/[^"')]+)["']?\s*\)/;
 
 /** The editor-canonical url() background shorthand its picker can re-parse. */
@@ -536,7 +548,7 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       id: uniqueId(ctx, e.id),
       type: "html-box",
       responsive: responsiveOf(ctx, e.box, {}, sectionH),
-      specials: { html: escapeHtml(e.html) },
+      specials: { html: escapeHtml(sanitizeBuilderClasses(e.html)) },
     };
   }
 

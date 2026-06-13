@@ -439,6 +439,7 @@ const ladiHtml = `<!DOCTYPE html><html><head><title>Ladi Test</title>
 #SPINLUCKY100 { width: 276px; height: 276px; top: 122px; left: 72px; }
 #SPINLUCKY100 .ladi-spin-lucky-screen:before { background-image: url("https://w.ladicdn.com/s500x500/abc/wheel-face.svg"); }
 #SPINLUCKY100 .ladi-spin-lucky-start { background-image: url("https://w.ladicdn.com/source/spin-btn.svg"); }
+#HTML_CODE110 { width: 200px; height: 100px; top: 300px; left: 10px; }
 #BUTTON30 { width: 240px; height: 40px; top: auto; left: 10px; bottom: 10px; position: fixed; z-index: 90000050; }
 #BUTTON30 > .ladi-button > .ladi-button-background { background-color: rgb(232, 58, 48); }
 #BUTTON_TEXT30 { width: 241px; top: 9px; left: 0px; }
@@ -470,6 +471,7 @@ const ladiHtml = `<!DOCTYPE html><html><head><title>Ladi Test</title>
   </form></div>
   <div id="LIST_PARAGRAPH80" class="ladi-element"><div class="ladi-list-paragraph"><ul><li>Thành phần thiên nhiên</li><li>Không đau rát</li></ul></div></div>
   <div id="COUNTDOWN90" class="ladi-element"><div class="ladi-countdown"><span>00</span></div></div>
+  <div id="HTML_CODE110" class="ladi-element"><div class="ladi-html-code"><style>.ladi-foo{color:red}</style><div class="ladi-foo">embed</div></div></div>
 </div></div>
 <div id="SECTION_POPUP" class="ladi-section"><div class="ladi-container">
   <div id="POPUP70" class="ladi-element"><div class="ladi-popup"><div class="ladi-popup-background"></div>
@@ -596,6 +598,15 @@ check(
   cSpin?.specials?.background === "https://w.ladicdn.com/abc/wheel-face.svg" &&
     cSpin?.specials?.backgroundBtn === "https://w.ladicdn.com/source/spin-btn.svg",
   { background: cSpin?.specials?.background, backgroundBtn: cSpin?.specials?.backgroundBtn }
+);
+const cHtmlBox = cSec2.children.find((c: any) => c.id === "html_code110");
+check(
+  "clone: html-box passthrough renames builder classes (ladi-html-code → webcake-html-box, inline .ladi-* CSS too)",
+  cHtmlBox?.type === "html-box" &&
+    /webcake-html-box/.test(cHtmlBox.specials.html) &&
+    /webcake-foo/.test(cHtmlBox.specials.html) &&
+    !/ladi-/.test(cHtmlBox.specials.html),
+  cHtmlBox?.specials?.html
 );
 
 console.log("== expand: image-block published background derives from specials.src (placeholder seed must not win) ==");
