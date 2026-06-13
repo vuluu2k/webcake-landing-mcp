@@ -14,7 +14,7 @@ import { landingDomain } from "./domains/landing/index.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
-import { parseHtml } from "./persistence/html-ingest.js";
+import { parseHtml, extractTailwindConfig } from "./persistence/html-ingest.js";
 import { warningsField } from "./mcp/response.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
 import { toEditorUrl, toEditorLoginUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
@@ -426,6 +426,52 @@ check("stitch: hero inside <main> detected", twRoles.includes("hero"), twRoles);
 check("stitch: form inside <main> detected", twRoles.includes("form"), twRoles);
 // A page with NO tailwind config must not gain design_tokens (no regression).
 check("ingest: design_tokens absent without a tailwind config", parseHtml(stylesheetHtml, "compact").design_tokens === undefined);
+
+console.log("== tailwind config: robust across ALL config shapes (any Stitch file) ==");
+// Cover the shapes the Tailwind theme config can take (v3 docs), so a DIFFERENT
+// Stitch export parses correctly — not just the two flat-Material-token samples.
+const twNested = `<script id="tailwind-config">tailwind.config = { theme: { extend: {
+  "colors": {
+    "white": "#ffffff",
+    "transparent": "transparent",
+    "gray": { "100": "#f3f4f6", "900": "#111827" },
+    "primary": { "DEFAULT": "#2563eb", "500": "#3b82f6", "600": "#2563eb" },
+    "brand": "rgb(255 0 0)"
+  },
+  "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "full": "9999px" },
+  "fontSize": { "sm": "14px", "base": ["16px", "24px"], "lg": ["18px", { "lineHeight": "28px", "fontWeight": "700" }] },
+  "fontFamily": { "sans": ["Inter", "sans-serif"], "display": "Oswald, ui-serif" }
+} } }</script>`;
+const cfgN = extractTailwindConfig(twNested)!;
+check("tw: config detected", !!cfgN);
+check("tw: nested colors flatten to token-NN", cfgN.colors["gray-100"] === "#f3f4f6" && cfgN.colors["gray-900"] === "#111827", cfgN.colors);
+check("tw: nested DEFAULT collapses to parent name", cfgN.colors["primary"] === "#2563eb", cfgN.colors);
+check("tw: nested non-DEFAULT keeps token-NN", cfgN.colors["primary-500"] === "#3b82f6" && cfgN.colors["primary-600"] === "#2563eb", cfgN.colors);
+check("tw: flat string color kept", cfgN.colors["white"] === "#ffffff", cfgN.colors);
+check("tw: keyword + rgb() color values kept", cfgN.colors["transparent"] === "transparent" && cfgN.colors["brand"] === "rgb(255 0 0)", cfgN.colors);
+check("tw: fontSize plain string", cfgN.fontSize["sm"] === "14px", cfgN.fontSize);
+check("tw: fontSize [size, lineHeight] pair → size", cfgN.fontSize["base"] === "16px", cfgN.fontSize);
+check("tw: fontSize [size, {…}] tuple → size", cfgN.fontSize["lg"] === "18px", cfgN.fontSize);
+check("tw: fontFamily array → first family", cfgN.fontFamily["sans"] === "Inter", cfgN.fontFamily);
+check("tw: fontFamily string → first family", cfgN.fontFamily["display"] === "Oswald", cfgN.fontFamily);
+check("tw: borderRadius DEFAULT key kept", cfgN.borderRadius["DEFAULT"] === "0.25rem" && cfgN.borderRadius["full"] === "9999px", cfgN.borderRadius);
+
+// theme.colors OVERRIDE (no `extend`) must be found too.
+const twOverride = `<script>tailwind.config = { theme: { colors: { "ink": "#0a0a0a", "accent": { "DEFAULT": "#ff6600" } } } }</script>`;
+const cfgO = extractTailwindConfig(twOverride)!;
+check("tw: theme.colors override (no extend) parsed", cfgO?.colors["ink"] === "#0a0a0a" && cfgO?.colors["accent"] === "#ff6600", cfgO?.colors);
+
+// usage resolution over nested + directional-border color classes.
+const twPage = `<!DOCTYPE html><html><head>${twNested}</head><body>
+  <header class="bg-primary"><a class="text-gray-900">Acme storefront navigation link</a></header>
+  <main><section class="border-t-primary-500"><h1 class="text-primary">Welcome to the shop</h1><p>Discover our full range of products built for everyday life.</p><img src="https://x/h.jpg"/><a class="bg-primary" href="#">Go shopping now</a></section></main>
+  <footer class="bg-gray-100"><p>Footer with contact details and a short company description here.</p></footer>
+</body></html>`;
+const twAst = parseHtml(twPage, "compact");
+check("tw: palette names every flattened token", twAst.palette?.["gray-900"] === "#111827" && twAst.palette?.["primary-500"] === "#3b82f6", twAst.palette);
+check("tw: usage-ranked colors resolve nested + directional-border classes", (twAst.colors ?? []).includes("#2563eb") && (twAst.colors ?? []).includes("#111827") && (twAst.colors ?? []).includes("#3b82f6"), twAst.colors);
+check("tw: design_tokens carries the resolved type scale", twAst.design_tokens?.font_size?.["lg"] === "18px" && twAst.design_tokens?.radius?.["full"] === "9999px", twAst.design_tokens);
+check("tw: no config → extractTailwindConfig null", extractTailwindConfig("<div class='text-primary'>x</div>") === null);
 
 console.log("== ingest: full mode — blocks detection, gradients, images-as-objects ==");
 const fullAst = parseHtml(stylesheetHtml, "full");
