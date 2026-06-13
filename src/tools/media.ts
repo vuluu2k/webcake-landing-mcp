@@ -243,7 +243,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
   // 14) Upload images to Webcake -----------------------------------------------
   server.tool(
     "upload_images",
-    "Converts external image URLs (typically collected from ingest_html/ingest_url results), data: URIs, or LOCAL FILE PATHS from the user's computer into Webcake-hosted URLs (statics.pancake.vn) by reading/downloading each image and re-uploading it to the Webcake backend via multipart upload (200 MB backend limit). Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone), the user supplies their own image URLs, OR the user provides local image files from their machine — pass the path directly in `urls`; NEVER upload a user's local file to a third-party host (catbox, imgur, transfer.sh…) to obtain a URL first. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 entries per call in parallel, with a 200 MB per-image cap. No Webcake credentials required (the upload endpoint is public). DEFAULTS to dry_run=true (returns a preview of what would be processed, no network calls — NO images are uploaded and NO hosted URLs are returned); in a REAL build flow call it with dry_run:false and wait for the returned images map (original URL → hosted URL) BEFORE assembling the page — never fall back to a placeholder for a slot whose upload succeeded. Use search_images instead when you need stock photos. Local file paths are only permitted when the MCP server runs locally (stdio mode); on the remote HTTP transport they are rejected per-entry.",
+    "Converts external image URLs (typically collected from ingest_html/ingest_url results), data: URIs, or LOCAL FILE PATHS from the user's computer into Webcake-hosted URLs (statics.pancake.vn) by reading/downloading each image and re-uploading it to the Webcake backend via multipart upload (200 MB backend limit). Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone), the user supplies their own image URLs, OR the user provides local image files from their machine — pass the path directly in `urls`; NEVER upload a user's local file to a third-party host (catbox, imgur, transfer.sh…) to obtain a URL first. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 entries per call in parallel, with a 200 MB per-image cap. No Webcake credentials required (the upload endpoint is public). UPLOADS BY DEFAULT (dry_run defaults to FALSE — unlike the page-persistence tools, this touches no account data, so the default is the real upload): the call downloads/reads each entry, uploads it, and returns the images map (original URL → hosted URL); WAIT for that map before assembling the page and never fall back to a placeholder for a slot whose upload succeeded. Pass dry_run:true only to preview what would be processed without any network/filesystem activity. Use search_images instead when you need stock photos. Local file paths are only permitted when the MCP server runs locally (stdio mode); on the remote HTTP transport they are rejected per-entry.",
     {
       urls: z
         .array(z.string())
@@ -259,11 +259,11 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
       dry_run: z
         .boolean()
         .optional()
-        .describe("Default TRUE — return a preview of the endpoint and entries that WOULD be processed, without any network or filesystem activity (local paths: reports whether the file exists and its size). Set false to actually read/download and upload."),
+        .describe("Default FALSE — the call actually reads/downloads and uploads, returning hosted URLs. Set true to only preview the endpoint and entries that WOULD be processed, without any network or filesystem activity (local paths: reports whether the file exists and its size)."),
     },
     { title: "Upload Images to Webcake", readOnlyHint: false, openWorldHint: true },
     async ({ urls, dry_run }, extra) => {
-      const isDry = dry_run !== false;
+      const isDry = dry_run === true;
       const base = resolveApiBase(extra?.requestInfo?.headers);
 
       // Stdio transport: extra.requestInfo is undefined (no HTTP request headers).
@@ -300,7 +300,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
           endpoint: `${base}/external/upload_file`,
           urls_to_upload: urlsInfo,
           action_required:
-            "DRY RUN ONLY — nothing was uploaded and NO hosted URLs exist yet. Do NOT build the page and do NOT fall back to placeholders: re-call upload_images with dry_run:false NOW (batch >20 entries into multiple calls) and WAIT for the returned images map before filling any specials.src / gallery link / background.",
+            "DRY RUN ONLY — nothing was uploaded and NO hosted URLs exist yet. Do NOT build the page and do NOT fall back to placeholders: re-call upload_images WITHOUT dry_run (uploads by default; batch >20 entries into multiple calls) and WAIT for the returned images map before filling any specials.src / gallery link / background.",
         });
       }
 

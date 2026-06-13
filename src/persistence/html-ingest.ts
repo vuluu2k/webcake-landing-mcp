@@ -1183,8 +1183,8 @@ const LADI_STYLE_KEYS = new Set([
 const LADI_CONFIG_KEY_RE =
   /countdown_type|countdown_minute|thankyou_value|form_config_id|show_popup_welcome_page|delay_popup_welcome_page|autoplay|max_turn|time_show|time_delay/;
 
-const MAX_CANVAS_ELEMENTS = 500;
-const CANVAS_SIZE_CAP = 80_000;
+const MAX_CANVAS_ELEMENTS = 1000;
+const CANVAS_SIZE_CAP = 1_000_000;
 /** Shedding step 1 keeps only these style keys — the look-defining minimum for a rebuild. */
 const CANVAS_CORE_STYLE_KEYS = ["font-family", "font-size", "font-weight", "color", "text-align", "background-color", "border-radius", "fill"];
 const CANVAS_SVG_CAP = 1200;
