@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.73] - 2026-06-13
+
+### Added
+- `ingest_html` and `ingest_url` now extract the full design system from a `tailwind.config` script block when present (Google Stitch and other Tailwind-CDN pages): the AST gains a `palette` field (token-named color map, e.g. `primary→#a43b38`, `surface-container-low→#f3f3f3` — maps utility classes like `text-primary` / `bg-surface-container-low` back to real hex values) and a new `design_tokens` field with the resolved spacing grid, corner radii, and type scale (e.g. `display-lg→48px`, `xl→80px`), so the rebuilt page matches the source's exact sizing and colors instead of guessing.
+- Server instructions now document Google Stitch as a fourth reference-input mode: call the Stitch MCP's `get_screen` tool, pass the returned `htmlCode.downloadUrl` to `ingest_url(detail:'full')`, read the `palette` and `design_tokens` from the returned AST to lock the design system, reuse the page's image URLs (they auto-host on save — Stitch's `googleusercontent.com` images included), then call `create_page`.
+
+### Fixed
+- `ingest_html` and `ingest_url` auto-rehost now correctly handles image CDNs that serve images without a file extension in the URL path (such as `lh3.googleusercontent.com` used by Google Stitch), so Stitch-generated images carried into `specials.src` are re-hosted to the Webcake CDN on save instead of being stored as hotlinked ephemeral URLs that would soon 404.
+
 ## [1.0.72] - 2026-06-13
 
 ### Fixed
