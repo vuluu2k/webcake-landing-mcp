@@ -6,6 +6,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.71] - 2026-06-13
+
+### Added
+- `ingest_html` and `ingest_url` now automatically convert absolute-canvas builder exports (LadiPage-family / Webcake-published HTML) into a ready-to-save Webcake page `source`, folded into the response as `source` + `clone_notes` + `clone_notice`; the heavy per-element geometry is summarized to `canvas_summary` and the model passes the `source` directly to `create_page` instead of hand-rebuilding element-by-element from the canvas.
+- `create_page`, `update_page`, `add_section`, and `patch_page` now automatically download and re-host external image URLs found anywhere in the source (specials.src, `url(...)` backgrounds, gallery `item.link`, video poster) to the Webcake CDN before storing; the response's `rehost` field reports candidates/rehosted/failed counts, so the model no longer needs to pre-call `upload_images` for reference or web image URLs — only local file paths from the user's computer still require an explicit `upload_images` call.
+
+### Changed
+- Generation guide (`get_generation_guide`) and server instructions updated to document the save-time auto-host behavior: reference and web image URLs can be placed directly in specials.src / gallery `item.link` / url(...) backgrounds and are re-hosted automatically on save; `upload_images` is now only required for local file paths the server cannot read.
+- `ingest_html` and `ingest_url` `sections` parameter description updated: re-fetching a specific section now returns a per-section `source` ready to pass directly to `add_section`, rather than just raw per-element canvas detail.
+
+### Fixed
+- LadiPage canvas parser now captures spin-wheel face (`.ladi-spin-lucky-screen:before`) and spin button (`.ladi-spin-lucky-start`) background images into a separate `spin` map instead of the shared `child` CSS-rule map, preventing both images from colliding and overwriting each other.
+- `expand` now correctly derives `styles.background` from a real `specials.src` even when the factory seed has already pre-filled `styles.background` with a placeholder URL (placehold.co), preventing the placeholder from rendering on the published page instead of the intended image.
+
 ## [1.0.70] - 2026-06-13
 
 ### Changed
