@@ -22,6 +22,7 @@ import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsPr
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
 import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
+import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl } from "./persistence/rehost.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -519,6 +520,86 @@ const onlyS2 = parseHtml(ladiHtml, "compact", { sections: ["SECTION2"] }).canvas
 check("ladi: sections filter → only SECTION2, no popups", onlyS2?.sections.length === 1 && onlyS2?.sections[0].id === "SECTION2" && onlyS2?.popups === undefined, onlyS2?.sections.map((s) => s.id));
 const onlyPopup = parseHtml(ladiHtml, "compact", { sections: ["SECTION_POPUP"] }).canvas;
 check("ladi: sections filter → SECTION_POPUP selects popups only", onlyPopup?.sections.length === 0 && onlyPopup?.popups?.[0]?.id === "POPUP70", { sections: onlyPopup?.sections.length, popups: onlyPopup?.popups?.map((p) => p.id) });
+
+console.log("== canvas-to-source: deterministic LadiPage canvas → Webcake source ==");
+check("clone: domain.canvasToSource is wired", typeof landingDomain.canvasToSource === "function");
+const cloneOut = landingDomain.canvasToSource!(cv, { title: "Ladi Clone" });
+const cloneSrc: any = cloneOut.source;
+check("clone: 2 page sections + 1 popup produced", cloneSrc.page.length === 2 && cloneSrc.popup.length === 1, {
+  page: cloneSrc.page.length,
+  popup: cloneSrc.popup.length,
+});
+// end-to-end: the sparse clone expands + validates exactly like a create_page payload
+const cloneExpanded = landingDomain.expand(cloneSrc);
+const cloneVr = landingDomain.validate(cloneExpanded);
+check("clone: expands + validates with 0 errors", cloneVr.valid, cloneVr.errors.slice(0, 6));
+const cSec1: any = cloneSrc.page[0];
+const cH = cSec1.children.find((c: any) => c.id === "headline10");
+check(
+  "clone: headline → text-block w/ text + box geometry",
+  cH?.type === "text-block" && cH.specials.text.includes("SẠCH TRƠN") && cH.responsive.mobile.styles.top === 118 && cH.responsive.mobile.styles.width === 296,
+  cH
+);
+const cImg = cSec1.children.find((c: any) => c.id === "image20");
+check("clone: image → image-block w/ full-size src", cImg?.type === "image-block" && cImg.specials.src === "https://w.ladicdn.com/abc/photo.png", cImg?.specials);
+check("clone: image offset/zoom crop → bgImage config", cImg?.responsive.desktop.config?.widthBgImage === 188 && cImg?.responsive.desktop.config?.topBgImage === -27, cImg?.responsive.desktop.config);
+// the publish renderer paints image-blocks ONLY from styles.background; the real src
+// must land there on expand and NOT be left as the seed's placeholder url.
+const cImgExp: any = (cloneExpanded as any).page[0].children.find((c: any) => c.id === "image20");
+check(
+  "clone: image-block published background derives from the REAL src (placeholder seed must not win)",
+  /ladicdn\.com\/abc\/photo\.png/.test(cImgExp?.responsive?.desktop?.styles?.background ?? "") &&
+    !/placehold\.co/.test(cImgExp?.responsive?.desktop?.styles?.background ?? ""),
+  cImgExp?.responsive?.desktop?.styles?.background
+);
+const cBtn = cSec1.children.find((c: any) => c.id === "button30");
+check("clone: button label from button_text child", cBtn?.type === "button" && cBtn.specials.text === "NHẬN ƯU ĐÃI NGAY", cBtn?.specials);
+check("clone: button popup event mapped to open_popup", cBtn?.events?.[0]?.action === "open_popup" && cBtn?.events?.[0]?.target === "popup70", cBtn?.events);
+check(
+  "clone: fixed element pinned via sticky config (b-l) + in-flow fallback box",
+  cBtn?.responsive.mobile.config?.sticky === true &&
+    cBtn?.responsive.mobile.config?.stickyPosition === "b-l" &&
+    cBtn?.responsive.mobile.config?.stickyLeft === 10 &&
+    cBtn?.responsive.mobile.config?.stickyBottom === 10 &&
+    cBtn?.responsive.mobile.styles.top === 650 &&
+    cBtn?.responsive.mobile.styles.left === 10 &&
+    cloneOut.notes.some((n) => /pinned as a sticky/.test(n)),
+  { config: cBtn?.responsive.mobile.config, styles: cBtn?.responsive.mobile.styles, notes: cloneOut.notes }
+);
+const cGrp = cSec1.children.find((c: any) => c.id === "group40");
+const cShape = cGrp?.children?.[0];
+check("clone: group keeps shape child as rectangle w/ svgMask + fill bg", cGrp?.type === "group" && cShape?.type === "rectangle" && !!cShape.responsive.desktop.config?.svgMask && cShape.responsive.desktop.styles.background === "rgba(255, 188, 1, 1.0)", cShape?.responsive.desktop);
+const cBox = cSec1.children.find((c: any) => c.id === "box95");
+check("clone: box animation → config.animation.name", cBox?.responsive.desktop.config?.animation?.name === "pulse", cBox?.responsive.desktop.config);
+const cSec2: any = cloneSrc.page[1];
+const cForm = cSec2.children.find((c: any) => c.id === "form60");
+const cInput = cForm?.children?.[0];
+check("clone: form_item → input child w/ mapped field_name", cForm?.type === "form" && cInput?.type === "input" && cInput.specials.field_name === "phone_number" && cInput.specials.field_type === "phone" && cInput.specials.required === true, cInput?.specials);
+const cList = cSec2.children.find((c: any) => c.id === "list_paragraph80");
+check("clone: list → list-paragraph w/ <li> items", cList?.type === "list-paragraph" && cList.specials.text.includes("<li>Thành phần thiên nhiên</li>"), cList?.specials);
+const cCd = cSec2.children.find((c: any) => c.id === "countdown90");
+check("clone: countdown duration from config", cCd?.type === "countdown" && cCd.specials.duration === "360", cCd?.specials);
+const cPop: any = cloneSrc.popup[0];
+check("clone: popup openInPage + delay from event data", cPop?.type === "popup" && cPop.specials.openInPage === true && cPop.specials.delayPopup === 6, cPop?.specials);
+const cSpin = cPop?.children?.find((c: any) => c.id === "spinlucky100");
+check("clone: spin-wheel prizes encoded, percents kept (sum 100)", cSpin?.type === "spin-wheel" && cSpin.specials.code === "PRIZE1|Mất lượt|0\nPRIZE2|FreeShip|100", cSpin?.specials?.code);
+
+console.log("== expand: image-block published background derives from specials.src (placeholder seed must not win) ==");
+{
+  const mk = (src: string) => ({
+    page: [{ id: "s", type: "section", responsive: { desktop: { styles: { height: 300 } }, mobile: { styles: { height: 300 } } }, children: [
+      { id: "im", type: "image-block", responsive: { desktop: { styles: { top: 0, left: 0, width: 100, height: 80 } }, mobile: { styles: { top: 0, left: 0, width: 100, height: 80 } } }, specials: { src } },
+    ] }], popup: [], settings: {}, options: {}, cartConfigs: {},
+  });
+  const real: any = (landingDomain.expand(mk("https://cdn.example.com/real.jpg")) as any).page[0].children[0];
+  check("expand: real specials.src → styles.background = that url (BOTH breakpoints)",
+    /cdn\.example\.com\/real\.jpg/.test(real.responsive.desktop.styles.background) &&
+    /cdn\.example\.com\/real\.jpg/.test(real.responsive.mobile.styles.background) &&
+    !/placehold\.co/.test(real.responsive.desktop.styles.background),
+    real.responsive.desktop.styles.background);
+  const ph: any = (landingDomain.expand(mk("https://placehold.co/100x80?text=Image")) as any).page[0].children[0];
+  check("expand: placeholder specials.src → keeps a placeholder background", /placehold\.co/.test(ph.responsive.desktop.styles.background), ph.responsive.desktop.styles.background);
+}
 
 console.log("== ingest: mojibake repair (UTF-8 mis-read as Latin-1) ==");
 const vietText = "TẨY LÔNG – Kem tẩy lông Huyền Phi sạch trơn sáng mịn an toàn hiệu quả nhanh chóng";
@@ -1474,6 +1555,54 @@ console.log("== validator: pill/badge label alignment ==");
   // label painted wider than the pill → spills past the rounded ends
   const rWide = validatePage(expandSource(badge(108, 330, 300, { fontSize: 16, fontWeight: 700 }, { width: 220, left: 370 }), createElement));
   check("pill: label wider than pill → spill warning", rWide.warnings.some((w) => w.includes("spills past")), rWide.warnings);
+}
+
+console.log("== rehost: external-image URL collect + rewrite (pure, offline) ==");
+{
+  const src = {
+    page: [{
+      id: "S1", type: "section",
+      responsive: { desktop: { styles: { background: "center center/ cover no-repeat scroll content-box url(https://w.ladicdn.com/s768x703/x/bg.jpg) border-box" } } },
+      children: [
+        { id: "I1", type: "image", specials: { src: "https://w.ladicdn.com/x/photo.png" } },
+        { id: "I2", type: "image", specials: { src: "https://w.ladicdn.com/x/photo.png" } }, // dup → collapses
+        { id: "G1", type: "gallery", specials: { media: [{ type: "image", link: "https://w.ladicdn.com/x/a.jpg", linkVideo: "", typeVideo: "youtube" }] } },
+        { id: "A1", type: "headline", specials: {}, href: "https://facebook.com/page" }, // href, not image → skip
+        { id: "I3", type: "image", specials: { src: "https://statics.pancake.vn/web_content/x/already.jpg" } }, // already hosted → skip
+        { id: "I4", type: "image", specials: { src: "https://placehold.co/600x400" } }, // deliberate placeholder → skip
+        { id: "SH", type: "shape", specials: { svg: "data:image/svg+xml;utf8,<svg></svg>" } }, // data: → skip
+      ],
+    }],
+  };
+  const urls = collectExternalImageUrls(src);
+  check("rehost: collects 3 distinct external image URLs", urls.length === 3, urls);
+  check("rehost: dedupes the repeated photo.png", urls.filter((u) => u.endsWith("photo.png")).length === 1);
+  check("rehost: extracts url() background image", urls.includes("https://w.ladicdn.com/s768x703/x/bg.jpg"));
+  check("rehost: extracts gallery item.link", urls.includes("https://w.ladicdn.com/x/a.jpg"));
+  check("rehost: skips a non-image href", !urls.includes("https://facebook.com/page"));
+  check("rehost: skips an already-hosted pancake URL", !urls.some((u) => u.includes("pancake")));
+  check("rehost: skips a placehold.co placeholder", !urls.some((u) => u.includes("placehold")));
+  check("rehost: skips a data: URI", !urls.some((u) => u.startsWith("data:")));
+
+  // isRehostableImageUrl edge cases
+  check("rehost: data: URI not rehostable", !isRehostableImageUrl("data:image/svg+xml;utf8,<svg>"));
+  check("rehost: extension-less URL not rehostable as a plain field", !isRehostableImageUrl("https://w.ladicdn.com/x/noext"));
+  check("rehost: .jpg URL rehostable", isRehostableImageUrl("https://w.ladicdn.com/x/p.jpg"));
+  check("rehost: ?query after ext still rehostable", isRehostableImageUrl("https://cdn.x/p.png?v=2"));
+
+  // rewrite: deep-clone + replace everywhere, leave original untouched
+  const map = new Map([
+    ["https://w.ladicdn.com/s768x703/x/bg.jpg", "https://statics.pancake.vn/web_content/BG.jpg"],
+    ["https://w.ladicdn.com/x/photo.png", "https://statics.pancake.vn/web_content/PHOTO.png"],
+    ["https://w.ladicdn.com/x/a.jpg", "https://statics.pancake.vn/web_content/A.jpg"],
+  ]);
+  const out: any = rewriteImageUrls(src, map);
+  check("rehost: rewrites url() background", out.page[0].responsive.desktop.styles.background.includes("url(https://statics.pancake.vn/web_content/BG.jpg)"));
+  check("rehost: rewrites image specials.src", out.page[0].children[0].specials.src === "https://statics.pancake.vn/web_content/PHOTO.png");
+  check("rehost: rewrites BOTH duplicate refs", out.page[0].children[1].specials.src === "https://statics.pancake.vn/web_content/PHOTO.png");
+  check("rehost: rewrites gallery item.link", out.page[0].children[2].specials.media[0].link === "https://statics.pancake.vn/web_content/A.jpg");
+  check("rehost: leaves the source object untouched (deep clone)", (src as any).page[0].children[0].specials.src === "https://w.ladicdn.com/x/photo.png");
+  check("rehost: empty map is a no-op identity", rewriteImageUrls(src, new Map()) === src);
 }
 
 console.log("== upload_images: local-path detector (pure, offline) ==");

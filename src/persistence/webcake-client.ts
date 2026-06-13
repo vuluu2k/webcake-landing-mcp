@@ -10,7 +10,13 @@
  * Endpoints live in the separate landing_page_backend repo
  * (LandingPageWeb.V1.AiController, scope /api/v1/ai). Requires global fetch (Node 18+).
  */
-import type { WebcakeConfig, Organization, CreateOutcome, PageSummary } from "./types.js";
+import type { WebcakeConfig, Organization, CreateOutcome, PageSummary, RehostReport } from "./types.js";
+import {
+  collectExternalImageUrls,
+  rewriteImageUrls,
+  rehostCache,
+  MAX_REHOST_PER_SAVE,
+} from "./rehost.js";
 
 /** Default fetch timeout in ms. Override via WEBCAKE_HTTP_TIMEOUT_MS env. */
 const HTTP_TIMEOUT_MS = (() => {
@@ -206,7 +212,10 @@ export async function createPage(
   source: unknown,
   orgId?: string
 ): Promise<CreateOutcome> {
-  const req = buildRequest(config, name, source, orgId);
+  // Host external image URLs to the Webcake CDN before storing, so a clone never
+  // keeps hotlinked/expiring source URLs. Failures keep the original URL.
+  const { source: hostedSource, report: rehost } = await rehostSourceImages(config.base, source);
+  const req = buildRequest(config, name, hostedSource, orgId);
   let res: Response;
   try {
     res = await fetch(req.url, { method: req.method, headers: req.headers, body: req.body, signal: timeoutSignal(HTTP_TIMEOUT_MS) });
@@ -246,6 +255,7 @@ export async function createPage(
     preview_url: toPreviewUrl(config, previewPath),
     organization_id: (orgId ?? config.orgId) ?? null,
     raw: data,
+    ...(rehost ? { rehost, rehosted_source: hostedSource } : {}),
   };
 }
 
@@ -359,12 +369,13 @@ export async function appendSection(
   sections: unknown
 ): Promise<CreateOutcome & { endpoint_missing?: boolean; section_count?: number; sections_added?: number }> {
   const url = `${config.base}${APPEND_ENDPOINT}`;
+  const { source: hostedSections, report: rehost } = await rehostSourceImages(config.base, sections);
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
       headers: authHeaders(config),
-      body: JSON.stringify({ page_id: pageId, sections }),
+      body: JSON.stringify({ page_id: pageId, sections: hostedSections }),
       signal: timeoutSignal(HTTP_TIMEOUT_MS),
     });
   } catch (e: any) {
@@ -402,6 +413,7 @@ export async function appendSection(
     section_count: data?.section_count,
     sections_added: data?.sections_added,
     raw: data,
+    ...(rehost ? { rehost, rehosted_source: hostedSections } : {}),
   };
 }
 
@@ -412,12 +424,13 @@ export async function updatePageSource(
   source: unknown
 ): Promise<CreateOutcome> {
   const url = `${config.base}${UPDATE_ENDPOINT}`;
+  const { source: hostedSource, report: rehost } = await rehostSourceImages(config.base, source);
   let res: Response;
   try {
     res = await fetch(url, {
       method: "POST",
       headers: authHeaders(config),
-      body: JSON.stringify({ page_id: pageId, source }),
+      body: JSON.stringify({ page_id: pageId, source: hostedSource }),
       signal: timeoutSignal(HTTP_TIMEOUT_MS),
     });
   } catch (e: any) {
@@ -449,6 +462,7 @@ export async function updatePageSource(
     preview_url: toPreviewUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
     raw: data,
+    ...(rehost ? { rehost, rehosted_source: hostedSource } : {}),
   };
 }
 
@@ -724,6 +738,105 @@ export async function uploadImageMultipart(
     return { ok: false, status: res.status, error: "Backend returned success but no URL in data field" };
   }
   return { ok: true, url: hostedUrl, status: res.status };
+}
+
+// ---------------------------------------------------------------------------
+// Server-side image re-host (runs on every real create/update/append save)
+// ---------------------------------------------------------------------------
+
+const REHOST_FETCH_TIMEOUT_MS = 60_000;
+const REHOST_MAX_BYTES = 200_000_000; // mirrors the backend multipart limit
+const REHOST_CONCURRENCY = 8;
+
+function rehostExtFromContentType(ct: string): string {
+  const sub = ct.split(";")[0].trim().toLowerCase();
+  const map: Record<string, string> = {
+    "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp",
+    "image/gif": "gif", "image/avif": "avif", "image/svg+xml": "svg", "image/bmp": "bmp", "image/tiff": "tiff",
+  };
+  return map[sub] ?? (sub.replace("image/", "") || "jpg");
+}
+
+/** Download one remote image and re-upload it to the Webcake CDN; returns the hosted URL or null. */
+async function fetchAndHostOne(apiBase: string, src: string): Promise<string | null> {
+  let res: Response;
+  try {
+    res = await fetch(src, {
+      signal: timeoutSignal(REHOST_FETCH_TIMEOUT_MS),
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; webcake-landing-mcp/1.0; +https://webcake.io)" },
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+  const cl = res.headers.get("content-length");
+  if (cl && parseInt(cl, 10) > REHOST_MAX_BYTES) return null;
+  let contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+  if (!contentType.startsWith("image/")) {
+    // Some CDNs send octet-stream for images — trust the URL extension instead of rejecting.
+    const extGuess = (() => { try { const p = new URL(src).pathname; const d = p.lastIndexOf("."); return d >= 0 ? p.slice(d + 1).split(/[?#]/)[0].toLowerCase() : ""; } catch { return ""; } })();
+    if (!extGuess) return null;
+    contentType = `image/${extGuess === "jpg" ? "jpeg" : extGuess}`;
+  }
+  let buf: ArrayBuffer;
+  try {
+    buf = await res.arrayBuffer();
+  } catch {
+    return null;
+  }
+  if (buf.byteLength > REHOST_MAX_BYTES) return null;
+  const ext = rehostExtFromContentType(contentType);
+  const up = await uploadImageMultipart(apiBase, Buffer.from(buf), `rehost.${ext}`, contentType);
+  return up.ok && up.url ? up.url : null;
+}
+
+/**
+ * Upload every external image URL in `source` to the Webcake CDN and return the
+ * source with those URLs rewritten in place (specials.src, `url(...)`
+ * backgrounds, gallery links, video posters). Idempotent and cached: a URL
+ * already on the CDN is skipped, and a URL seen in a previous save is reused
+ * from `rehostCache`. A per-URL failure leaves the original URL untouched and
+ * never throws — the save proceeds either way. Returns `{ source }` unchanged
+ * with no report when the source has no external images.
+ */
+export async function rehostSourceImages(
+  apiBase: string,
+  source: unknown
+): Promise<{ source: unknown; report?: RehostReport }> {
+  const candidates = collectExternalImageUrls(source);
+  if (candidates.length === 0) return { source };
+
+  const capped = candidates.slice(0, MAX_REHOST_PER_SAVE);
+  const skipped = candidates.length - capped.length;
+
+  // Resolve from cache first; upload the rest with a small concurrency pool.
+  const toUpload = capped.filter((u) => !rehostCache.has(u));
+  for (let i = 0; i < toUpload.length; i += REHOST_CONCURRENCY) {
+    const batch = toUpload.slice(i, i + REHOST_CONCURRENCY);
+    const hosted = await Promise.all(batch.map((u) => fetchAndHostOne(apiBase, u)));
+    batch.forEach((u, j) => {
+      const h = hosted[j];
+      if (h) rehostCache.set(u, h);
+    });
+  }
+
+  const map = new Map<string, string>();
+  const failed: string[] = [];
+  for (const u of capped) {
+    const h = rehostCache.get(u);
+    if (h) map.set(u, h);
+    else failed.push(u);
+  }
+
+  const rewritten = rewriteImageUrls(source, map);
+  const report: RehostReport = {
+    candidates: candidates.length,
+    rehosted: map.size,
+    failed: failed.length,
+    skipped,
+    ...(failed.length ? { failed_urls: failed.slice(0, 8) } : {}),
+  };
+  return { source: rewritten, report };
 }
 
 /**

@@ -18,6 +18,6 @@ export function registerTools(server: McpServer, domain: Domain, { allowLocalFil
   registerReferenceTools(server, domain);
   registerGenerationTools(server, domain);
   registerMediaTools(server, allowLocalFiles);
-  registerIngestTools(server);
+  registerIngestTools(server, domain);
   registerPersistenceTools(server, domain);
 }

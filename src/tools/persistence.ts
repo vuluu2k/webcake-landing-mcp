@@ -329,7 +329,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         const publishOutcome =
           publish === false
             ? { published: false, skipped: true, note: "publish:false — created source-only; the preview stays blank until publish_page runs." }
-            : await autoPublish(config, outcome.page_id!, parsed);
+            : await autoPublish(config, outcome.page_id!, outcome.rehosted_source ?? parsed);
         return text({
           created: true,
           ...outcome,
@@ -774,6 +774,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           preview_url: outcome.preview_url,
           status: outcome.status,
           error: outcome.error,
+          ...(outcome.rehost ? { rehost: outcome.rehost } : {}),
           ...warningsField(result.warnings),
           ...(outcome.ok ? {} : {
             draft_id: existingDraftId,
@@ -1223,7 +1224,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         }
         // A page created via the fix-after-error path gets the same auto-publish
         // as a direct create_page (build + publish_html so the preview renders).
-        const publishOutcome = outcome.ok ? await autoPublish(config, outcome.page_id!, parsed) : undefined;
+        const publishOutcome = outcome.ok ? await autoPublish(config, outcome.page_id!, outcome.rehosted_source ?? parsed) : undefined;
         return text({
           patched: outcome.ok,
           created: outcome.ok,

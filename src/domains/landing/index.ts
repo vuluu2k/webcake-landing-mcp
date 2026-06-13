@@ -18,6 +18,8 @@ import { GENERATION_GUIDE } from "./guide.js";
 import { INSTRUCTIONS } from "./instructions.js";
 import { LIBRARY, ELEMENT_TYPES, CONTAINER_TYPES, FIELD_TYPES, createElement } from "./elements/index.js";
 import { createPageSource } from "./page.js";
+import { canvasToPageSource } from "./canvas-to-source.js";
+import type { IngestedCanvas } from "../../persistence/html-ingest.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
 import { expandSource } from "../../core/expand.js";
 import { compactSource } from "../../core/compact.js";
@@ -62,15 +64,31 @@ function hasUrl(bg: unknown): boolean {
   return typeof bg === "string" && bg.includes("url(");
 }
 
+/** Deliberate-placeholder image hosts (the factory seed fills new image-blocks with one). */
+const PLACEHOLDER_IMG_HOSTS = ["placehold.co", "placeholder.com", "dummyimage.com"];
+/** True when a url / CSS background string points at a deliberate placeholder image. */
+function isPlaceholderImg(s: unknown): boolean {
+  return typeof s === "string" && PLACEHOLDER_IMG_HOSTS.some((h) => s.includes(h));
+}
+
 /** Walk a tree node and normalise every image-block in-place (mutates). */
 function normalizeImageBlocks(node: any): void {
   if (!node || typeof node !== "object") return;
   if (node.type === "image-block") {
     const src = node.specials?.src;
     if (typeof src === "string" && src.trim() !== "") {
+      const srcIsReal = !isPlaceholderImg(src);
       for (const bp of ["desktop", "mobile"] as const) {
         const styles = node.responsive?.[bp]?.styles;
-        if (styles && !hasUrl(styles.background)) {
+        if (!styles) continue;
+        // The publish renderer paints an image-block ONLY from styles.background —
+        // specials.src is never read on publish. Derive the background from
+        // specials.src when the slot has no image url yet, OR when it still holds a
+        // placeholder url while specials.src is a REAL image: the factory seed
+        // pre-fills background with the placeholder, which would otherwise WIN over a
+        // real src and render the placeholder on the published page. An explicit real
+        // background (model-set, non-placeholder) is left untouched.
+        if (!hasUrl(styles.background) || (srcIsReal && isPlaceholderImg(styles.background))) {
           styles.background = imgBackground(src);
         }
       }
@@ -264,4 +282,5 @@ export const landingDomain: Domain = {
     }
   },
   schema: pageSchema,
+  canvasToSource: (canvas, meta) => canvasToPageSource(canvas as IngestedCanvas, meta),
 };

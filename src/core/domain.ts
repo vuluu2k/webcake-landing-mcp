@@ -57,4 +57,15 @@ export interface Domain {
   compact(input: unknown): unknown;
   /** The canonical JSON Schema (Draft 2020-12) for this domain's source. */
   schema: object;
+  /**
+   * Optional: deterministically rebuild a parsed absolute-canvas builder export
+   * (the `canvas` payload from the ingest tools — LadiPage-family / Webcake-
+   * published HTML) into a ready-to-save source for THIS domain. A domain that
+   * supports clone-by-geometry implements it; the ingest tools call it to fold a
+   * `source` + `notes` (lossy-approximation list) into their response so a clone
+   * keeps the original's exact boxes/styles/images instead of being hand-rebuilt.
+   * `canvas` is the opaque ingest `canvas` object; returns the sparse source
+   * (run through `expand`+`validate` by create_page) and the notes.
+   */
+  canvasToSource?(canvas: unknown, meta?: { title?: string; description?: string }): { source: unknown; notes: string[] };
 }
