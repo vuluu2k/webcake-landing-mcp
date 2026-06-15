@@ -64,15 +64,15 @@
 - [ ] Danh sách tool trong client.
 
 ## Icon
-- Có sẵn SVG tại `/icon.svg`. **ChatGPT cần PNG 64×64 < 5KB** — export từ SVG:
-  `rsvg-convert -w 64 -h 64 src/branding-icon.svg > icon-64.png` (hoặc dùng Figma/online).
+- SVG công khai: `/icon.svg`.
+- **PNG 64×64 (2.9KB <5KB) đã tạo sẵn:** [assets/icon-64.png](../assets/icon-64.png) — dùng cho ChatGPT.
 
 ---
 
 ## HƯỚNG DẪN NỘP
 
 ### Điều kiện tiên quyết (làm trước khi submit)
-1. **Deploy production** `mcp.toolvn.io.vn` với code mới (OAuth) — đang chạy bản cũ thì phải redeploy.
+1. **Deploy production** `mcp.toolvn.io.vn` với code mới (OAuth). Đã có sẵn [coolify/Dockerfile](../coolify/Dockerfile) + [coolify/docker-compose.yml](../coolify/docker-compose.yml) (env OAuth set sẵn, build context = repo root). Trên Coolify: New Resource → Docker Compose → trỏ repo → **Docker Compose Location = `/coolify/docker-compose.yml`** → set domain `mcp.toolvn.io.vn` (port 8787) + điền secret `PEXELS_API_KEY` trong Environment UI → Deploy. (Đã build + run thử local: healthy, /mcp trả 401 đúng.)
 2. **builderx_spa `/mcp-connect`** đã sửa (allowlist host connector) — chỉ cần **deploy production** bản này.
 3. **Verify** end-to-end production bằng MCP Inspector (URL = `https://mcp.toolvn.io.vn/mcp`) — phải qua được OAuth.
 4. Chuẩn bị test account + screenshots + PNG icon ở trên.
