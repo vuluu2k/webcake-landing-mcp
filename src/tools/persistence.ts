@@ -134,7 +134,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       let existingDraftId: string | undefined = draft_id;
 
       if (draft_id) {
-        const cached = getDraft(draft_id);
+        const cached = await getDraft(draft_id);
         if (!cached) {
           return text({
             created: false,
@@ -158,7 +158,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       }
 
       // Resolve name/org from args, then fall back to what the draft stored.
-      const cachedDraft = existingDraftId ? getDraft(existingDraftId) : null;
+      const cachedDraft = existingDraftId ? await getDraft(existingDraftId) : null;
       const pageName = name ?? cachedDraft?.name ?? "AI Page";
 
       // 'personal' is a sentinel meaning "no org, skip auto-resolution".
@@ -174,9 +174,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         // patch_page({ draft_id }) instead of regenerating + re-shipping the whole
         // source (there is no page_id yet, so patch_page can't target a live page).
         if (existingDraftId) {
-          updateDraft(existingDraftId, expanded);
+          await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: orgId });
+          existingDraftId = await putDraft({ source: expanded, name: pageName, organization_id: orgId });
         }
         return text({
           created: false,
@@ -205,9 +205,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         // Cache (or refresh) the validated source so the model can confirm with
         // dry_run=false without re-sending the full payload.
         if (existingDraftId) {
-          updateDraft(existingDraftId, expanded);
+          await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: orgId });
+          existingDraftId = await putDraft({ source: expanded, name: pageName, organization_id: orgId });
         }
 
         // Describe what will happen on the real run given current inputs (cheap, no network call).
@@ -294,9 +294,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             const orgList = orgs.map((o) => ({ id: o.id, name: o.name, is_default: o.is_default }));
             // Cache so the model can retry with organization_id without re-sending source.
             if (existingDraftId) {
-              updateDraft(existingDraftId, expanded);
+              await updateDraft(existingDraftId, expanded);
             } else {
-              existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: undefined });
+              existingDraftId = await putDraft({ source: expanded, name: pageName, organization_id: undefined });
             }
             return text({
               created: false,
@@ -316,14 +316,14 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // CACHE-FIRST: write to draft cache BEFORE the network call. On timeout or
       // network failure the draft survives and the model can retry without re-sending.
       if (existingDraftId) {
-        updateDraft(existingDraftId, expanded);
+        await updateDraft(existingDraftId, expanded);
       } else {
-        existingDraftId = putDraft({ source: expanded, name: pageName, organization_id: resolvedOrgId });
+        existingDraftId = await putDraft({ source: expanded, name: pageName, organization_id: resolvedOrgId });
       }
 
       const outcome = await createPage(config, pageName, parsed, resolvedOrgId);
       if (outcome.ok) {
-        deleteDraft(existingDraftId); // created — drop the draft
+        await deleteDraft(existingDraftId); // created — drop the draft
         // Auto-publish (default): build + publish_html so the preview renders
         // immediately. Never fails the create — result.publish carries the state.
         const publishOutcome =
@@ -340,7 +340,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
       // Failure (including timeout): keep the draft so the model can retry.
-      updateDraft(existingDraftId, expanded);
+      await updateDraft(existingDraftId, expanded);
       // A backend 404/5xx on a route that normally works is usually a transient
       // deploy/restart window — the fix is to RETRY THE SAME REQUEST, not to
       // change parameters. (Observed failure mode: a transient 404 with an
@@ -476,7 +476,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       let resolvedPageId: string | undefined = page_id;
 
       if (draft_id) {
-        const cached = getDraft(draft_id);
+        const cached = await getDraft(draft_id);
         if (!cached) {
           return text({
             updated: false,
@@ -511,9 +511,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const result = domain.validate(expanded);
       if (!result.valid) {
         if (existingDraftId) {
-          updateDraft(existingDraftId, expanded);
+          await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
+          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
         }
         return text({
           updated: false,
@@ -531,9 +531,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         // Cache (or refresh) the validated source so the model can confirm with
         // dry_run=false without re-sending the full payload.
         if (existingDraftId) {
-          updateDraft(existingDraftId, expanded);
+          await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
+          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
         }
         return text({
           dry_run: true,
@@ -552,17 +552,17 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       // CACHE-FIRST: write to draft cache BEFORE the network call.
       if (existingDraftId) {
-        updateDraft(existingDraftId, expanded);
+        await updateDraft(existingDraftId, expanded);
       } else {
-        existingDraftId = putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
+        existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
       }
 
       const outcome = await updatePageSource(config, resolvedPageId, parsed);
       if (outcome.ok) {
-        deleteDraft(existingDraftId);
+        await deleteDraft(existingDraftId);
         return text({ updated: true, ...outcome, ...warningsField(result.warnings) });
       }
-      updateDraft(existingDraftId, expanded);
+      await updateDraft(existingDraftId, expanded);
       return text({
         updated: false,
         ...outcome,
@@ -650,7 +650,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       if (draft_id) {
         // Load cached shell from a previous add_section dry_run or failure round.
-        const cached = getDraft(draft_id);
+        const cached = await getDraft(draft_id);
         if (!cached) {
           return text({
             added: false,
@@ -703,9 +703,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         // patch_page({ draft_id, patches, dry_run:false }) instead of rebuilding the
         // whole section batch (same pattern as create_page failure caching).
         if (existingDraftId) {
-          updateDraft(existingDraftId, expandedShell);
+          await updateDraft(existingDraftId, expandedShell);
         } else {
-          existingDraftId = putDraft({ source: expandedShell, kind: "sections", page_id });
+          existingDraftId = await putDraft({ source: expandedShell, kind: "sections", page_id });
         }
         return text({
           added: false,
@@ -732,9 +732,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         // Cache (or refresh) the validated shell so the model can confirm with
         // dry_run=false without re-sending the section payload.
         if (existingDraftId) {
-          updateDraft(existingDraftId, expandedShell);
+          await updateDraft(existingDraftId, expandedShell);
         } else {
-          existingDraftId = putDraft({ source: expandedShell, kind: "sections", page_id });
+          existingDraftId = await putDraft({ source: expandedShell, kind: "sections", page_id });
         }
         return text({
           dry_run: true,
@@ -754,14 +754,14 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       if (!outcome.endpoint_missing) {
         if (outcome.ok) {
           // Success: drop the draft now that sections are persisted.
-          if (existingDraftId) deleteDraft(existingDraftId);
+          if (existingDraftId) await deleteDraft(existingDraftId);
         } else {
           // Server-side failure (duplicate id vs live tree, etc.): keep the draft so
           // the model can retry/fix without re-shipping the payload.
           if (existingDraftId) {
-            updateDraft(existingDraftId, expandedShell);
+            await updateDraft(existingDraftId, expandedShell);
           } else {
-            existingDraftId = putDraft({ source: expandedShell, kind: "sections", page_id });
+            existingDraftId = await putDraft({ source: expandedShell, kind: "sections", page_id });
           }
         }
         return text({
@@ -820,7 +820,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       }
       const parsed = domain.coerce(merged);
       const fbOutcome = await updatePageSource(config, page_id, parsed);
-      if (fbOutcome.ok && existingDraftId) deleteDraft(existingDraftId);
+      if (fbOutcome.ok && existingDraftId) await deleteDraft(existingDraftId);
       return text({
         added: fbOutcome.ok,
         sections_added: newSections.length,
@@ -934,7 +934,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       // Resolve the base source: a cached draft (create-before-save), else a live page.
       let base: any;
-      const draft = draft_id ? getDraft(draft_id) : null;
+      const draft = draft_id ? await getDraft(draft_id) : null;
       if (draft_id) {
         if (!draft) {
           return text({
@@ -1074,7 +1074,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       //   'update'              → UPDATE the existing page (updatePageSource)
       if (draft_id && draft) {
         if (!result.valid) {
-          updateDraft(draft_id, base); // persist partial fixes for the next patch round
+          await updateDraft(draft_id, base); // persist partial fixes for the next patch round
           return text({
             patched: false,
             reason: "validation_failed",
@@ -1091,7 +1091,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         if (draft.kind === "sections") {
           const targetPageId = page_id ?? draft.page_id;
           if (!targetPageId) {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
             return text({
               patched: false,
               reason: "no_page_id",
@@ -1100,7 +1100,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             });
           }
           if (isDry) {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
             return text({
               dry_run: true,
               draft_id,
@@ -1116,15 +1116,15 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             });
           }
           if (!config) {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
             return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
           }
           const sectionsToAppend = Array.isArray((expanded as any).page) ? (expanded as any).page : [];
           const outcome = await appendSection(config, targetPageId, sectionsToAppend);
           if (outcome.ok) {
-            deleteDraft(draft_id);
+            await deleteDraft(draft_id);
           } else {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
           }
           return text({
             patched: outcome.ok,
@@ -1145,7 +1145,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         if (draft.kind === "update") {
           const targetPageId = page_id ?? draft.page_id;
           if (!targetPageId) {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
             return text({
               patched: false,
               reason: "no_page_id",
@@ -1154,7 +1154,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             });
           }
           if (isDry) {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
             return text({
               dry_run: true,
               draft_id,
@@ -1170,14 +1170,14 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             });
           }
           if (!config) {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
             return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
           }
           const outcome = await updatePageSource(config, targetPageId, parsed);
           if (outcome.ok) {
-            deleteDraft(draft_id);
+            await deleteDraft(draft_id);
           } else {
-            updateDraft(draft_id, base);
+            await updateDraft(draft_id, base);
           }
           return text({
             patched: outcome.ok,
@@ -1196,7 +1196,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
         // --- Page draft (kind='page' or absent): CREATE as a new page once valid ---
         if (isDry) {
-          updateDraft(draft_id, base);
+          await updateDraft(draft_id, base);
           return text({
             dry_run: true,
             draft_id,
@@ -1211,16 +1211,16 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           });
         }
         if (!config) {
-          updateDraft(draft_id, base);
+          await updateDraft(draft_id, base);
           return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
         }
         // CACHE-FIRST: source is already in the draft; refresh before the network call.
-        updateDraft(draft_id, base);
+        await updateDraft(draft_id, base);
         const outcome = await createPage(config, draft.name ?? "AI Page", parsed, draft.organization_id);
         if (outcome.ok) {
-          deleteDraft(draft_id);
+          await deleteDraft(draft_id);
         } else {
-          updateDraft(draft_id, base); // keep for retry
+          await updateDraft(draft_id, base); // keep for retry
         }
         // A page created via the fix-after-error path gets the same auto-publish
         // as a direct create_page (build + publish_html so the preview renders).
@@ -1256,7 +1256,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       // CACHE-FIRST: write an 'update' draft BEFORE the network call so a timeout or
       // failure is recoverable via patch_page({ draft_id, dry_run:false }) with no patches.
-      const liveDraftId = putDraft({ source: expanded, kind: "update", page_id: page_id! });
+      const liveDraftId = await putDraft({ source: expanded, kind: "update", page_id: page_id! });
 
       if (isDry) {
         return text({
@@ -1272,7 +1272,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       const outcome = await updatePageSource(config!, page_id!, parsed);
       if (outcome.ok) {
-        deleteDraft(liveDraftId);
+        await deleteDraft(liveDraftId);
         return text({
           patched: true,
           patches_applied: applied,
@@ -1284,7 +1284,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
       // Network failure / timeout: keep the update draft for retry.
-      updateDraft(liveDraftId, expanded);
+      await updateDraft(liveDraftId, expanded);
       return text({
         patched: false,
         patches_applied: applied,

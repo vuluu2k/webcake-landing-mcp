@@ -210,7 +210,7 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
     if (req.method !== "POST") return oauthError(res, 405, "invalid_request", "Use POST."), true;
     const raw = await readRawBody(req);
     const body = parseBodyParams(raw, String(req.headers["content-type"] ?? ""));
-    const result = registerClient(body);
+    const result = await registerClient(body);
     if (!result.ok) return oauthError(res, 400, result.error, result.error_description), true;
     res.writeHead(201, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
     res.end(
@@ -229,7 +229,7 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
   // ---- Authorize: validate + delegate to the SPA login, parking the request ----
   if (req.method === "GET" && path === OAUTH_AUTHORIZE) {
     const sp = new URL(req.url ?? "/", "http://x").searchParams;
-    const result = startAuthorize({
+    const result = await startAuthorize({
       client_id: sp.get("client_id"),
       redirect_uri: sp.get("redirect_uri"),
       response_type: sp.get("response_type"),
@@ -261,7 +261,7 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
   // ---- Login callback: the SPA handed back the user's ljwt → mint a code ----
   if (req.method === "GET" && path === OAUTH_CALLBACK) {
     const sp = new URL(req.url ?? "/", "http://x").searchParams;
-    const done = completeAuthorize(sp.get("state"), sp.get("token"));
+    const done = await completeAuthorize(sp.get("state"), sp.get("token"));
     if (!done.ok) return htmlError(res, 400, done.error_description), true;
     const r = new URL(done.redirectUri);
     r.searchParams.set("code", done.code);
@@ -279,7 +279,7 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
     if (req.method !== "POST") return oauthError(res, 405, "invalid_request", "Use POST."), true;
     const raw = await readRawBody(req);
     const body = parseBodyParams(raw, String(req.headers["content-type"] ?? "")) as TokenParams;
-    const result = exchangeToken(body);
+    const result = await exchangeToken(body);
     if (!result.ok) return oauthError(res, result.status, result.error, result.error_description), true;
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
     res.end(JSON.stringify(result.body));
@@ -291,7 +291,7 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
     if (req.method !== "POST") return oauthError(res, 405, "invalid_request", "Use POST."), true;
     const raw = await readRawBody(req);
     const body = parseBodyParams(raw, String(req.headers["content-type"] ?? ""));
-    revokeToken(body.token);
+    await revokeToken(body.token);
     res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
     res.end("{}");
     return true;
@@ -423,7 +423,7 @@ export async function startHttpServer(port: number): Promise<void> {
     // normal x-webcake-jwt header, so persistence/config.ts is unchanged. A legacy
     // raw JWT sent via x-webcake-jwt / ?jwt= still wins and passes straight through.
     const bearer = bearerFrom(req);
-    const oauthLjwt = resolveAccessToken(bearer);
+    const oauthLjwt = await resolveAccessToken(bearer);
     if (oauthLjwt && req.headers["x-webcake-jwt"] == null) {
       req.headers["x-webcake-jwt"] = oauthLjwt;
       req.rawHeaders.push("x-webcake-jwt", oauthLjwt);

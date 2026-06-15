@@ -1239,42 +1239,42 @@ console.log("== draft-cache: page draft round-trip (create_page failure flow) ==
 {
   // Simulate the expanded shell that a failed create_page would cache.
   const pageSource = expandSource(sparse, createElement);
-  const draftId = putDraft({ source: pageSource, name: "Test Page", organization_id: "org_1" });
+  const draftId = await putDraft({ source: pageSource, name: "Test Page", organization_id: "org_1" });
   check("page draft: putDraft returns an id", typeof draftId === "string" && draftId.startsWith("draft_"), draftId);
-  const fetched = getDraft(draftId);
+  const fetched = await getDraft(draftId);
   check("page draft: getDraft returns the entry", fetched != null && fetched.name === "Test Page", fetched);
   check("page draft: kind is absent (backward compat)", fetched?.kind == null, fetched?.kind);
   check("page draft: page_id is absent", fetched?.page_id == null, fetched?.page_id);
 
   // Simulate a patch round: update the cached source.
   const patched = { ...pageSource, page: [...(pageSource.page ?? []), { id: "extra_sec", type: "section" }] };
-  updateDraft(draftId, patched);
-  const afterPatch = getDraft(draftId);
+  await updateDraft(draftId, patched);
+  const afterPatch = await getDraft(draftId);
   check("page draft: updateDraft refreshes source", afterPatch?.source === patched, afterPatch?.source === patched);
 
-  deleteDraft(draftId);
-  check("page draft: deleteDraft removes entry", getDraft(draftId) === null, getDraft(draftId));
+  await deleteDraft(draftId);
+  check("page draft: deleteDraft removes entry", (await getDraft(draftId)) === null, await getDraft(draftId));
 }
 
 console.log("== draft-cache: sliding TTL (every touch refreshes the clock) ==");
 {
-  const id = putDraft({ source: { page: [] } });
-  const entry = getDraft(id)!;
-  // Backdate the entry (getDraft returns the live object), then touch it again:
-  // the read must refresh `created` to ~now so an active workflow never expires.
+  const id = await putDraft({ source: { page: [] } });
+  const entry = (await getDraft(id))!;
+  // Backdate the entry (memory backend's getDraft returns the live object), then touch it
+  // again: the read must refresh `created` to ~now so an active workflow never expires.
   entry.created = Date.now() - 10_000;
-  const touched = getDraft(id);
+  const touched = await getDraft(id);
   check("sliding TTL: getDraft refreshes created", touched != null && Date.now() - touched.created < 2_000, touched && Date.now() - touched.created);
   // updateDraft refreshes too.
   touched!.created = Date.now() - 10_000;
-  updateDraft(id, { page: [] });
-  check("sliding TTL: updateDraft refreshes created", Date.now() - getDraft(id)!.created < 2_000);
-  deleteDraft(id);
+  await updateDraft(id, { page: [] });
+  check("sliding TTL: updateDraft refreshes created", Date.now() - (await getDraft(id))!.created < 2_000);
+  await deleteDraft(id);
   // An UNTOUCHED draft must still expire (default TTL 2h; skip when overridden).
   if (!process.env.WEBCAKE_DRAFT_TTL_MS) {
-    const stale = putDraft({ source: { page: [] } });
-    getDraft(stale)!.created = Date.now() - 3 * 60 * 60 * 1000;
-    check("sliding TTL: untouched draft still expires", getDraft(stale) === null);
+    const stale = await putDraft({ source: { page: [] } });
+    (await getDraft(stale))!.created = Date.now() - 3 * 60 * 60 * 1000;
+    check("sliding TTL: untouched draft still expires", (await getDraft(stale)) === null);
   }
 }
 
@@ -1296,18 +1296,18 @@ console.log("== draft-cache: sections draft round-trip (add_section dry_run / fa
     svariations: [],
   }, createElement);
 
-  const sid = putDraft({ source: secShell, kind: "sections", page_id: "pg_live_123" });
+  const sid = await putDraft({ source: secShell, kind: "sections", page_id: "pg_live_123" });
   check("sections draft: putDraft returns an id", typeof sid === "string" && sid.startsWith("draft_"), sid);
 
-  const sd = getDraft(sid);
+  const sd = await getDraft(sid);
   check("sections draft: getDraft returns entry with kind='sections'", sd?.kind === "sections", sd?.kind);
   check("sections draft: page_id stored", sd?.page_id === "pg_live_123", sd?.page_id);
   check("sections draft: source has page array", Array.isArray(sd?.source?.page), sd?.source?.page);
 
   // Simulate patch round: fix an element in the shell then update.
   const fixedShell = { ...secShell, page: secShell.page ?? [] };
-  updateDraft(sid, fixedShell);
-  const afterFix = getDraft(sid);
+  await updateDraft(sid, fixedShell);
+  const afterFix = await getDraft(sid);
   check("sections draft: updateDraft refreshes source", afterFix?.source === fixedShell, afterFix?.source === fixedShell);
   check("sections draft: kind preserved after update", afterFix?.kind === "sections", afterFix?.kind);
   check("sections draft: page_id preserved after update", afterFix?.page_id === "pg_live_123", afterFix?.page_id);
@@ -1318,11 +1318,11 @@ console.log("== draft-cache: sections draft round-trip (add_section dry_run / fa
 
   // Simulate the patch_page sections path: ops would be applied, then append would fire.
   // We only test the cache mechanics here (no live network in smoke).
-  deleteDraft(sid);
-  check("sections draft: deleteDraft removes entry", getDraft(sid) === null, getDraft(sid));
+  await deleteDraft(sid);
+  check("sections draft: deleteDraft removes entry", await getDraft(sid) === null, await getDraft(sid));
 
   // Expired / missing draft returns null.
-  check("sections draft: getDraft on unknown id → null", getDraft("draft_doesnotexist") === null);
+  check("sections draft: getDraft on unknown id → null", await getDraft("draft_doesnotexist") === null);
 }
 
 console.log("== draft-cache: update draft round-trip (update_page / live-page patch timeout flow) ==");
@@ -1331,10 +1331,10 @@ console.log("== draft-cache: update draft round-trip (update_page / live-page pa
   const updateSource = expandSource(sparse, createElement);
 
   // putDraft with kind='update' and an explicit page_id.
-  const uid = putDraft({ source: updateSource, kind: "update", page_id: "pg_existing_456" });
+  const uid = await putDraft({ source: updateSource, kind: "update", page_id: "pg_existing_456" });
   check("update draft: putDraft returns an id", typeof uid === "string" && uid.startsWith("draft_"), uid);
 
-  const ud = getDraft(uid);
+  const ud = await getDraft(uid);
   check("update draft: getDraft returns entry with kind='update'", ud?.kind === "update", ud?.kind);
   check("update draft: page_id stored", ud?.page_id === "pg_existing_456", ud?.page_id);
   check("update draft: source has page array", Array.isArray(ud?.source?.page), ud?.source?.page);
@@ -1343,8 +1343,8 @@ console.log("== draft-cache: update draft round-trip (update_page / live-page pa
   // Simulate a patch round: getDraft returns a LIVE reference; mutating it is the
   // retry trap — we verify that updateDraft replaces the reference explicitly.
   const mutatedSource = { ...updateSource, page: updateSource.page ?? [] };
-  updateDraft(uid, mutatedSource);
-  const afterPatch = getDraft(uid);
+  await updateDraft(uid, mutatedSource);
+  const afterPatch = await getDraft(uid);
   check("update draft: updateDraft refreshes source", afterPatch?.source === mutatedSource, afterPatch?.source === mutatedSource);
   check("update draft: kind preserved after update", afterPatch?.kind === "update", afterPatch?.kind);
   check("update draft: page_id preserved after update", afterPatch?.page_id === "pg_existing_456", afterPatch?.page_id);
@@ -1356,13 +1356,13 @@ console.log("== draft-cache: update draft round-trip (update_page / live-page pa
   check("update draft: commit-as-is (no ops) expanded source validates", commitValid.valid, commitValid.errors);
 
   // Verify different draft IDs are independent (no cross-contamination).
-  const uid2 = putDraft({ source: { page: [] }, kind: "update", page_id: "pg_other_789" });
+  const uid2 = await putDraft({ source: { page: [] }, kind: "update", page_id: "pg_other_789" });
   check("update draft: second update draft has independent id", uid2 !== uid, { uid, uid2 });
-  check("update draft: second draft has its own page_id", getDraft(uid2)?.page_id === "pg_other_789");
-  deleteDraft(uid2);
+  check("update draft: second draft has its own page_id", (await getDraft(uid2))?.page_id === "pg_other_789");
+  await deleteDraft(uid2);
 
-  deleteDraft(uid);
-  check("update draft: deleteDraft removes entry", getDraft(uid) === null, getDraft(uid));
+  await deleteDraft(uid);
+  check("update draft: deleteDraft removes entry", await getDraft(uid) === null, await getDraft(uid));
 }
 
 console.log("== validate: animation contract checks ==");

@@ -140,8 +140,7 @@ export function rewriteImageUrls<T>(source: T, map: Map<string, string>): T {
   return recur(source) as T;
 }
 
-/** Process-wide {original → hosted} cache so a URL reused across elements/saves uploads once. */
-export const rehostCache = new Map<string, string>();
-
-/** Hard cap on uploads per save — a runaway-safety backstop, far above a real page's image count. */
+/** Hard cap on uploads per save — a runaway-safety backstop, far above a real page's image count.
+ *  The {original → hosted} dedup cache itself lives in ./rehost-cache.ts (Redis-or-memory),
+ *  kept OUT of this module so rehost.ts stays PURE (no network/IO → no webcake-client cycle). */
 export const MAX_REHOST_PER_SAVE = 120;

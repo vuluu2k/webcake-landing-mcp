@@ -1,0 +1,53 @@
+# Local DEV dependencies for the webcake-landing MCP server: Redis (cache) +
+# Postgres (OAuth store). Run these in Docker, run the SERVER itself on the host
+# (`npm run serve`) pointed at them — fast iteration, no rebuild loop.
+#
+#   docker compose -f docker-compose.dev.yml up -d      # start redis + postgres
+#   docker compose -f docker-compose.dev.yml down        # stop  (add -v to wipe data)
+#
+# Then export the two URLs (or put them in .env — see .env.example) before serving:
+#   export REDIS_URL=redis://localhost:6379
+#   export DATABASE_URL=postgres://webcake:webcake@localhost:5432/webcake_mcp
+#   npm run build && npm run serve
+#
+# Both ports are published to localhost so the host process can reach them. The
+# cache (Redis) is disposable; Postgres data lives in a named volume so issued
+# OAuth tokens survive `down`/`up` (use `down -v` to reset). Tables auto-create
+# on first connect (ensureOAuthSchema) — no init SQL needed.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: webcake-mcp-redis
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    # Host port is overridable (WEBCAKE_DEV_REDIS_PORT) for machines that already
+    # run Redis on 6379. Match it in REDIS_URL when you change it.
+    ports:
+      - "${WEBCAKE_DEV_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: webcake-mcp-postgres
+    environment:
+      POSTGRES_USER: webcake
+      POSTGRES_PASSWORD: webcake
+      POSTGRES_DB: webcake_mcp
+    # Host port is overridable (WEBCAKE_DEV_PG_PORT) for machines that already run
+    # Postgres on 5432. Match it in DATABASE_URL when you change it.
+    ports:
+      - "${WEBCAKE_DEV_PG_PORT:-5432}:5432"
+    volumes:
+      - webcake-pg-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webcake -d webcake_mcp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  webcake-pg-dev:

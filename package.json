@@ -50,5 +50,9 @@
     "@types/node": "^22.0.0",
     "fontkit": "^2.0.4",
     "typescript": "^5.6.0"
+  },
+  "optionalDependencies": {
+    "ioredis": "^5.11.1",
+    "pg": "^8.21.0"
   }
 }

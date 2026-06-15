@@ -11,12 +11,8 @@
  * (LandingPageWeb.V1.AiController, scope /api/v1/ai). Requires global fetch (Node 18+).
  */
 import type { WebcakeConfig, Organization, CreateOutcome, PageSummary, RehostReport } from "./types.js";
-import {
-  collectExternalImageUrls,
-  rewriteImageUrls,
-  rehostCache,
-  MAX_REHOST_PER_SAVE,
-} from "./rehost.js";
+import { collectExternalImageUrls, rewriteImageUrls, MAX_REHOST_PER_SAVE } from "./rehost.js";
+import { rehostGet, rehostSet } from "./rehost-cache.js";
 
 /** Default fetch timeout in ms. Override via WEBCAKE_HTTP_TIMEOUT_MS env. */
 const HTTP_TIMEOUT_MS = (() => {
@@ -795,7 +791,7 @@ async function fetchAndHostOne(apiBase: string, src: string): Promise<string | n
  * source with those URLs rewritten in place (specials.src, `url(...)`
  * backgrounds, gallery links, video posters). Idempotent and cached: a URL
  * already on the CDN is skipped, and a URL seen in a previous save is reused
- * from `rehostCache`. A per-URL failure leaves the original URL untouched and
+ * from the rehost cache (Redis-or-memory, ./rehost-cache.ts). A per-URL failure leaves the original URL untouched and
  * never throws — the save proceeds either way. Returns `{ source }` unchanged
  * with no report when the source has no external images.
  */
@@ -810,20 +806,20 @@ export async function rehostSourceImages(
   const skipped = candidates.length - capped.length;
 
   // Resolve from cache first; upload the rest with a small concurrency pool.
-  const toUpload = capped.filter((u) => !rehostCache.has(u));
+  const cacheHits = await Promise.all(capped.map((u) => rehostGet(u)));
+  const toUpload = capped.filter((_, i) => !cacheHits[i]);
   for (let i = 0; i < toUpload.length; i += REHOST_CONCURRENCY) {
     const batch = toUpload.slice(i, i + REHOST_CONCURRENCY);
     const hosted = await Promise.all(batch.map((u) => fetchAndHostOne(apiBase, u)));
-    batch.forEach((u, j) => {
-      const h = hosted[j];
-      if (h) rehostCache.set(u, h);
-    });
+    await Promise.all(
+      batch.map((u, j) => (hosted[j] ? rehostSet(u, hosted[j]!) : Promise.resolve()))
+    );
   }
 
   const map = new Map<string, string>();
   const failed: string[] = [];
   for (const u of capped) {
-    const h = rehostCache.get(u);
+    const h = await rehostGet(u);
     if (h) map.set(u, h);
     else failed.push(u);
   }

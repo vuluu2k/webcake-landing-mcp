@@ -15,16 +15,20 @@
  *   - Token endpoint (POST /token)  authorization_code + refresh_token
  *   - Authorization Server + Protected Resource metadata (the /.well-known docs)
  *
- * Access tokens are OPAQUE random strings mapped to the user's `ljwt` in this
+ * Access tokens are OPAQUE random strings mapped to the user's `ljwt` in the
  * store (so they can be revoked and the ljwt never leaves the server). The HTTP
  * layer resolves a Bearer access token to its ljwt and injects it as the normal
  * `x-webcake-jwt` header, so the rest of the server (persistence/config.ts) is
  * UNCHANGED and the legacy `?jwt=` / `x-webcake-jwt` paths keep working untouched.
  *
- * STORE: in-memory + single-process. Fine for one `serve` instance; move the maps
- * to Redis (same interface) before running multiple instances behind a load balancer.
+ * STORE: Postgres when DATABASE_URL is set (tokens survive a `serve` restart and
+ * are shared across instances behind a load balancer), else in-memory maps
+ * (single-instance `serve`, stdio/`npx`, offline tests). Both implement the same
+ * async `OAuthStore` interface; the rest of this module is backend-agnostic. All
+ * exported state functions are async — callers (src/http.ts) `await` them.
  */
 import { randomBytes, createHash } from "node:crypto";
+import { getPg, ensureOAuthSchema, type PgPool } from "../persistence/postgres.js";
 
 // ---- TTLs (override via env where useful) ---------------------------------
 const TEN_MIN = 10 * 60 * 1000;
@@ -64,13 +68,6 @@ type AuthCode = {
 type AccessToken = { ljwt: string; scope?: string; expiresAt: number };
 type RefreshToken = { ljwt: string; client_id: string; scope?: string; expiresAt: number };
 
-// ---- In-memory maps -------------------------------------------------------
-const clients = new Map<string, OAuthClient>();
-const pending = new Map<string, PendingAuth>(); // key: internal state we send to /mcp-connect
-const codes = new Map<string, AuthCode>(); // key: authorization code
-const accessTokens = new Map<string, AccessToken>(); // key: access token
-const refreshTokens = new Map<string, RefreshToken>(); // key: refresh token
-
 function now(): number {
   return Date.now();
 }
@@ -79,13 +76,229 @@ function token(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
 }
 
-/** Lazy sweep of anything expired — cheap, called on the hot paths. */
-function sweep(): void {
-  const t = now();
-  for (const [k, v] of pending) if (v.expiresAt < t) pending.delete(k);
-  for (const [k, v] of codes) if (v.expiresAt < t) codes.delete(k);
-  for (const [k, v] of accessTokens) if (v.expiresAt < t) accessTokens.delete(k);
-  for (const [k, v] of refreshTokens) if (v.expiresAt < t) refreshTokens.delete(k);
+// ===========================================================================
+// Store abstraction: one async interface, two backends (memory + Postgres).
+// ===========================================================================
+interface OAuthStore {
+  putClient(c: OAuthClient): Promise<void>;
+  getClient(id: string): Promise<OAuthClient | undefined>;
+
+  putPending(state: string, p: PendingAuth): Promise<void>;
+  takePending(state: string): Promise<PendingAuth | undefined>; // get + delete (one-time)
+
+  putCode(code: string, c: AuthCode): Promise<void>;
+  takeCode(code: string): Promise<AuthCode | undefined>; // get + delete (one-time)
+
+  putAccess(t: string, a: AccessToken): Promise<void>;
+  getAccess(t: string): Promise<AccessToken | undefined>;
+
+  putRefresh(t: string, r: RefreshToken): Promise<void>;
+  takeRefresh(t: string): Promise<RefreshToken | undefined>; // get + delete (rotated)
+
+  revoke(t: string): Promise<void>; // best-effort: drop an access AND/OR refresh token
+}
+
+// ---- In-memory store (default; no DATABASE_URL) ---------------------------
+class MemoryStore implements OAuthStore {
+  private clients = new Map<string, OAuthClient>();
+  private pending = new Map<string, PendingAuth>();
+  private codes = new Map<string, AuthCode>();
+  private access = new Map<string, AccessToken>();
+  private refresh = new Map<string, RefreshToken>();
+
+  /** Lazy sweep of anything expired — cheap, called on the hot paths. */
+  private sweep(): void {
+    const t = now();
+    for (const [k, v] of this.pending) if (v.expiresAt < t) this.pending.delete(k);
+    for (const [k, v] of this.codes) if (v.expiresAt < t) this.codes.delete(k);
+    for (const [k, v] of this.access) if (v.expiresAt < t) this.access.delete(k);
+    for (const [k, v] of this.refresh) if (v.expiresAt < t) this.refresh.delete(k);
+  }
+
+  async putClient(c: OAuthClient) {
+    this.clients.set(c.client_id, c);
+  }
+  async getClient(id: string) {
+    return this.clients.get(id);
+  }
+  async putPending(state: string, p: PendingAuth) {
+    this.sweep();
+    this.pending.set(state, p);
+  }
+  async takePending(state: string) {
+    this.sweep();
+    const p = this.pending.get(state);
+    this.pending.delete(state);
+    return p && p.expiresAt >= now() ? p : undefined;
+  }
+  async putCode(code: string, c: AuthCode) {
+    this.codes.set(code, c);
+  }
+  async takeCode(code: string) {
+    this.sweep();
+    const c = this.codes.get(code);
+    this.codes.delete(code);
+    return c && c.expiresAt >= now() ? c : undefined;
+  }
+  async putAccess(t: string, a: AccessToken) {
+    this.access.set(t, a);
+  }
+  async getAccess(t: string) {
+    const a = this.access.get(t);
+    if (a && a.expiresAt < now()) {
+      this.access.delete(t);
+      return undefined;
+    }
+    return a;
+  }
+  async putRefresh(t: string, r: RefreshToken) {
+    this.refresh.set(t, r);
+  }
+  async takeRefresh(t: string) {
+    this.sweep();
+    const r = this.refresh.get(t);
+    this.refresh.delete(t);
+    return r && r.expiresAt >= now() ? r : undefined;
+  }
+  async revoke(t: string) {
+    this.access.delete(t);
+    this.refresh.delete(t);
+  }
+}
+
+// ---- Postgres store (when DATABASE_URL is set) ----------------------------
+class PgStore implements OAuthStore {
+  constructor(private pool: PgPool) {}
+
+  async putClient(c: OAuthClient) {
+    await this.pool.query(
+      `INSERT INTO oauth_clients (client_id, client_name, redirect_uris, created_at)
+       VALUES ($1,$2,$3,$4)
+       ON CONFLICT (client_id) DO UPDATE SET client_name=$2, redirect_uris=$3`,
+      [c.client_id, c.client_name ?? null, JSON.stringify(c.redirect_uris), c.created_at]
+    );
+  }
+  async getClient(id: string) {
+    const { rows } = await this.pool.query(
+      `SELECT client_id, client_name, redirect_uris, created_at FROM oauth_clients WHERE client_id=$1`,
+      [id]
+    );
+    const r = rows[0];
+    if (!r) return undefined;
+    return {
+      client_id: r.client_id,
+      client_name: r.client_name ?? undefined,
+      redirect_uris: Array.isArray(r.redirect_uris) ? r.redirect_uris : JSON.parse(r.redirect_uris),
+      created_at: Number(r.created_at),
+    } as OAuthClient;
+  }
+  async putPending(state: string, p: PendingAuth) {
+    await this.pool.query(
+      `INSERT INTO oauth_pending (state, client_id, redirect_uri, code_challenge, client_state, scope, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [state, p.client_id, p.redirect_uri, p.code_challenge, p.state ?? null, p.scope ?? null, p.expiresAt]
+    );
+  }
+  async takePending(state: string) {
+    const { rows } = await this.pool.query(
+      `DELETE FROM oauth_pending WHERE state=$1 RETURNING client_id, redirect_uri, code_challenge, client_state, scope, expires_at`,
+      [state]
+    );
+    const r = rows[0];
+    if (!r || Number(r.expires_at) < now()) return undefined;
+    return {
+      client_id: r.client_id,
+      redirect_uri: r.redirect_uri,
+      code_challenge: r.code_challenge,
+      state: r.client_state ?? undefined,
+      scope: r.scope ?? undefined,
+      expiresAt: Number(r.expires_at),
+    } as PendingAuth;
+  }
+  async putCode(code: string, c: AuthCode) {
+    await this.pool.query(
+      `INSERT INTO oauth_codes (code, client_id, redirect_uri, code_challenge, scope, ljwt, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [code, c.client_id, c.redirect_uri, c.code_challenge, c.scope ?? null, c.ljwt, c.expiresAt]
+    );
+  }
+  async takeCode(code: string) {
+    const { rows } = await this.pool.query(
+      `DELETE FROM oauth_codes WHERE code=$1 RETURNING client_id, redirect_uri, code_challenge, scope, ljwt, expires_at`,
+      [code]
+    );
+    const r = rows[0];
+    if (!r || Number(r.expires_at) < now()) return undefined;
+    return {
+      client_id: r.client_id,
+      redirect_uri: r.redirect_uri,
+      code_challenge: r.code_challenge,
+      scope: r.scope ?? undefined,
+      ljwt: r.ljwt,
+      expiresAt: Number(r.expires_at),
+    } as AuthCode;
+  }
+  async putAccess(t: string, a: AccessToken) {
+    await this.pool.query(
+      `INSERT INTO oauth_access_tokens (token, ljwt, scope, expires_at) VALUES ($1,$2,$3,$4)`,
+      [t, a.ljwt, a.scope ?? null, a.expiresAt]
+    );
+  }
+  async getAccess(t: string) {
+    const { rows } = await this.pool.query(
+      `SELECT ljwt, scope, expires_at FROM oauth_access_tokens WHERE token=$1`,
+      [t]
+    );
+    const r = rows[0];
+    if (!r) return undefined;
+    if (Number(r.expires_at) < now()) {
+      await this.pool.query(`DELETE FROM oauth_access_tokens WHERE token=$1`, [t]);
+      return undefined;
+    }
+    return { ljwt: r.ljwt, scope: r.scope ?? undefined, expiresAt: Number(r.expires_at) } as AccessToken;
+  }
+  async putRefresh(t: string, r: RefreshToken) {
+    await this.pool.query(
+      `INSERT INTO oauth_refresh_tokens (token, ljwt, client_id, scope, expires_at) VALUES ($1,$2,$3,$4,$5)`,
+      [t, r.ljwt, r.client_id, r.scope ?? null, r.expiresAt]
+    );
+  }
+  async takeRefresh(t: string) {
+    const { rows } = await this.pool.query(
+      `DELETE FROM oauth_refresh_tokens WHERE token=$1 RETURNING ljwt, client_id, scope, expires_at`,
+      [t]
+    );
+    const r = rows[0];
+    if (!r || Number(r.expires_at) < now()) return undefined;
+    return {
+      ljwt: r.ljwt,
+      client_id: r.client_id,
+      scope: r.scope ?? undefined,
+      expiresAt: Number(r.expires_at),
+    } as RefreshToken;
+  }
+  async revoke(t: string) {
+    await this.pool.query(`DELETE FROM oauth_access_tokens WHERE token=$1`, [t]);
+    await this.pool.query(`DELETE FROM oauth_refresh_tokens WHERE token=$1`, [t]);
+  }
+}
+
+// ---- Backend selection (memoized) -----------------------------------------
+const memoryStore = new MemoryStore();
+let storePromise: Promise<OAuthStore> | undefined;
+
+/** Resolve the active store ONCE: Postgres if configured + schema ready, else memory. */
+function getStore(): Promise<OAuthStore> {
+  if (storePromise) return storePromise;
+  storePromise = (async () => {
+    const pool = getPg();
+    if (pool && (await ensureOAuthSchema(pool))) return new PgStore(pool);
+    return memoryStore;
+  })().catch((e) => {
+    console.error("[oauth] store init failed, using in-memory:", e?.message ?? e);
+    return memoryStore;
+  });
+  return storePromise;
 }
 
 // ---- PKCE -----------------------------------------------------------------
@@ -115,7 +328,7 @@ export type RegisterResult =
   | { ok: true; client: OAuthClient }
   | { ok: false; error: string; error_description: string };
 
-export function registerClient(body: RegisterRequest): RegisterResult {
+export async function registerClient(body: RegisterRequest): Promise<RegisterResult> {
   const uris = Array.isArray(body?.redirect_uris)
     ? body.redirect_uris.filter((u): u is string => typeof u === "string" && /^https?:\/\//i.test(u))
     : [];
@@ -128,12 +341,13 @@ export function registerClient(body: RegisterRequest): RegisterResult {
     redirect_uris: uris,
     created_at: now(),
   };
-  clients.set(client.client_id, client);
+  (await getStore()).putClient(client).catch((e) => console.error("[oauth] putClient:", e?.message ?? e));
   return { ok: true, client };
 }
 
-export function getClient(clientId: string | undefined | null): OAuthClient | undefined {
-  return clientId ? clients.get(clientId) : undefined;
+export async function getClient(clientId: string | undefined | null): Promise<OAuthClient | undefined> {
+  if (!clientId) return undefined;
+  return (await getStore()).getClient(clientId);
 }
 
 // ---- Authorize: park the request, then resolve it once the user logs in ---
@@ -157,9 +371,9 @@ export type StartAuthorizeResult =
  * `redirectable: false` means the error must be shown as a page (we can't trust
  * the redirect_uri); `true` means it's safe to bounce the error to the client.
  */
-export function startAuthorize(p: StartAuthorizeParams): StartAuthorizeResult {
-  sweep();
-  const client = getClient(p.client_id);
+export async function startAuthorize(p: StartAuthorizeParams): Promise<StartAuthorizeResult> {
+  const store = await getStore();
+  const client = p.client_id ? await store.getClient(p.client_id) : undefined;
   if (!client) {
     return { ok: false, error: "invalid_client", error_description: "Unknown client_id. Register first via /register.", redirectable: false };
   }
@@ -174,7 +388,7 @@ export function startAuthorize(p: StartAuthorizeParams): StartAuthorizeResult {
     return { ok: false, error: "invalid_request", error_description: "PKCE with code_challenge_method=S256 is required.", redirectable: true };
   }
   const internalState = token(24);
-  pending.set(internalState, {
+  await store.putPending(internalState, {
     client_id: client.client_id,
     redirect_uri: p.redirect_uri,
     code_challenge: p.code_challenge,
@@ -195,18 +409,20 @@ export type CompleteAuthorizeResult =
  * parked PKCE challenge, and return where to redirect the user (the client's
  * redirect_uri with ?code=&state=).
  */
-export function completeAuthorize(internalState: string | undefined | null, ljwt: string | undefined | null): CompleteAuthorizeResult {
-  sweep();
-  if (!internalState || !pending.has(internalState)) {
+export async function completeAuthorize(
+  internalState: string | undefined | null,
+  ljwt: string | undefined | null
+): Promise<CompleteAuthorizeResult> {
+  const store = await getStore();
+  const p = internalState ? await store.takePending(internalState) : undefined;
+  if (!p) {
     return { ok: false, error: "invalid_request", error_description: "Authorization session expired or unknown — restart the connection." };
   }
-  const p = pending.get(internalState)!;
-  pending.delete(internalState);
   if (!ljwt) {
     return { ok: false, error: "access_denied", error_description: "No Webcake token returned from login." };
   }
   const code = token(32);
-  codes.set(code, {
+  await store.putCode(code, {
     client_id: p.client_id,
     redirect_uri: p.redirect_uri,
     code_challenge: p.code_challenge,
@@ -236,22 +452,26 @@ export type TokenSuccess = {
 };
 export type TokenResult = { ok: true; body: TokenSuccess } | { ok: false; status: number; error: string; error_description: string };
 
-function issueTokens(ljwt: string, client_id: string, scope: string | undefined): TokenSuccess {
+async function issueTokens(
+  store: OAuthStore,
+  ljwt: string,
+  client_id: string,
+  scope: string | undefined
+): Promise<TokenSuccess> {
   const access = token(32);
   const refresh = token(32);
-  accessTokens.set(access, { ljwt, scope, expiresAt: now() + ACCESS_TTL });
-  refreshTokens.set(refresh, { ljwt, client_id, scope, expiresAt: now() + REFRESH_TTL });
+  await store.putAccess(access, { ljwt, scope, expiresAt: now() + ACCESS_TTL });
+  await store.putRefresh(refresh, { ljwt, client_id, scope, expiresAt: now() + REFRESH_TTL });
   return { access_token: access, token_type: "Bearer", expires_in: Math.floor(ACCESS_TTL / 1000), refresh_token: refresh, scope };
 }
 
-export function exchangeToken(p: TokenParams): TokenResult {
-  sweep();
+export async function exchangeToken(p: TokenParams): Promise<TokenResult> {
+  const store = await getStore();
   if (p.grant_type === "authorization_code") {
-    if (!p.code || !codes.has(p.code)) {
+    const c = p.code ? await store.takeCode(p.code) : undefined; // one-time use
+    if (!c) {
       return { ok: false, status: 400, error: "invalid_grant", error_description: "Unknown or expired authorization code." };
     }
-    const c = codes.get(p.code)!;
-    codes.delete(p.code); // one-time use
     if (c.client_id !== p.client_id) {
       return { ok: false, status: 400, error: "invalid_grant", error_description: "client_id does not match the authorization code." };
     }
@@ -261,37 +481,30 @@ export function exchangeToken(p: TokenParams): TokenResult {
     if (!p.code_verifier || !verifyPkce(p.code_verifier, c.code_challenge)) {
       return { ok: false, status: 400, error: "invalid_grant", error_description: "PKCE verification failed." };
     }
-    return { ok: true, body: issueTokens(c.ljwt, c.client_id, c.scope) };
+    return { ok: true, body: await issueTokens(store, c.ljwt, c.client_id, c.scope) };
   }
   if (p.grant_type === "refresh_token") {
-    if (!p.refresh_token || !refreshTokens.has(p.refresh_token)) {
+    const r = p.refresh_token ? await store.takeRefresh(p.refresh_token) : undefined; // rotate
+    if (!r) {
       return { ok: false, status: 400, error: "invalid_grant", error_description: "Unknown or expired refresh token." };
     }
-    const r = refreshTokens.get(p.refresh_token)!;
-    refreshTokens.delete(p.refresh_token); // rotate
-    return { ok: true, body: issueTokens(r.ljwt, r.client_id, r.scope) };
+    return { ok: true, body: await issueTokens(store, r.ljwt, r.client_id, r.scope) };
   }
   return { ok: false, status: 400, error: "unsupported_grant_type", error_description: "grant_type must be authorization_code or refresh_token." };
 }
 
 // ---- Resource-server side: resolve a Bearer access token to its ljwt -------
 /** Returns the user's ljwt for a valid, unexpired access token, else undefined. */
-export function resolveAccessToken(accessToken: string | undefined | null): string | undefined {
+export async function resolveAccessToken(accessToken: string | undefined | null): Promise<string | undefined> {
   if (!accessToken) return undefined;
-  const a = accessTokens.get(accessToken);
-  if (!a) return undefined;
-  if (a.expiresAt < now()) {
-    accessTokens.delete(accessToken);
-    return undefined;
-  }
-  return a.ljwt;
+  const a = await (await getStore()).getAccess(accessToken);
+  return a?.ljwt;
 }
 
 /** Revoke an access or refresh token (best-effort; for /revoke). */
-export function revokeToken(t: string | undefined | null): void {
+export async function revokeToken(t: string | undefined | null): Promise<void> {
   if (!t) return;
-  accessTokens.delete(t);
-  refreshTokens.delete(t);
+  await (await getStore()).revoke(t);
 }
 
 // ---- Metadata documents (RFC 8414 / RFC 9728) -----------------------------
