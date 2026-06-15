@@ -252,6 +252,40 @@ console.log("== validate: custom CSS/class/JS escape hatches (beyond-element cap
   check("escape hatch: declarations-only misuse does NOT block (warning, not error)", selR.valid, selR.errors);
 }
 
+console.log("== validate: custom-code SAFETY (broad/broken custom breaks the UI) ==");
+{
+  const cloneG = () => JSON.parse(JSON.stringify(good));
+  const W = (r: any, re: RegExp) => r.warnings.filter((w: string) => re.test(w));
+  // settings.extra_css with bare-tag + Webcake-internal selectors → unscoped warning; scoped #w- rule does NOT trip it.
+  const broad = cloneG();
+  broad.settings.extra_css = "body{margin:0} .rectangle-css{opacity:.5} #w-btn1:hover{transform:scale(1.02)}";
+  const broadR = validatePage(broad);
+  check("custom-safety: unscoped extra_css selectors (body/.rectangle-css) flagged", W(broadR, /UNSCOPED selector/).length > 0, broadR.warnings);
+  check("custom-safety: a #w- scoped rule is NOT flagged", !/#w-btn1/.test(W(broadR, /UNSCOPED selector/)[0] ?? ""), W(broadR, /UNSCOPED/));
+  // unbalanced braces in extra_css.
+  const braces = cloneG(); braces.settings.extra_css = "#w-btn1{color:red";
+  check("custom-safety: unbalanced extra_css braces flagged", W(validatePage(braces), /unbalanced braces/).length > 0);
+  // bhet holding raw CSS (no tags) → wrong-field warning.
+  const bhetCss = cloneG(); bhetCss.settings.bhet = "body{margin:0}";
+  check("custom-safety: bhet with no HTML tags flagged (belongs in extra_css)", W(validatePage(bhetCss), /no HTML tags/).length > 0);
+  // bbet with an unclosed <script> → swallow warning.
+  const bbetBad = cloneG(); bbetBad.settings.bbet = "<script>init()";
+  check("custom-safety: bbet unclosed <script> flagged", W(validatePage(bbetBad), /unbalanced <script>/).length > 0);
+  // element custom_css with layout props → break-layout warning (visual props alone do NOT trip it).
+  const layoutCss = cloneG();
+  layoutCss.page[0].children[0].specials = { text: "X", customAdvance: true, custom_css: "width:100%;display:flex;box-shadow:0 2px 8px rgba(0,0,0,.1);" };
+  check("custom-safety: custom_css layout props (width/display) flagged", W(validatePage(layoutCss), /layout prop/).length > 0, validatePage(layoutCss).warnings);
+  const visualCss = cloneG();
+  visualCss.page[0].children[0].specials = { text: "X", customAdvance: true, custom_css: "box-shadow:0 2px 8px rgba(0,0,0,.1);backdrop-filter:blur(8px);" };
+  check("custom-safety: visual-only custom_css is NOT flagged", W(validatePage(visualCss), /layout prop/).length === 0, validatePage(visualCss).warnings);
+  // a correct, fully-scoped custom setup → none of these warnings.
+  const clean = cloneG();
+  clean.settings.extra_css = "#w-btn1{transition:transform .3s}#w-btn1:hover{transform:translateY(-2px)}";
+  clean.settings.bhet = "<link href='https://fonts.googleapis.com/css2?family=Inter' rel='stylesheet'>";
+  clean.page[0].children[0].specials = { text: "X", customAdvance: true, custom_css: "box-shadow:0 8px 24px rgba(0,0,0,.08);" };
+  check("custom-safety: correctly-scoped custom triggers no safety warning", W(validatePage(clean), /UNSCOPED|unbalanced|no HTML tags|layout prop/).length === 0, validatePage(clean).warnings);
+}
+
 console.log("== validate: icon rendering (svg-mask needs background; font-class route is clean) ==");
 {
   const cloneG = () => JSON.parse(JSON.stringify(good));

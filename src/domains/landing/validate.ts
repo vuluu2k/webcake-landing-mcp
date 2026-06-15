@@ -340,6 +340,17 @@ export function validatePage(input: unknown): ValidationResult {
         if (typeof sp.custom_css === "string" && /[{}]|@keyframes|:hover|:focus|::/.test(sp.custom_css)) {
           warnings.push(`${path} (${type}): specials.custom_css is injected as plain declarations inside #w-${node.id}{…} — a selector/:hover/@keyframes/media-query there breaks the rule. Keep declarations only here (e.g. "box-shadow:0 20px 40px rgba(0,0,0,.08);backdrop-filter:blur(20px);"); put hover/keyframes/media rules in settings.extra_css targeting #w-${node.id} (or a specials.custom_class).`);
         }
+        // Layout/structural props in custom_css fight the absolute-canvas system
+        // (the renderer sets the element's box + display) → the element jumps or the
+        // page breaks. Geometry belongs in responsive.<bp>.styles, not custom_css.
+        if (typeof sp.custom_css === "string") {
+          const badProps = (sp.custom_css.match(/(?:^|[;{]\s*)(position|top|left|right|bottom|inset|width|height|display|float|flex|grid)\s*:/gi) ?? [])
+            .map((m: string) => m.replace(/[;{:\s]/g, ""))
+            .filter((p: string, i: number, a: string[]) => a.indexOf(p) === i);
+          if (badProps.length) {
+            warnings.push(`${path} (${type}): specials.custom_css sets layout prop(s) ${badProps.join(", ")} — these override the element's box/display and break the absolute-canvas layout. Set size/position via responsive.<bp>.styles (top/left/width/height per breakpoint); keep custom_css to VISUAL props only (background, box-shadow, border, filter, backdrop-filter, transition, transform).`);
+          }
+        }
       }
     }
 
@@ -1166,6 +1177,69 @@ export function validatePage(input: unknown): ValidationResult {
       `popup[${i}]`
     );
   });
+
+  // ── custom-code safety: settings.extra_css / extra_script / bhet / bbet ──────
+  // These inject RAW into the page (extra_css in <head>, extra_script before
+  // </body>, bhet at end of <head>, bbet at end of <body>) — unscoped/broken
+  // custom code is the #1 way "custom breaks the UI". Flag the dangerous shapes.
+  {
+    // Webcake's own runtime class names — restyling them globally breaks the layout.
+    const INTERNAL_CLASS_RE = /\.(section-container|section-wrapper|pageview|rectangle-css|text-block-css|image-block-css|button-css|group-[\w-]*|gallery-[\w-]*|popup-[\w-]*|overlay|lazy|full-mask-size|mask-position|full-(?:width|height)|ladi-[\w-]*)\b/;
+    // Bare element selectors that, unscoped, restyle the WHOLE page.
+    const BARE_TAG_SEL_RE = /(?:^|[,{}>+~\s])(html|body|section|article|header|footer|nav|main|aside|div|span|p|a|button|ul|ol|li|img|table|tr|td|input|form|h[1-6])\s*(?:[,{>+~:.[]|$)/i;
+    /** Selectors in a raw stylesheet not scoped to #w-… that would restyle the whole page (broad tags, *, Webcake internals). */
+    const broadCssSelectors = (css: string): string[] => {
+      const out = new Set<string>();
+      const ruleRe = /([^{}]+)\{[^{}]*\}/g;
+      let m: RegExpExecArray | null;
+      while ((m = ruleRe.exec(css)) !== null && out.size < 5) {
+        for (const selRaw of m[1].split(",")) {
+          const sel = selRaw.trim();
+          if (!sel || sel.startsWith("@") || sel.includes("#w-")) continue; // scoped/at-rule → safe
+          if (/\*/.test(sel) || BARE_TAG_SEL_RE.test(sel) || INTERNAL_CLASS_RE.test(sel)) out.add(sel.slice(0, 60));
+        }
+      }
+      return [...out];
+    };
+
+    const settings = page?.settings;
+    if (settings && typeof settings === "object") {
+      const extraCss = settings.extra_css;
+      if (typeof extraCss === "string" && extraCss.trim()) {
+        const opens = (extraCss.match(/{/g) ?? []).length;
+        const closes = (extraCss.match(/}/g) ?? []).length;
+        if (opens !== closes) {
+          warnings.push(`settings.extra_css has unbalanced braces (${opens} '{' vs ${closes} '}') — a malformed rule leaks into the rest of the page CSS and breaks the layout. Fix the braces.`);
+        }
+        const broad = broadCssSelectors(extraCss);
+        if (broad.length) {
+          warnings.push(`settings.extra_css has UNSCOPED selector(s) that restyle the whole page and break the UI: ${broad.join(" | ")}. Scope EVERY rule to a specific element — #w-<element id> (or a specials.custom_class you added) — never bare tags, '*', or Webcake's own classes (.section-container / .rectangle-css / .text-block-css / .group-* / …).`);
+        }
+      }
+      for (const field of ["bhet", "bbet"] as const) {
+        const v = settings[field];
+        if (typeof v !== "string" || !v.trim()) continue;
+        if (!v.includes("<")) {
+          warnings.push(`settings.${field} contains no HTML tags — it is injected as raw HTML (${field === "bhet" ? "end of <head>" : "end of <body>"}), not CSS/JS. Put CSS in settings.extra_css and JS in settings.extra_script, or wrap this in <style>…</style> / <script>…</script>.`);
+        }
+        for (const sb of v.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) ?? []) {
+          const broad = broadCssSelectors(sb.replace(/<\/?style[^>]*>/gi, ""));
+          if (broad.length) {
+            warnings.push(`settings.${field} has a <style> with UNSCOPED selector(s) that break the page UI: ${broad.join(" | ")}. Scope every rule to #w-<id> / a custom_class, or move page-wide CSS into settings.extra_css with scoped selectors.`);
+            break;
+          }
+        }
+        for (const tag of ["script", "style", "div"]) {
+          const o = (v.match(new RegExp(`<${tag}\\b`, "gi")) ?? []).length;
+          const c = (v.match(new RegExp(`</${tag}>`, "gi")) ?? []).length;
+          if (o !== c) {
+            warnings.push(`settings.${field} has an unbalanced <${tag}> tag (${o} open vs ${c} close) — an unclosed tag swallows the rest of the page and breaks rendering. Close every tag.`);
+            break;
+          }
+        }
+      }
+    }
+  }
 
   return {
     valid: errors.length === 0,
