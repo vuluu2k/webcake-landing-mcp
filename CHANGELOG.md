@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.75] - 2026-06-15
+
+### Added
+- New `get_icon_svg` tool resolves Material Symbols (`ms:<name>`) and Font Awesome (`fa:<name>`) icon-font references to real inline SVG markup via the public Iconify API, so clones of Stitch and other icon-font pages can render native icons instead of dropping them; no Webcake credentials needed.
+- `new_page_skeleton` now accepts `desktopWidth` (960 or 1200) and `mobileWidth` (420 or 360) parameters to initialize `settings.width_section` on the returned skeleton.
+
+### Changed
+- `settings.width_section.desktop` and `settings.width_section.mobile` are now schema enum fields (desktop: 960 or 1200, mobile: 420 or 360); the generation guide and server instructions now document canvas width as a per-breakpoint design choice and advise using 1200 for wide, multi-column, or editorial layouts and when cloning references wider than 960 (e.g. a Google Stitch screen at ~1280).
+- `validate_page` now warns when a `rectangle` element with `config.svgMask` set has no `styles.background`, since the masked icon is invisible without a solid background color; icon-font glyph text-blocks (Material Symbols / Font Awesome `<span>`) are no longer flagged for emoji-only or text-overflow warnings.
+- `ingest_html` and `ingest_url` now classify Stitch-style `<nav class="fixed top-0…">` top bars that have no `<header>` tag as `header` role; a pinned bottom `<nav>` action bar is excluded from this rule.
+- `ingest_html` and `ingest_url` now classify 2-card repeating grids as `features` role (previously ≥3 cards were required), and assign an `about` role to content sections with a heading and prose paragraphs (previously `unknown`).
+- `ingest_html` and `ingest_url` now surface Material Symbols and Font Awesome icon names in `IngestedBlock.icon` as `ms:<name>` / `fa:<name>` so the model can call `get_icon_svg` to retrieve the real SVG and render native Webcake icon elements.
+- `ingest_html` and `ingest_url` now detect Tailwind pill-button anchor tags (rounded + background/border + padding utilities) as CTAs, extend CTA band classification to sections with up to 3 supporting paragraphs (previously 1), and surface Tailwind gradient strings in compact-mode AST output (previously full mode only).
+- Generation guide (`get_generation_guide`) and server instructions updated to document canvas-width selection guidance and the full icon rendering workflow: call `get_icon_svg`, place the SVG in both breakpoints' `config.svgMask`, set `styles.background` to the icon color, and keep the box square.
+
 ## [1.0.74] - 2026-06-13
 
 ### Added
