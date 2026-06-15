@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.76] - 2026-06-15
+
+### Added
+- `validate_page` now warns when `specials.custom_css` sets layout or structural CSS properties (`position`, `top`, `left`, `right`, `bottom`, `inset`, `width`, `height`, `display`, `float`, `flex`, `grid`) that override the element's absolute-canvas box and break the page layout; only visual properties (`background`, `box-shadow`, `filter`, `backdrop-filter`, `transition`, `transform`, etc.) are permitted.
+- `validate_page` now warns when `settings.extra_css` has unbalanced braces or contains selectors not scoped to a specific `#w-<element id>` or `specials.custom_class` — including bare element tags (`body`, `div`, `p`, etc.), the universal `*` selector, and Webcake-internal class names (`.section-container`, `.rectangle-css`, `.group-*`, etc.) — which would restyle the entire page and break the layout.
+- `validate_page` now warns when `settings.bhet` or `settings.bbet` contains no HTML tags (raw CSS/JS placed in the wrong field instead of `settings.extra_css` / `settings.extra_script`), when a `<style>` block inside them has unscoped selectors, or when a `<script>`, `<style>`, or `<div>` tag is left unclosed.
+
+### Changed
+- `get_generation_guide` and server instructions now include explicit SAFETY rules for the custom-code escape hatches: scope every `settings.extra_css` rule to `#w-<id>` or a `specials.custom_class`; restrict `specials.custom_css` to visual-only declarations (no layout props); ensure all `bhet`/`bbet` HTML is fully closed; wrap `extra_script` in `try/catch` and run on `DOMContentLoaded`; `validate_page` flags every violation as a warning requiring a fix before publishing.
+
 ## [1.0.75] - 2026-06-15
 
 ### Added
