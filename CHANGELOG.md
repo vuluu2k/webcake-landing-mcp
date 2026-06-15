@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.77] - 2026-06-15
+
+### Added
+- The remote `serve` transport now implements a spec-conformant OAuth 2.1 Authorization Server (Authorization Code + PKCE S256, Dynamic Client Registration, refresh tokens, token revocation, and `/.well-known` authorization-server and protected-resource metadata), enabling the server to be added as a Claude custom connector or ChatGPT plugin directly from a URL without manually copying a JWT.
+- Access tokens issued by the OAuth flow are opaque random strings mapped server-side to the user's Webcake landing JWT; the existing `?jwt=` query-param, `x-webcake-jwt` header, and raw Bearer JWT credential paths all continue to work alongside OAuth tokens without any change.
+- Privacy Policy (`/privacy`) and Terms of Service (`/terms`) pages are now served on the connector's own origin, satisfying the public-URL requirement for Claude Connectors Directory and ChatGPT App Directory submissions.
+- The server's web guide (browser `GET /`) now includes a bilingual "Clone" section showcasing cloning from a live website URL, Google Stitch screens, and Figma files, and adds copy/image/Figma icons to the embedded icon set.
+
+### Changed
+- The `serve` transport now enforces OAuth by default: unauthenticated `/mcp` requests receive a `401 + WWW-Authenticate` challenge so OAuth-capable clients (Claude, ChatGPT, MCP Inspector) automatically initiate the consent flow; set `WEBCAKE_OAUTH=0` to restore the previous open-access behavior.
+
 ## [1.0.76] - 2026-06-15
 
 ### Added
