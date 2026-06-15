@@ -453,9 +453,14 @@ export function validatePage(input: unknown): ValidationResult {
           /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|[\u200D\uFE0F\u20E3\s])+$/u.test(visible);
         if (onlyEmoji) {
           warnings.push(
-            `${path} (text-block): specials.text is only the emoji "${visible}" — keyboard emoji as standalone icons look unprofessional and render inconsistently across devices. Use a rectangle with per-breakpoint config.svgMask (raw <svg> string) + styles.background set to the brand accent color instead (see the rectangle element's example). Emoji are fine inline within sentences, never as card icons.`
+            `${path} (text-block): specials.text is only the emoji "${visible}" — keyboard emoji as standalone icons look unprofessional and render inconsistently across devices. Use a real icon instead: call get_icon_svg to fetch the <svg>, then a rectangle with that svg in per-breakpoint config.svgMask + styles.background set to the accent color (the native Webcake icon). Emoji are fine inline within sentences, never as card icons.`
           );
         }
+
+        // An icon-font text-block (Material Symbols / Font Awesome span) is a
+        // SINGLE glyph, not wrapping text — the ligature name ("verified") is not
+        // displayed, so the text-metrics estimate is meaningless here. Skip it.
+        const isIconGlyph = /\b(material-symbols|material-icons)\b/.test(rawText) || /<i\b[^>]*\bfa-/.test(rawText);
 
         // Wrapped-text overflow: live text height is AUTO — text that wraps to
         // more lines than the declared box spills DOWN and overlaps the element
@@ -465,6 +470,7 @@ export function validatePage(input: unknown): ValidationResult {
         // 1-line-tall box — slip through, while body text (16px → 22px line)
         // keeps its old tolerance against the rough estimate.
         for (const bp of ["desktop", "mobile"] as const) {
+          if (isIconGlyph) break;
           const styles = node.responsive?.[bp]?.styles;
           const w = num(styles?.width);
           const h = num(styles?.height);
@@ -951,7 +957,9 @@ export function validatePage(input: unknown): ValidationResult {
       if (!child || typeof child !== "object") return;
       const cpath = `${path}.children[${idx}]`;
       const rawText = child.type === "text-block" ? child.specials?.text : undefined;
-      if (typeof rawText === "string") {
+      // Icon-font glyph (Material Symbols / Font Awesome) — one glyph, not wrapping text.
+      const isIconGlyph = typeof rawText === "string" && (/\b(material-symbols|material-icons)\b/.test(rawText) || /<i\b[^>]*\bfa-/.test(rawText));
+      if (typeof rawText === "string" && !isIconGlyph) {
         for (const bp of ["desktop", "mobile"] as const) {
           if (overlapWarnings >= MAX_OVERLAP_WARNINGS) break;
           const s = child.responsive?.[bp]?.styles;

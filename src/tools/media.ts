@@ -36,6 +36,7 @@ import {
   pexelsKeyFromHeaders,
 } from "../persistence/pexels-client.js";
 import { uploadImageMultipart } from "../persistence/webcake-client.js";
+import { resolveIconSvg } from "../persistence/icon-client.js";
 import { configFromHeaders, ENVIRONMENTS, stripTrailingSlash } from "../persistence/config.js";
 
 /** Resolve just the API base (no JWT required) from per-request headers → env → WEBCAKE_ENV preset → prod default. */
@@ -237,6 +238,43 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
             : { ok: true, photo: r.photos?.[0] ?? null, total_results: r.total_results };
       }
       return text({ queries: out });
+    }
+  );
+
+  // 13b) Resolve icon-font names to real inline SVGs --------------------------
+  server.tool(
+    "get_icon_svg",
+    "Resolves icon-font NAMES into real inline SVG markup via the public Iconify API — so a clone reproduces a reference's icons (esp. Google Stitch, which renders icons with a Material Symbols / Font Awesome CLASS, not an image). ingest_html/ingest_url surface those icons as block.icon \"ms:<name>\" (Material Symbols) / \"fa:<name>\" (Font Awesome); pass them here to get the SVG. ACCEPTS: \"ms:verified\", \"fa:chart-line\", a real Iconify id (\"mdi:home\"), or a bare name (assumed Material Symbols); underscores are normalized to hyphens, and Material Symbols resolve to the OUTLINED variant (the Stitch look) with a filled fallback. Returns { icons: { \"<ref>\": { ok, svg, iconify } } }. RENDER each svg as Webcake's native icon element — a RECTANGLE: put the svg in BOTH responsive.desktop.config.svgMask AND responsive.mobile.config.svgMask, set styles.background = the icon color, and keep the box SQUARE (width === height). The svg is only a MASK (its own fill is ignored), so the icon is BLANK without a solid styles.background; the renderer reads each breakpoint's svgMask separately (no fallback) and forces preserveAspectRatio='none' (a non-square box stretches it). No Webcake credentials needed.",
+    {
+      icons: z
+        .array(z.string())
+        .min(1)
+        .max(40)
+        .describe("Icon references to resolve (1–40), e.g. [\"ms:verified\", \"ms:support_agent\", \"fa:chart-line\"] — typically the block.icon values from an ingest result."),
+    },
+    { title: "Resolve Icon SVGs", readOnlyHint: true, openWorldHint: true },
+    async ({ icons }) => {
+      const unique = [...new Set(icons)];
+      const results = await Promise.all(unique.map(async (ref) => [ref, await resolveIconSvg(ref)] as const));
+      const out: Record<string, any> = {};
+      let resolved = 0;
+      let failed = 0;
+      for (const [ref, r] of results) {
+        if (r.ok) {
+          resolved++;
+          out[ref] = { ok: true, svg: r.svg, iconify: r.iconify };
+        } else {
+          failed++;
+          out[ref] = { ok: false, error: r.error };
+        }
+      }
+      return text({
+        icons: out,
+        resolved,
+        failed,
+        usage:
+          "For each icons[<ref>].svg, make a rectangle in that card's icon slot: copy the svg into BOTH responsive.desktop.config.svgMask AND responsive.mobile.config.svgMask, set styles.background to the icon color, and keep the box SQUARE (width === height) — without styles.background the masked icon is invisible, and a non-square box stretches it. For any ok:false ref, fall back to an emoji inline or skip — never leave a feature card iconless.",
+      });
     }
   );
 

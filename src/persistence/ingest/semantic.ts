@@ -77,10 +77,34 @@ function isPricingSection(el: HTMLElement): boolean {
   return /[$€£¥₫]\s*\d/.test(text) && /\/(month|mo\b|year|yr\b|annual)/i.test(text);
 }
 
+/** A top navigation bar without a <header> tag: <nav>, or a sticky/fixed top bar (no heading) with a logo + links. Stitch desktops use <nav class="fixed top-0 …">. A BOTTOM-pinned bar (mobile sticky action/nav bar, <nav class="fixed bottom-0 …">) is NOT the header. */
+function looksLikeTopBar(el: HTMLElement): boolean {
+  const cls = (el.getAttribute("class") ?? "").toLowerCase();
+  if (/\bbottom-0\b|bottom:\s*0/.test(cls)) return false; // bottom action/nav bar, not the page header
+  const tag = el.tagName?.toLowerCase();
+  if (tag === "nav") return true;
+  const pinnedTop = /\b(fixed|sticky)\b/.test(cls) && /\btop-0\b|top:\s*0/.test(cls);
+  if (!pinnedTop) return false;
+  if (el.querySelector(HEADING_TAGS.join(","))) return false; // a pinned hero/banner, not a nav bar
+  return !!el.querySelector("nav") || el.querySelectorAll("a").length >= 2;
+}
+
+/** A repeating grid of ≥2 card-like siblings that each carry a title (heading/strong) or an icon — a feature/benefit grid. Catches 2-column Stitch grids that the ≥3 count misses. */
+function looksLikeCardGrid(el: HTMLElement): boolean {
+  const found = findRepeatingContainer(el);
+  if (!found || found.items.length < 2) return false;
+  const titled = found.items.filter(
+    (it) => it.querySelector(HEADING_TAGS.join(",")) || it.querySelector("strong, b") || detectIconFont(it)
+  ).length;
+  return titled >= 2;
+}
+
 export function classifySection(el: HTMLElement, detail: "compact" | "full"): IngestedSection {
   const tag = el.tagName?.toLowerCase();
   if (tag === "header") return classifyHeader(el, detail);
   if (tag === "footer") return classifyFooter(el, detail);
+  // A top nav bar without a <header> tag (Stitch uses <nav class="fixed top-0…">) is the header.
+  if (looksLikeTopBar(el)) return classifyHeader(el, detail);
 
   const form = el.querySelector("form");
   if (form) return classifyForm(el, form, detail);
@@ -111,7 +135,10 @@ export function classifySection(el: HTMLElement, detail: "compact" | "full"): In
     return sec;
   }
 
-  if (countFeatureBlocks(el) >= 3) {
+  const headingTag = heading?.tagName?.toLowerCase();
+  // features: the classic ≥3 count OR a ≥2-card repeating grid (Stitch 2-column
+  // benefit grids) — but never steal an h1 section (that's the hero).
+  if (countFeatureBlocks(el) >= 3 || (headingTag !== "h1" && looksLikeCardGrid(el))) {
     const sec: IngestedSection = { role: "features", heading: elText(heading), subheading, ctas: ctas.length ? ctas : undefined };
     if (detail === "full") {
       const blocks = detectBlocks(el);
@@ -122,7 +149,7 @@ export function classifySection(el: HTMLElement, detail: "compact" | "full"): In
     return sec;
   }
 
-  if (heading?.tagName?.toLowerCase() === "h1" && (imgSrcs.length > 0 || ctas.length > 0)) {
+  if (headingTag === "h1" && (imgSrcs.length > 0 || ctas.length > 0)) {
     const sec: IngestedSection = {
       role: "hero",
       heading: elText(heading),
@@ -134,8 +161,35 @@ export function classifySection(el: HTMLElement, detail: "compact" | "full"): In
     return sec;
   }
 
-  if (ctas.length > 0 && paragraphs.length <= 1) {
-    return { role: "cta", heading: elText(heading), subheading, ctas };
+  // CTA band: a heading + call-to-action with no card grid and no imagery — allow
+  // a couple of supporting paragraphs (a closing "ready to start?" band), not just one.
+  if (ctas.length > 0 && imgSrcs.length === 0 && paragraphs.length <= 3) {
+    return {
+      role: "cta",
+      heading: elText(heading),
+      subheading,
+      paragraphs: paragraphs.length ? paragraphs.slice(0, detail === "full" ? 2 : 1) : undefined,
+      ctas,
+    };
+  }
+
+  // Content/about band: a heading with real prose (and maybe an image) — a far more
+  // useful role than "unknown" for the rebuild. Reserve "unknown" for sections with
+  // no heading AND no paragraphs.
+  if (elText(heading) && paragraphs.length >= 1) {
+    const sec: IngestedSection = {
+      role: "about",
+      heading: elText(heading),
+      subheading,
+      paragraphs: paragraphs.slice(0, detail === "full" ? 6 : 3),
+      images: detail === "full" ? (images as { src: string; alt?: string }[]).slice(0, 4) : (images as string[]).slice(0, 4),
+      ctas: ctas.length ? ctas : undefined,
+    };
+    if (detail === "full") {
+      const blocks = detectBlocks(el);
+      if (blocks.length) sec.blocks = blocks;
+    }
+    return sec;
   }
 
   const sec: IngestedSection = {
@@ -365,6 +419,33 @@ function findRepeatingContainer(
  *   text is ≤4 chars (emoji/badge) — surfaced separately so the model can map
  *   it to a Webcake svg-mask rectangle.
  */
+// Font-Awesome style classes that are NOT the icon name (fa-solid, fa-2x, …).
+const FA_STYLE_TOKENS = new Set(["solid", "regular", "light", "thin", "duotone", "brands", "sharp", "fw", "lg", "sm", "xs", "xl", "2xs", "1x", "2x", "3x", "4x", "5x", "6x", "7x", "8x", "9x", "10x", "rotate", "flip", "spin", "pulse", "border", "pull", "stack"]);
+
+/**
+ * A Material-Symbols / Material-Icons / Font-Awesome icon inside `scope`,
+ * normalized to "ms:<name>" / "fa:<name>" (the icon NAME, not a glyph). These
+ * are font ligatures the clone can't render as plain text — surfaced so the model
+ * loads the icon font (settings.bhet) and renders each as a text-block/html-box,
+ * instead of dropping the icon or pasting the raw ligature word.
+ */
+function detectIconFont(scope: HTMLElement): string | undefined {
+  const ms = scope.querySelector('[class*="material-symbols"],[class*="material-icons"]');
+  if (ms) {
+    const name = ms.textContent.trim().toLowerCase().replace(/\s+/g, "_");
+    if (name && /^[a-z0-9_]+$/.test(name)) return `ms:${name}`;
+  }
+  const fa = scope.querySelector('i[class*="fa-"],span[class*="fa-"]');
+  if (fa) {
+    const name = (fa.getAttribute("class") ?? "")
+      .split(/\s+/)
+      .map((c) => /^fa-([a-z0-9-]+)$/i.exec(c)?.[1])
+      .find((n): n is string => !!n && !FA_STYLE_TOKENS.has(n));
+    if (name) return `fa:${name}`;
+  }
+  return undefined;
+}
+
 function detectBlocks(el: HTMLElement): IngestedBlock[] {
   const found = findRepeatingContainer(el);
   if (!found || found.items.length < 2) return [];
@@ -372,25 +453,37 @@ function detectBlocks(el: HTMLElement): IngestedBlock[] {
   return found.items.slice(0, 12).map((c): IngestedBlock => {
     const kids = elementChildren(c);
 
-    // ── icon slot ──
+    // True when a child IS or CONTAINS an icon-font glyph (so it's never mistaken
+    // for the title/body — Material Symbols ligature text like "verified" reads as
+    // a word but is an icon).
+    const containsIcon = (k: HTMLElement) =>
+      /material-symbols|material-icons|\bfa-/.test(k.getAttribute("class") ?? "") ||
+      !!k.querySelector('[class*="material-symbols"],[class*="material-icons"],i[class*="fa-"]');
+
+    // ── icon slot ── prefer a real icon-font glyph (Material Symbols / Font
+    // Awesome), captured as "ms:<name>"/"fa:<name>" regardless of name length;
+    // fall back to an emoji / short-text / icon-class child.
+    const iconFont = detectIconFont(c);
     const iconEl = kids.find((k) => {
       const cls = (k.getAttribute("class") ?? "").toLowerCase();
-      if (/icon|emoji|badge|img/.test(cls)) return true;
+      if (/icon|emoji|badge|img|material-symbols|material-icons/.test(cls)) return true;
+      if (containsIcon(k)) return true;
       const t = k.textContent.trim();
       return t.length > 0 && t.length <= 4; // likely a single emoji
     });
-    const icon = iconEl?.textContent?.trim() || undefined;
+    const icon = iconFont ?? (iconEl?.textContent?.trim() || undefined);
+    const isIcon = (k: HTMLElement) => k === iconEl || containsIcon(k);
 
     // ── title ──
     const headingEl = c.querySelector(HEADING_TAGS.join(","));
     const titleClassEl = kids.find((k) => {
       const cls = (k.getAttribute("class") ?? "").toLowerCase();
-      return /title|name|heading|label/.test(cls) && k !== iconEl;
+      return /title|name|heading|label/.test(cls) && !isIcon(k);
     });
     const strongEl = c.querySelector("strong") || c.querySelector("b");
     // fallback: first non-icon short-text child
     const fallbackTitleEl = kids.find((k) => {
-      if (k === iconEl) return false;
+      if (isIcon(k)) return false;
       const cls = (k.getAttribute("class") ?? "").toLowerCase();
       if (/icon|emoji|badge/.test(cls)) return false;
       const t = k.textContent.trim();
@@ -402,15 +495,14 @@ function detectBlocks(el: HTMLElement): IngestedBlock[] {
     // ── body ──
     // Prefer <p> tags; fall back to div children whose class contains body|desc|text|content
     const titleText = title ?? "";
-    const iconText = icon ?? "";
     const bodyFromP = c.querySelectorAll("p")
       .map((p) => p.text.trim())
-      .filter((t) => t && t !== titleText && t !== iconText && t.length > 5)
+      .filter((t) => t && t !== titleText && t.length > 5)
       .join(" ")
       .slice(0, 250);
     const bodyFromDiv = !bodyFromP ? kids
       .filter((k) => {
-        if (k === iconEl || k === titleEl) return false;
+        if (isIcon(k) || k === titleEl) return false;
         const cls = (k.getAttribute("class") ?? "").toLowerCase();
         return /body|desc|text|content|copy/.test(cls);
       })

@@ -24,7 +24,7 @@ export type IngestedWidget = { hint: string; html: string; css?: string };
 
 /** A repeating card-like block detected in full mode. */
 export type IngestedBlock = {
-  icon?: string;   // emoji or short badge text from an icon slot (maps to a Webcake svg-mask rectangle)
+  icon?: string;   // an emoji/short badge text, OR an icon-font ref "ms:<name>" (Material Symbols, e.g. "ms:verified") / "fa:<name>" (Font Awesome). For ms:/fa: call get_icon_svg to resolve the real <svg>, then render it as a rectangle (svg in both breakpoints' config.svgMask + styles.background = icon color, square box) — the native Webcake icon.
   title?: string;
   body?: string;
   image?: string;

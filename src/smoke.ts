@@ -22,6 +22,7 @@ import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsPr
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
 import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
+import { iconifyCandidates } from "./persistence/icon-client.js";
 import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl } from "./persistence/rehost.js";
 
 let failures = 0;
@@ -251,6 +252,38 @@ console.log("== validate: custom CSS/class/JS escape hatches (beyond-element cap
   check("escape hatch: declarations-only misuse does NOT block (warning, not error)", selR.valid, selR.errors);
 }
 
+console.log("== validate: icon rendering (svg-mask needs background; font-class route is clean) ==");
+{
+  const cloneG = () => JSON.parse(JSON.stringify(good));
+  const maskChild = (bg?: string) => ({
+    id: "icon1", type: "rectangle", properties: { name: "icon", movable: true, sync: true },
+    specials: {}, runtime: {}, events: [],
+    responsive: {
+      desktop: { config: { svgMask: "<svg viewBox='0 0 24 24'><path d='M4 4h16v16H4z'/></svg>" }, styles: { top: 10, left: 10, width: 40, height: 40, ...(bg ? { background: bg } : {}) } },
+      mobile: { config: { svgMask: "<svg viewBox='0 0 24 24'><path d='M4 4h16v16H4z'/></svg>" }, styles: { top: 10, left: 10, width: 40, height: 40, ...(bg ? { background: bg } : {}) } },
+    },
+  });
+  // svg-mask WITHOUT a background fill → invisible-icon warning (the "svg in a rectangle doesn't show" bug).
+  const noBg = cloneG(); noBg.page[0].children = [maskChild()];
+  check("icon-render: svg-mask rectangle without background → invisible warning", validatePage(noBg).warnings.some((w) => /svgMask is set but styles\.background/.test(w)), validatePage(noBg).warnings);
+  // svg-mask WITH a solid background → no invisible warning.
+  const withBg = cloneG(); withBg.page[0].children = [maskChild("rgba(0,88,188,1)")];
+  check("icon-render: svg-mask rectangle WITH background → no invisible warning", !validatePage(withBg).warnings.some((w) => /svgMask is set but styles\.background/.test(w)), validatePage(withBg).warnings);
+  // font-class route (the Stitch-faithful one): text-block with a Material Symbols span + the font loaded via bhet → valid & clean.
+  const fontRoute = cloneG();
+  fontRoute.settings.bhet = "<link href='https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined' rel='stylesheet'>";
+  fontRoute.page[0].children = [{
+    id: "icon2", type: "text-block", properties: { name: "icon", movable: true, sync: true },
+    specials: { text: "<span class=\"material-symbols-outlined\">verified</span>" }, runtime: {}, events: [],
+    responsive: {
+      desktop: { config: {}, styles: { top: 10, left: 10, width: 40, height: 40, fontSize: 32, color: "rgba(0,88,188,1)" } },
+      mobile: { config: {}, styles: { top: 10, left: 10, width: 40, height: 40, fontSize: 28, color: "rgba(0,88,188,1)" } },
+    },
+  }];
+  const fr = validatePage(fontRoute);
+  check("icon-render: font-class text-block icon validates clean (no svg/emoji warning)", fr.valid && !fr.warnings.some((w) => /svgMask|emoji/.test(w)), { errors: fr.errors, warnings: fr.warnings });
+}
+
 console.log("== expand: hydrates sparse nodes ==");
 const sparse = {
   page: [
@@ -362,6 +395,32 @@ check("ingest: hero image captured", (hero?.images?.length ?? 0) > 0, hero?.imag
 const form = ast.sections.find((s) => s.role === "form");
 check("ingest: form fields captured", (form?.form_fields?.length ?? 0) >= 2, form?.form_fields);
 check("ingest: form submit CTA captured", !!form?.ctas?.[0]?.text?.includes("Place"), form?.ctas);
+
+console.log("== ingest: Stitch-structure section classification (generalizes to any Stitch HTML) ==");
+{
+  // Mirrors the real Stitch shape: <nav> top bar (no <header>), <main> with a
+  // h1 hero, 2-column card grids, a card-less CTA band, <footer>, and a sticky
+  // BOTTOM <nav> action bar.
+  const stitchStruct = `<!DOCTYPE html><html><head></head><body>
+    <nav class="fixed top-0 w-full z-50 bg-white/80"><div class="font-bold">BrandName</div><div><a href="#">Pricing</a><a href="#">Docs</a></div><a class="px-5 py-2 rounded-xl bg-primary" href="#">Sign in</a></nav>
+    <main class="pt-20">
+      <section class="pt-24 pb-32"><div class="grid lg:grid-cols-12"><div class="lg:col-span-7"><h1>Become a strategic partner</h1><p>Earn recurring commission on every customer you refer to us.</p><a class="px-8 py-4 rounded-xl bg-primary" href="#">Join now</a></div><div class="lg:col-span-5"><img src="https://x/hero.jpg"/></div></div></section>
+      <section class="py-24 bg-surface-container-low"><div class="text-center"><h2>Transparent income</h2></div><div class="grid md:grid-cols-2 gap-6"><div class="card p-8 rounded-xl"><span class="material-symbols-outlined">payments</span><h3>Fast payouts</h3><p>Money in your account within days, not months at all.</p></div><div class="card p-8 rounded-xl"><span class="material-symbols-outlined">monitoring</span><h3>Live tracking</h3><p>Watch every referral convert in a real-time dashboard.</p></div></div></section>
+      <section class="py-20"><div class="rounded-3xl p-12 text-center"><h2>Ready to boost your income?</h2><p>Join thousands of partners already earning with us.</p><p>No setup fee, cancel anytime, get started in minutes.</p><a class="px-8 py-4 rounded-xl bg-primary" href="#">Get started</a></div></section>
+    </main>
+    <footer class="pt-12 pb-8"><div class="grid grid-cols-4"><a href="#">About</a><a href="#">Blog</a><a href="#">Terms</a><a href="#">Contact</a></div><p>© 2026 BrandName</p></footer>
+    <nav class="fixed bottom-0 left-0 right-0 z-50 bg-white"><a class="px-6 py-3 rounded-xl bg-primary" href="#">Join now</a></nav>
+  </body></html>`;
+  const ss = parseHtml(stitchStruct, "full");
+  const roles = ss.sections.map((s) => s.role);
+  check("stitch-struct: <nav> top bar (no <header>) → header", roles[0] === "header", roles);
+  check("stitch-struct: h1 section → hero", ss.sections.some((s) => s.role === "hero" && /strategic partner/.test(s.heading ?? "")), roles);
+  check("stitch-struct: 2-card grid → features (not unknown)", ss.sections.some((s) => s.role === "features" && (s.blocks?.length ?? 0) === 2), roles);
+  check("stitch-struct: card-less CTA band with 2 paragraphs → cta (not unknown)", ss.sections.some((s) => s.role === "cta" && /Ready to boost/.test(s.heading ?? "")), roles);
+  check("stitch-struct: <footer> → footer", roles.includes("footer"), roles);
+  check("stitch-struct: sticky BOTTOM <nav> is NOT a second header", roles.filter((r) => r === "header").length === 1, roles);
+  check("stitch-struct: no 'unknown' sections left", !roles.includes("unknown"), roles);
+}
 
 console.log("== ingest: size_hint (desktop section heights) ==");
 check("ingest: every section has a size_hint", ast.sections.every((s) => (s.size_hint?.height ?? 0) > 0), ast.sections.map((s) => s.size_hint));
@@ -558,6 +617,24 @@ const arbGrad = parseHtml(`<!DOCTYPE html><html><head>${fxCfg}</head><body><main
 check("fx: arbitrary [#hex] gradient stop resolved", (arbGrad.gradients ?? []).includes("linear-gradient(to right, #ff0000, #0058bc)"), arbGrad.gradients);
 // no tailwind config → no gradients from this path, no hover noise on a plain page.
 check("fx: plain page (no config, no hover classes) has no gradients/hover", (() => { const a = parseHtml(stylesheetHtml, "compact"); return a.gradients === undefined && a.sections.every((s) => s.hover_effects === undefined); })());
+
+console.log("== ingest: icon-font extraction (Material Symbols / Font Awesome) ==");
+{
+  // Feature cards with Material Symbols icons (a long ligature name + a nested-wrapper icon) and one Font Awesome card.
+  const iconHtml = `<!DOCTYPE html><html><head></head><body><main><section><h2>Why choose us</h2>
+    <div class="grid"><div class="card"><span class="material-symbols-outlined">verified</span><h3>Trusted</h3><p>Verified by thousands of happy partners every month.</p></div>
+    <div class="card"><div class="icon-wrap"><span class="material-symbols-outlined">support_agent</span></div><h3>Support</h3><p>A dedicated manager helps you grow revenue fast.</p></div>
+    <div class="card"><i class="fa-solid fa-chart-line fa-2x"></i><h3>Analytics</h3><p>Track every referral conversion in real time dashboards.</p></div></div>
+  </section></main></body></html>`;
+  const ia = parseHtml(iconHtml, "full");
+  const fsec = ia.sections.find((s) => (s.blocks || []).length >= 3);
+  const blocks = fsec?.blocks ?? [];
+  check("icon: Material Symbols long ligature captured as ms:<name>", blocks[0]?.icon === "ms:verified", blocks[0]);
+  check("icon: nested-wrapper Material Symbol captured", blocks[1]?.icon === "ms:support_agent", blocks[1]);
+  check("icon: Font Awesome captured as fa:<name> (style tokens skipped)", blocks[2]?.icon === "fa:chart-line", blocks[2]);
+  check("icon: ligature name does NOT leak into the card title", blocks[0]?.title === "Trusted" && blocks[1]?.title === "Support", blocks.map((b) => b.title));
+  check("icon: real body kept (icon excluded)", /Verified by thousands/.test(blocks[0]?.body ?? ""), blocks[0]?.body);
+}
 
 console.log("== ingest: full mode — blocks detection, gradients, images-as-objects ==");
 const fullAst = parseHtml(stylesheetHtml, "full");
@@ -1836,6 +1913,13 @@ console.log("== rehost: external-image URL collect + rewrite (pure, offline) =="
 
 console.log("== upload_images: local-path detector (pure, offline) ==");
 {
+  // get_icon_svg name → Iconify candidate mapping (pure; the fetch itself is networked)
+  check("icon-svg: ms:<name> → material-symbols outline-first, underscore→hyphen", JSON.stringify(iconifyCandidates("ms:support_agent")) === JSON.stringify(["material-symbols/support-agent-outline", "material-symbols/support-agent"]), iconifyCandidates("ms:support_agent"));
+  check("icon-svg: fa:<name> → fa6-solid first with fallbacks", iconifyCandidates("fa:chart-line")[0] === "fa6-solid/chart-line", iconifyCandidates("fa:chart-line"));
+  check("icon-svg: bare name assumed Material Symbols", iconifyCandidates("verified")[0] === "material-symbols/verified-outline", iconifyCandidates("verified"));
+  check("icon-svg: real Iconify id passes through", iconifyCandidates("mdi:home")[0] === "mdi/home", iconifyCandidates("mdi:home"));
+  check("icon-svg: empty ref → no candidates", iconifyCandidates("")?.length === 0, iconifyCandidates(""));
+
   // isLocalPath: recognised forms
   check("localPath: absolute POSIX /…", isLocalPath("/home/user/photo.jpg"));
   check("localPath: home-dir ~/…", isLocalPath("~/Pictures/logo.png"));
