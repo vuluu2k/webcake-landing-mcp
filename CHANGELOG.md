@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.79] - 2026-06-15
+
+### Changed
+- The Privacy Policy served at `/privacy` is updated with GDPR-style data-category headings, per-category purpose statements, documentation of PostgreSQL and Redis as the durable storage backends for OAuth tokens and the draft cache (with in-memory fallback), an expanded third-party services list that includes Iconify, and a new "Data we do NOT collect" section that explicitly states the connector never handles payment-card data, health data, government identifiers, authentication secrets, or the user's full conversation history.
+
 ## [1.0.78] - 2026-06-15
 
 ### Added
