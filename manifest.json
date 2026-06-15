@@ -1,0 +1,96 @@
+{
+  "manifest_version": "0.3",
+  "name": "webcake-landing-mcp",
+  "display_name": "Webcake Landing",
+  "version": "1.0.78",
+  "description": "Build, validate, and publish complete Webcake landing pages with an AI assistant.",
+  "long_description": "Webcake Landing lets your AI assistant design, validate, and publish complete landing pages straight into your Webcake account. Describe the page you want — the assistant assembles the layout, content, and images, checks it against the Webcake page schema, saves it, and publishes a live preview. It can also edit existing pages section-by-section, search stock photos, resolve icons, and import a reference URL or HTML to clone a layout. Reference, generation, media, and ingest tools work with no credentials; the persistence tools save to your own Webcake organization using a JWT you provide.",
+  "author": {
+    "name": "vuluu2k",
+    "url": "https://github.com/vuluu2k"
+  },
+  "homepage": "https://mcp.toolvn.io.vn",
+  "documentation": "https://github.com/vuluu2k/webcake-landing-mcp#readme",
+  "support": "https://github.com/vuluu2k/webcake-landing-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vuluu2k/webcake-landing-mcp"
+  },
+  "license": "MIT",
+  "keywords": ["webcake", "landing page", "page builder", "website", "marketing", "design"],
+  "icon": "assets/icon-512.png",
+  "privacy_policies": ["https://mcp.toolvn.io.vn/privacy"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "WEBCAKE_JWT": "${user_config.webcake_jwt}",
+        "WEBCAKE_ENV": "${user_config.webcake_env}",
+        "WEBCAKE_ORG_ID": "${user_config.webcake_org_id}",
+        "PEXELS_API_KEY": "${user_config.pexels_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "webcake_jwt": {
+      "type": "string",
+      "title": "Webcake JWT",
+      "description": "Your Webcake landing-page access token. Required only to save/list/publish pages (the reference, generation, media, and ingest tools work without it). Get it by running 'npx webcake-landing-mcp login', or from your Webcake account.",
+      "sensitive": true,
+      "required": false
+    },
+    "webcake_env": {
+      "type": "string",
+      "title": "Webcake Environment",
+      "description": "Which Webcake backend to target: prod, staging, or local. Defaults to prod.",
+      "required": false,
+      "default": "prod"
+    },
+    "webcake_org_id": {
+      "type": "string",
+      "title": "Default Organization ID",
+      "description": "Optional default Webcake organization to create pages in. Leave blank to choose per request.",
+      "required": false
+    },
+    "pexels_api_key": {
+      "type": "string",
+      "title": "Pexels API Key (optional)",
+      "description": "Optional Pexels API key for stock-photo search. Without one, images are fetched via a shared hosted proxy. Free key: https://www.pexels.com/api/",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "get_generation_guide", "description": "Get the landing-page generation guide and recipes." },
+    { "name": "list_elements", "description": "List all available element types in the catalog." },
+    { "name": "get_element", "description": "Get docs and a sparse authoring template for an element type." },
+    { "name": "get_page_schema", "description": "Get the canonical JSON Schema for a page source." },
+    { "name": "new_element", "description": "Return a sparse authoring template for an element node." },
+    { "name": "new_page_skeleton", "description": "Return a starter page-source skeleton." },
+    { "name": "validate_page", "description": "Validate a page source against the schema and semantic rules." },
+    { "name": "ingest_html", "description": "Parse HTML into a reference AST for cloning a layout." },
+    { "name": "ingest_url", "description": "Fetch a URL and parse it into a reference AST." },
+    { "name": "search_images", "description": "Search stock photos (Pexels) for page imagery." },
+    { "name": "get_icon_svg", "description": "Resolve Material Symbols / Font Awesome icon names to inline SVG." },
+    { "name": "upload_images", "description": "Re-host external or local images to the Webcake CDN." },
+    { "name": "list_organizations", "description": "List the Webcake organizations on your account." },
+    { "name": "list_pages", "description": "List landing pages in your Webcake account." },
+    { "name": "find_pages", "description": "Search your pages by name, domain, or id." },
+    { "name": "get_page", "description": "Get the source of an existing Webcake page." },
+    { "name": "create_page", "description": "Create and auto-publish a new Webcake page." },
+    { "name": "add_section", "description": "Append section(s) to an existing Webcake page." },
+    { "name": "update_page", "description": "Overwrite an existing Webcake page source." },
+    { "name": "patch_page", "description": "Edit a page by element id with per-element ops." },
+    { "name": "publish_page", "description": "Build and publish a page to refresh its live preview." }
+  ],
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

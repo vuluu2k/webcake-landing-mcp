@@ -7,3 +7,6 @@ dist/
 .env.local
 # Generated from CHANGELOG.md by scripts/gen-changelog.mjs
 src/changelog.json
+
+# MCPB desktop-extension bundle (build artifact)
+*.mcpb

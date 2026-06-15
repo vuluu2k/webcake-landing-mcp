@@ -31,6 +31,7 @@
     "dev:guide": "node scripts/preview-guide.mjs",
     "smoke": "node dist/smoke.js",
     "inspect": "npm run build && npx -y @modelcontextprotocol/inspector node dist/index.js",
+    "pack:mcpb": "node scripts/pack-mcpb.mjs",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm run smoke",
     "release": "node scripts/release.js",
