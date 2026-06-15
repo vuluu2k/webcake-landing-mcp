@@ -87,6 +87,11 @@ const ICONS: Record<string, string> = {
     '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 9h20"/><path d="M6 6.5h.01"/><path d="M9 6.5h.01"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  image:
+    '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+  figma:
+    '<path d="M5 5.5A3.5 3.5 0 0 1 8.5 2H12v7H8.5A3.5 3.5 0 0 1 5 5.5z"/><path d="M12 2h3.5a3.5 3.5 0 1 1 0 7H12V2z"/><path d="M12 12.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 1 1-7 0z"/><path d="M5 19.5A3.5 3.5 0 0 1 8.5 16H12v3.5a3.5 3.5 0 1 1-7 0z"/><path d="M5 12.5A3.5 3.5 0 0 1 8.5 9H12v7H8.5A3.5 3.5 0 0 1 5 12.5z"/>',
 };
 function icon(name: string): string {
   return `<svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] ?? ""}</svg>`;
@@ -182,6 +187,10 @@ type Strings = {
   how: Array<{ icon: string; t: string; d: string }>;
   buildH2: string;
   uses: Array<{ icon: string; t: string; e: string }>;
+  cloneH2: string;
+  cloneSub: string;
+  clone: Array<{ icon: string; t: string; d: string }>;
+  cloneCap: string;
   connectH2: string;
   m1Tag: string;
   m1Sub: string;
@@ -275,6 +284,28 @@ const T: Record<Lang, Strings> = {
         e: '"Đồng hồ đếm ngược cỡ lớn, lưới sản phẩm giảm giá, nút Mua luôn nổi."',
       },
     ],
+    cloneH2: "Thấy trang nào đẹp? Copy về trong 1 nốt nhạc 🔥",
+    cloneSub:
+      "Đừng ngồi dựng lại từ đầu cho mệt. Một trang web bạn mê, một bản Figma, hay vài màn hình vẽ bằng Google Stitch — quăng cho AI là có ngay landing page Webcake của riêng bạn. Nhanh đến mức bạn sẽ muốn khoe.",
+    clone: [
+      {
+        icon: "link",
+        t: "Copy nguyên một trang web",
+        d: "Dán cái link, hết. AI bê nguyên bố cục, màu mè, chữ nghĩa, hình ảnh về Webcake — y như bản gốc, mà giờ là của bạn để sửa thả ga.",
+      },
+      {
+        icon: "image",
+        t: "Google Stitch → trang thật",
+        d: "Vẽ ý tưởng trong Google Stitch xong là xong việc của bạn. AI biến mấy màn hình đó thành trang Webcake chạy thật, bấm sửa được luôn.",
+      },
+      {
+        icon: "figma",
+        t: "Figma lên sóng tức thì",
+        d: "File Figma đẹp long lanh để đó làm gì? AI đọc thiết kế, dựng lại đúng bố cục - màu - chữ trên Webcake. Khỏi kéo thả lại từng li từng tí.",
+      },
+    ],
+    cloneCap:
+      "Ảnh trong mẫu được AI tự tải về, lưu thẳng trên Webcake — trang của bạn không sợ chết link, không phụ thuộc vào ai. Xem trước, chỉnh vài câu chữ, bấm đăng. Xong một trang trước khi ly cà phê kịp nguội. ☕",
     connectH2: "Kết nối — chọn 1 trong 2 cách",
     m1Tag: "Cách ① · Cài trên máy của bạn",
     m1Sub:
@@ -393,6 +424,28 @@ const T: Record<Lang, Strings> = {
         e: '"A big countdown, a grid of discounted products, a Buy button that follows you."',
       },
     ],
+    cloneH2: "See a page you love? Steal it in seconds 🔥",
+    cloneSub:
+      "Stop building from scratch. A website you're obsessed with, a Figma file, a few screens from Google Stitch — throw it at the AI and walk away with a Webcake landing page that's yours. So fast you'll want to brag about it.",
+    clone: [
+      {
+        icon: "link",
+        t: "Clone a whole website",
+        d: "Drop the link. Done. The AI lifts the layout, colors, copy and images straight onto Webcake — same vibe as the original, now yours to remix.",
+      },
+      {
+        icon: "image",
+        t: "Google Stitch → live page",
+        d: "Sketch the idea in Google Stitch and your job's over. The AI turns those screens into a real, editable Webcake page you can ship.",
+      },
+      {
+        icon: "figma",
+        t: "Figma, live in a snap",
+        d: "That gorgeous Figma file shouldn't just sit there. The AI reads it and rebuilds the layout, colors and text on Webcake — zero re-dragging.",
+      },
+    ],
+    cloneCap:
+      "The AI grabs every image and stores it on Webcake itself — no dead links, no depending on anyone else. Preview it, tweak a line or two, hit publish. A page done before your coffee gets cold. ☕",
     connectH2: "Connect — pick one of two ways",
     m1Tag: "Way ① · Install on your computer",
     m1Sub:
@@ -867,6 +920,18 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
       )
       .join("\n    ")}
   </ul>
+
+  <h2 class="reveal">${t.cloneH2}</h2>
+  <p class="flow-cap reveal" style="margin-bottom:16px">${t.cloneSub}</p>
+  <div class="grid">
+    ${t.clone
+      .map(
+        (c) =>
+          `<div class="glass card reveal">${tile(c.icon)}<h3>${c.t}</h3><p>${c.d}</p></div>`,
+      )
+      .join("\n    ")}
+  </div>
+  <p class="flow-cap reveal">${t.cloneCap}</p>
 
   <h2 id="connect" class="reveal">${t.connectH2}</h2>
 

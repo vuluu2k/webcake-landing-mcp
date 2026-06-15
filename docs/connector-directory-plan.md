@@ -37,21 +37,33 @@ Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong · `[-]` bỏ 
 > Luồng: Claude/ChatGPT → `/authorize` (PKCE) → redirect user sang builderx_spa login (PancakeID) → lấy `ljwt`
 > qua cơ chế `/mcp-connect` → MCP phát `code` → `/token` đổi `code`+`code_verifier` → access-token (ngắn hạn,
 > opaque/JWT) lưu map → `ljwt`. Resource server (chính MCP) validate access-token → resolve ra `ljwt`.
-- [ ] Tạo module `src/auth/oauth-server.ts` (in-memory store cho clients/codes/tokens; có thể nâng lên Redis sau).
-- [ ] Định nghĩa scope tối thiểu (vd `landing:read`, `landing:write`) + map access-token → `ljwt`/identity.
-- [ ] `GET /authorize`: nhận `client_id,redirect_uri,code_challenge(S256),state,scope`; redirect user sang builderx_spa login; sau khi có `ljwt` → phát `code` 1 lần, redirect về `redirect_uri?code=...&state=...`.
-- [ ] `POST /token`: verify `code`+`code_verifier` (S256) → mint access-token (ngắn hạn) + refresh-token; lưu map token→ljwt.
-- [ ] `POST /register` (**Dynamic Client Registration**) để Claude/ChatGPT tự đăng ký client_id.
-- [ ] Whitelist redirect URI Claude: `https://claude.ai/api/mcp/auth_callback` (+ ChatGPT khi submit).
-- [ ] Revoke + hết hạn token theo user (refresh rotation).
-- [ ] (Phối hợp builderx_spa) đảm bảo `/mcp-connect` trả `ljwt` được cho redirect server-to-server (không chỉ loopback localhost) — đây là điểm DUY NHẤT có thể cần sửa ngoài repo này.
+- [x] Tạo module [src/auth/oauth-server.ts](../src/auth/oauth-server.ts) (in-memory store clients/codes/tokens; nâng Redis sau khi >1 instance).
+- [x] Scope tối thiểu `landing:read`/`landing:write` + map access-token (opaque) → `ljwt`.
+- [x] `GET /authorize`: validate `client_id,redirect_uri,code_challenge(S256),state,scope`; park request; redirect user sang `/mcp-connect`; sau khi có `ljwt` → phát `code` 1 lần, redirect về `redirect_uri?code=...&state=...`.
+- [x] `POST /token`: verify `code`+`code_verifier` (S256) → access-token 1h + refresh-token 30d (rotation); map token→ljwt.
+- [x] `POST /register` (**Dynamic Client Registration**) → client_id (public client, PKCE).
+- [x] `GET /authorize` whitelist redirect_uri theo client đã đăng ký (Claude tự gửi `https://claude.ai/api/mcp/auth_callback` khi DCR).
+- [x] `POST /revoke` + hết hạn token (lazy sweep).
+- [x] **(builderx_spa)** `/mcp-connect` đã cho phép redirect về host connector tin cậy (https) ngoài loopback — sửa `isLoopback`→`isAllowedRedirect` trong `src/views/McpConnect.vue`, allowlist mặc định `mcp.toolvn.io.vn` (override `VITE_MCP_ALLOWED_HOSTS`). Logic đã test (chặn evil.com / giả subdomain / http tới host prod). **CÒN LẠI: deploy builderx_spa production.**
 
-## Phase 2 — Biến serve mode thành OAuth Protected Resource
-- [ ] Host `GET /.well-known/oauth-protected-resource` (trỏ tới AS ở Phase 1) trong [src/http.ts](../src/http.ts).
-- [ ] (Nếu cần) `GET /.well-known/oauth-authorization-server` metadata.
-- [ ] **Validate Bearer access-token** ở [src/persistence/config.ts](../src/persistence/config.ts) `configFromHeaders`: thay vì coi Bearer là JWT thô, verify access-token (chữ ký/introspection) rồi resolve ra Webcake JWT của user. Giữ nhánh `x-webcake-jwt`/`?jwt=` cho Level A để không phá tương thích.
-- [ ] Trả `401` + header `WWW-Authenticate: Bearer resource_metadata=...` khi thiếu/sai token (để client khởi động OAuth).
-- [ ] Test luồng OAuth end-to-end bằng `mcp-remote` hoặc MCP Inspector trước khi đụng tới Claude/ChatGPT.
+## Phase 2 — Biến serve mode thành OAuth Protected Resource ✅ ĐÃ XONG (code)
+- [x] `GET /.well-known/oauth-protected-resource` + `GET /.well-known/oauth-authorization-server` trong [src/http.ts](../src/http.ts) (`handleOAuth`).
+- [x] **Resolve Bearer access-token → `x-webcake-jwt` ngay trong http.ts** (KHÔNG sửa [config.ts](../src/persistence/config.ts) — luồng cũ `x-webcake-jwt`/`?jwt=` nguyên vẹn). Bearer không khớp access-token → fallback coi như JWT thô như cũ.
+- [x] Trả `401` + `WWW-Authenticate: Bearer resource_metadata=...` khi thiếu credential — **CHỈ khi bật `WEBCAKE_OAUTH=1`** (mặc định tắt để Level A không đổi hành vi).
+- [x] Test end-to-end bằng script + curl (13/13 pass). MCP Inspector: tuỳ chọn xác minh thêm với client thật.
+
+### Cách bật + test
+```bash
+npm run build && npm run smoke            # gate (ALL GOOD)
+# OAuth BẬT SẴN mặc định — không cần cờ:
+node dist/index.js serve --port 8799
+# Ở tab khác — chạy bộ test flow (DCR→PKCE→authorize→callback→token→refresh→/mcp):
+node scripts/oauth-smoke.mjs              # in "OAUTH OK — 13 passed"
+```
+- **Mặc định = OAuth BẬT**: `/mcp` không có credential nào → `401` + `WWW-Authenticate` để OAuth client (Claude/ChatGPT/Inspector) tự khởi động login. MỌI credential vẫn pass: `?jwt=` / `x-webcake-jwt` / Bearer JWT cũ / OAuth access-token.
+- **Tắt** (cho ẩn danh chạy như Level A cũ): `WEBCAKE_OAUTH=0` (hoặc `false`/`no`/`off`).
+- TTL: `WEBCAKE_OAUTH_ACCESS_TTL_MS` / `WEBCAKE_OAUTH_REFRESH_TTL_MS`.
+- LOGIN THẬT trên **local** chạy ngay (callback `http://localhost:<port>/oauth/callback` được `/mcp-connect` cho phép vì là loopback). Trên **production** (`mcp.toolvn.io.vn`) cần sửa `/mcp-connect` (builderx_spa) cho phép redirect về `https://mcp.toolvn.io.vn/oauth/callback` (xem Phase 1 mục cuối).
 
 ## Phase 3 — Tool safety annotations ✅ ĐÃ XONG
 > Directory yêu cầu mỗi tool có `title` + annotation an toàn. SDK ≥1.29 hỗ trợ.
@@ -62,13 +74,13 @@ Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong · `[-]` bỏ 
 - [x] persistence WRITE (`update_page`, `patch_page`, `publish_page`) → `destructiveHint: true`; `create_page`/`add_section` → `destructiveHint: false` (append-only) (+ `title`).
 - [x] Tất cả 20 tool đã có `title` người-đọc. (Còn lại: rà soát lần cuối trước khi submit.)
 
-## Phase 4 — Chuẩn bị hồ sơ submission
-- [ ] Icon (ChatGPT: 64×64 px, <5KB) — đã có asset trong [src/branding.ts](../src/branding.ts)/`src/og.png`, export đúng kích cỡ.
-- [ ] Tên (ChatGPT ≤30 ký tự), mô tả ngắn + dài.
-- [ ] **Privacy policy** + **Terms** (URL công khai).
-- [ ] **Test account Webcake** + sample data cho reviewer.
-- [ ] Screenshots, website đã verify, support contact (email).
-- [ ] Mô tả luồng auth + danh sách tool cho reviewer.
+## Phase 4 — Chuẩn bị hồ sơ submission  → chi tiết: [submission-packet.md](./submission-packet.md)
+- [x] **Privacy policy** + **Terms** — host công khai tại `/privacy` + `/terms` ([src/legal.ts](../src/legal.ts), wired in http.ts).
+- [x] Tên (`Webcake Landing`, 15 ký tự), mô tả ngắn + dài — trong [submission-packet.md](./submission-packet.md).
+- [x] Mô tả luồng auth (OAuth 2.1 + PKCE + DCR) + danh sách 20 tool với annotation — trong packet.
+- [ ] Icon PNG 64×64 <5KB (ChatGPT) — export từ `/icon.svg` (lệnh trong packet).
+- [ ] **Test account Webcake** + sample data cho reviewer (tạo tay, không commit).
+- [ ] Screenshots (3–5 ảnh — checklist trong packet).
 
 ## Phase 5 — Nộp Claude Connectors Directory
 - [ ] Đọc lại requirements: https://claude.com/docs/connectors/building/submission

@@ -19,10 +19,42 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "./server.js";
 import { ICON_SVG, ICON_MIME } from "./branding.js";
 import { guideHtml, ogImageSvg, normalizeLang } from "./web-guide.js";
+import { privacyHtml, termsHtml } from "./legal.js";
 import { searchPexels, resolvePexelsKey, type PexelsSearchParams } from "./persistence/pexels-client.js";
+import { resolveEnv, ENVIRONMENTS, stripTrailingSlash } from "./persistence/config.js";
+import { buildConnectUrl } from "./auth/login.js";
+import {
+  registerClient,
+  startAuthorize,
+  completeAuthorize,
+  exchangeToken,
+  resolveAccessToken,
+  revokeToken,
+  authServerMetadata,
+  protectedResourceMetadata,
+  type TokenParams,
+} from "./auth/oauth-server.js";
 
 const MCP_PATH = "/mcp";
 const IMAGES_PATH = "/api/images/search";
+
+// OAuth 2.1 endpoints (the embedded thin Authorization Server — see auth/oauth-server.ts).
+const WELL_KNOWN_PR = "/.well-known/oauth-protected-resource";
+const WELL_KNOWN_AS = "/.well-known/oauth-authorization-server";
+const OAUTH_REGISTER = "/register";
+const OAUTH_AUTHORIZE = "/authorize";
+const OAUTH_CALLBACK = "/oauth/callback"; // where /mcp-connect bounces the user's ljwt back
+const OAUTH_TOKEN = "/token";
+const OAUTH_REVOKE = "/revoke";
+
+// OAuth enforcement is ON by default so an OAuth-capable client (Claude/ChatGPT/
+// MCP Inspector) gets the 401 + WWW-Authenticate it needs to START the OAuth flow.
+// ALL credential types still pass straight through (?jwt= / x-webcake-jwt / a raw
+// Bearer JWT / an OAuth access token) — only a request with NO credential at all is
+// challenged. Opt OUT (allow anonymous /mcp, the old Level-A behavior) with
+// WEBCAKE_OAUTH=0 (or false/no/off). The well-known + /register + /authorize +
+// /token routes are always served regardless.
+const OAUTH_ENFORCED = !/^(0|false|no|off)$/i.test(process.env.WEBCAKE_OAUTH ?? "");
 
 // Social/search crawlers (Facebook, Zalo, Twitter/X, LinkedIn, Slack, Telegram,
 // WhatsApp, Discord, Google, Bing…) fetch the root with `Accept: */*` rather than
@@ -94,6 +126,188 @@ function applyQueryAuth(req: IncomingMessage) {
   }
 }
 
+// The public origin of THIS server, honoring the reverse proxy (Coolify/Traefik/
+// Cloudflare) so the OAuth metadata + redirect URIs are the externally-reachable
+// URL, not localhost. Mirrors the logic used for the OG/landing page.
+function publicBase(req: IncomingMessage): string {
+  const fwdHost = req.headers["x-forwarded-host"];
+  const host = (Array.isArray(fwdHost) ? fwdHost[0] : fwdHost) || req.headers.host || "localhost";
+  const fwdProto = req.headers["x-forwarded-proto"];
+  // Honor the reverse proxy's scheme; otherwise default to http for loopback hosts
+  // (local testing) and https everywhere else (a public deploy is behind TLS).
+  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(host);
+  const proto = (Array.isArray(fwdProto) ? fwdProto[0] : fwdProto)?.split(",")[0] || (isLocal ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+// The browser login page that returns the user's landing JWT (`ljwt`) — the SPA's
+// /mcp-connect (see auth/login.ts). Resolved from the same env preset the rest of
+// the server uses: explicit WEBCAKE_APP_BASE wins, else the --env/WEBCAKE_ENV preset,
+// else prod. This is the consent step the OAuth /authorize flow delegates to.
+function connectPageUrl(): string {
+  const preset = resolveEnv(process.env.WEBCAKE_ENV) ?? ENVIRONMENTS.prod;
+  const appBase = stripTrailingSlash(process.env.WEBCAKE_APP_BASE || preset.appBase)!;
+  return `${appBase}/mcp-connect`;
+}
+
+async function readRawBody(req: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const c of req) chunks.push(c as Buffer);
+  return Buffer.concat(chunks).toString("utf8").trim();
+}
+
+/** Parse a request body that may be JSON or application/x-www-form-urlencoded. */
+function parseBodyParams(raw: string, contentType: string): Record<string, string> {
+  if (!raw) return {};
+  if (contentType.includes("application/json")) {
+    try {
+      const o = JSON.parse(raw);
+      return o && typeof o === "object" ? (o as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  }
+  const out: Record<string, string> = {};
+  for (const [k, v] of new URLSearchParams(raw)) out[k] = v;
+  return out;
+}
+
+function oauthError(res: ServerResponse, status: number, error: string, description: string) {
+  res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
+  res.end(JSON.stringify({ error, error_description: description }));
+}
+
+function htmlError(res: ServerResponse, status: number, message: string) {
+  res.writeHead(status, { "content-type": "text/html; charset=utf-8" });
+  res.end(`<!doctype html><meta charset="utf-8"><body style="font-family:system-ui;padding:40px;max-width:520px;margin:auto"><h2>Webcake connector</h2><p>${message}</p></body>`);
+}
+
+/**
+ * Handle every OAuth 2.1 endpoint. Returns true when the request was an OAuth
+ * route (and a response was sent), false to let the caller continue routing.
+ */
+async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: string): Promise<boolean> {
+  const issuer = publicBase(req);
+
+  // ---- Metadata (RFC 8414 / RFC 9728) ----
+  if (req.method === "GET" && path === WELL_KNOWN_PR) {
+    res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
+    res.end(JSON.stringify(protectedResourceMetadata(`${issuer}${MCP_PATH}`, issuer)));
+    return true;
+  }
+  if (req.method === "GET" && path === WELL_KNOWN_AS) {
+    res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
+    res.end(JSON.stringify(authServerMetadata(issuer)));
+    return true;
+  }
+
+  // ---- Dynamic Client Registration ----
+  if (path === OAUTH_REGISTER) {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST,OPTIONS" });
+      return res.end(), true;
+    }
+    if (req.method !== "POST") return oauthError(res, 405, "invalid_request", "Use POST."), true;
+    const raw = await readRawBody(req);
+    const body = parseBodyParams(raw, String(req.headers["content-type"] ?? ""));
+    const result = registerClient(body);
+    if (!result.ok) return oauthError(res, 400, result.error, result.error_description), true;
+    res.writeHead(201, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
+    res.end(
+      JSON.stringify({
+        client_id: result.client.client_id,
+        client_id_issued_at: Math.floor(result.client.created_at / 1000),
+        redirect_uris: result.client.redirect_uris,
+        token_endpoint_auth_method: "none",
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+      })
+    );
+    return true;
+  }
+
+  // ---- Authorize: validate + delegate to the SPA login, parking the request ----
+  if (req.method === "GET" && path === OAUTH_AUTHORIZE) {
+    const sp = new URL(req.url ?? "/", "http://x").searchParams;
+    const result = startAuthorize({
+      client_id: sp.get("client_id"),
+      redirect_uri: sp.get("redirect_uri"),
+      response_type: sp.get("response_type"),
+      code_challenge: sp.get("code_challenge"),
+      code_challenge_method: sp.get("code_challenge_method"),
+      state: sp.get("state"),
+      scope: sp.get("scope"),
+    });
+    if (!result.ok) {
+      // Safe to bounce the error to the client only when redirect_uri is trusted.
+      if (result.redirectable) {
+        const r = new URL(sp.get("redirect_uri")!);
+        r.searchParams.set("error", result.error);
+        r.searchParams.set("error_description", result.error_description);
+        const st = sp.get("state");
+        if (st) r.searchParams.set("state", st);
+        res.writeHead(302, { location: r.toString() });
+        return res.end(), true;
+      }
+      return htmlError(res, 400, result.error_description), true;
+    }
+    // Send the user to the SPA login; it returns here with ?token=<ljwt>&state=<internalState>.
+    const callback = `${issuer}${OAUTH_CALLBACK}`;
+    const loginUrl = buildConnectUrl(connectPageUrl(), callback, result.internalState);
+    res.writeHead(302, { location: loginUrl });
+    return res.end(), true;
+  }
+
+  // ---- Login callback: the SPA handed back the user's ljwt → mint a code ----
+  if (req.method === "GET" && path === OAUTH_CALLBACK) {
+    const sp = new URL(req.url ?? "/", "http://x").searchParams;
+    const done = completeAuthorize(sp.get("state"), sp.get("token"));
+    if (!done.ok) return htmlError(res, 400, done.error_description), true;
+    const r = new URL(done.redirectUri);
+    r.searchParams.set("code", done.code);
+    if (done.state) r.searchParams.set("state", done.state);
+    res.writeHead(302, { location: r.toString() });
+    return res.end(), true;
+  }
+
+  // ---- Token ----
+  if (path === OAUTH_TOKEN) {
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "POST,OPTIONS" });
+      return res.end(), true;
+    }
+    if (req.method !== "POST") return oauthError(res, 405, "invalid_request", "Use POST."), true;
+    const raw = await readRawBody(req);
+    const body = parseBodyParams(raw, String(req.headers["content-type"] ?? "")) as TokenParams;
+    const result = exchangeToken(body);
+    if (!result.ok) return oauthError(res, result.status, result.error, result.error_description), true;
+    res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*", "cache-control": "no-store" });
+    res.end(JSON.stringify(result.body));
+    return true;
+  }
+
+  // ---- Revoke (RFC 7009, best-effort) ----
+  if (path === OAUTH_REVOKE) {
+    if (req.method !== "POST") return oauthError(res, 405, "invalid_request", "Use POST."), true;
+    const raw = await readRawBody(req);
+    const body = parseBodyParams(raw, String(req.headers["content-type"] ?? ""));
+    revokeToken(body.token);
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end("{}");
+    return true;
+  }
+
+  return false;
+}
+
+/** Extract the Bearer token from the Authorization header, if any. */
+function bearerFrom(req: IncomingMessage): string | undefined {
+  const auth = req.headers["authorization"];
+  const v = Array.isArray(auth) ? auth[0] : auth;
+  if (!v || !/^Bearer\s+/i.test(v)) return undefined;
+  return v.replace(/^Bearer\s+/i, "").trim() || undefined;
+}
+
 /**
  * Shared image proxy: GET /api/images/search?query=…&per_page=…&orientation=…
  * Holds the server's own PEXELS_API_KEY (from env/.env) and returns the normalized
@@ -163,6 +377,16 @@ export async function startHttpServer(port: number): Promise<void> {
       return res.end(ogImageSvg());
     }
 
+    // Public legal pages — required URLs for the Claude/ChatGPT directory submission.
+    if (req.method === "GET" && (path === "/privacy" || path === "/privacy-policy")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" });
+      return res.end(privacyHtml());
+    }
+    if (req.method === "GET" && (path === "/terms" || path === "/tos")) {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" });
+      return res.end(termsHtml());
+    }
+
     // Lightweight health check for hosting platforms.
     if (req.method === "GET" && (path === "/" || path === "/health")) {
       // A browser/connector probing the root with `Accept: text/html` gets a tiny
@@ -187,10 +411,35 @@ export async function startHttpServer(port: number): Promise<void> {
     // Shared image proxy (for `npx` clients without their own Pexels key).
     if (path === IMAGES_PATH) return handleImageSearch(req, res);
 
+    // OAuth 2.1 endpoints (always served; see handleOAuth). Returns true if handled.
+    if (await handleOAuth(req, res, path)) return;
+
     if (path !== MCP_PATH) return rpcError(res, 404, `Not found. Send MCP requests to ${MCP_PATH}.`);
 
     // Accept credentials via ?jwt=/?api_base=/... (for clients that can't set headers).
     applyQueryAuth(req);
+
+    // OAuth access token → resolve to the user's landing JWT and inject it as the
+    // normal x-webcake-jwt header, so persistence/config.ts is unchanged. A legacy
+    // raw JWT sent via x-webcake-jwt / ?jwt= still wins and passes straight through.
+    const bearer = bearerFrom(req);
+    const oauthLjwt = resolveAccessToken(bearer);
+    if (oauthLjwt && req.headers["x-webcake-jwt"] == null) {
+      req.headers["x-webcake-jwt"] = oauthLjwt;
+      req.rawHeaders.push("x-webcake-jwt", oauthLjwt);
+    }
+
+    // Enforcement (WEBCAKE_OAUTH=1): a request with NO recognized credential gets a
+    // 401 + WWW-Authenticate so Claude/ChatGPT kick off the OAuth flow. Legacy creds
+    // (x-webcake-jwt header or ?jwt= → mapped above) still pass; in enforced mode a
+    // raw JWT must use those, since Bearer is reserved for OAuth access tokens.
+    if (OAUTH_ENFORCED && !oauthLjwt && req.headers["x-webcake-jwt"] == null) {
+      res.writeHead(401, {
+        "www-authenticate": `Bearer resource_metadata="${publicBase(req)}${WELL_KNOWN_PR}"`,
+        "content-type": "application/json",
+      });
+      return res.end(JSON.stringify({ error: "invalid_token", error_description: "Authentication required — connect via OAuth." }));
+    }
 
     const sidHeader = req.headers["mcp-session-id"];
     const sessionId = Array.isArray(sidHeader) ? sidHeader[0] : sidHeader;
