@@ -1,6 +1,6 @@
 ---
 name: webcake-landing
-description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 16 tools, intake questions, and the create/edit workflow with organization targeting, reference-input ingest, and dry-run safety.
+description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 21 tools, intake questions, and the create/edit workflow with organization targeting, reference-input ingest, and dry-run safety.
 metadata:
   author: Vũ Lưu
   version: "2026.06.05"

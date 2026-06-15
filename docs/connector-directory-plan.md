@@ -78,7 +78,7 @@ node scripts/oauth-smoke.mjs              # in "OAUTH OK — 13 passed"
 - [x] **Privacy policy** + **Terms** — host công khai tại `/privacy` + `/terms` ([src/legal.ts](../src/legal.ts), wired in http.ts).
 - [x] Tên (`Webcake Landing`, 15 ký tự), mô tả ngắn + dài — trong [submission-packet.md](./submission-packet.md).
 - [x] Mô tả luồng auth (OAuth 2.1 + PKCE + DCR) + danh sách 20 tool với annotation — trong packet.
-- [ ] Icon PNG 64×64 <5KB (ChatGPT) — export từ `/icon.svg` (lệnh trong packet).
+- [x] Icon PNG 64×64 <5KB (ChatGPT) — [assets/icon-64.png](../assets/icon-64.png) (64×64 RGBA, 2.9KB). ✅
 - [ ] **Test account Webcake** + sample data cho reviewer (tạo tay, không commit).
 - [ ] Screenshots (3–5 ảnh — checklist trong packet).
 

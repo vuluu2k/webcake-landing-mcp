@@ -41,38 +41,52 @@ export function privacyHtml(): string {
 <div class="meta">Last updated: ${LAST_UPDATED}</div>
 <p>Webcake Landing MCP ("the connector") is a Model Context Protocol server that lets an AI assistant
 build and edit landing pages in your <a href="https://webcake.io">Webcake</a> account. This policy explains
-what data the connector handles and how.</p>
+what categories of data the connector handles, why, who receives it, and how long it is kept.</p>
 
-<h2>What we access</h2>
+<h2>Categories of personal data we access</h2>
 <ul>
   <li><strong>Your Webcake identity &amp; access token.</strong> When you connect, you log in to Webcake and the
-  connector receives a per-user access token mapped to your Webcake landing-page credential. It is used solely
+  connector receives a per-user access token mapped to your Webcake landing-page credential. <em>Purpose:</em> solely
   to call the Webcake backend on your behalf (create, read, update, publish pages, list your organizations).</li>
   <li><strong>Page content you ask the assistant to build or edit.</strong> The page-source JSON (text, images,
-  layout) flows through the connector to your Webcake account.</li>
+  layout) flows through the connector to your Webcake account. <em>Purpose:</em> to assemble and save the page you request.</li>
   <li><strong>Images.</strong> External image URLs in a page are re-hosted to the Webcake CDN on save. Optional
-  stock-photo search is served via the Pexels API.</li>
+  stock-photo search uses the Pexels API and icon lookup uses the Iconify API. <em>Purpose:</em> to supply the
+  visuals for your page.</li>
 </ul>
 
-<h2>What we store</h2>
+<h2>What we store and for how long</h2>
 <ul>
-  <li><strong>OAuth tokens are kept in memory only</strong>, for the lifetime of the running server, and expire
-  automatically (access tokens ~1 hour, refresh tokens ~30 days). They are never written to disk by the
-  connector and are removed on logout/revoke or when they expire.</li>
-  <li>The connector does <strong>not</strong> run an analytics database, does not sell data, and does not share
-  your data with third parties beyond the services required to perform your request (below).</li>
+  <li><strong>OAuth tokens.</strong> Stored in the connector's database (PostgreSQL) when the server is configured
+  with one — so a logged-in session survives a server restart and works across instances — otherwise only in
+  process memory. Either way they <strong>expire automatically</strong> (access tokens ~1 hour, refresh tokens
+  ~30 days) and are removed on logout/revoke or expiry.</li>
+  <li><strong>Transient draft cache.</strong> If a page fails validation while being created, its draft page-source
+  is cached briefly (about 2 hours, in Redis or memory) so you can fix and retry without re-sending everything.
+  It is removed on success or expiry.</li>
+  <li>The connector does <strong>not</strong> run an analytics database, does <strong>not</strong> sell data, and
+  does <strong>not</strong> perform tracking, behavioral profiling, or advertising.</li>
 </ul>
 
-<h2>Third-party services</h2>
+<h2>Categories of recipients (third-party services)</h2>
+<p>Your data is shared only with the services required to perform your request:</p>
 <ul>
-  <li><strong>Webcake</strong> (api.webcake.io) — stores and serves your pages; governed by Webcake's own terms.</li>
+  <li><strong>Webcake</strong> (api.webcake.io, the Webcake CDN, and the publish/build host) — stores, renders,
+  and serves your pages; governed by Webcake's own terms.</li>
   <li><strong>Pexels</strong> (pexels.com) — stock-photo search, only when you request images.</li>
+  <li><strong>Iconify</strong> (iconify.design) — resolves icon names to SVG, only when a page uses icons.</li>
 </ul>
+
+<h2>Data we do NOT collect</h2>
+<p>The connector never asks for or stores payment-card data, health data, government identifiers, or
+authentication secrets (passwords, API keys, MFA/OTP codes) as tool inputs. It operates only on the page
+content you explicitly ask the assistant to build — it does <strong>not</strong> read, reconstruct, or infer
+your full conversation or chat history.</p>
 
 <h2>Data retention &amp; deletion</h2>
-<p>Tokens expire automatically as described above; you can revoke access at any time by disconnecting the
-connector in Claude/ChatGPT settings, or by logging out of Webcake. Pages you create live in your Webcake
-account and are managed there. To request deletion of anything else, contact us below.</p>
+<p>Tokens and the draft cache expire automatically as described above; you can revoke access at any time by
+disconnecting the connector in Claude/ChatGPT settings, or by logging out of Webcake. Pages you create live in
+your Webcake account and are managed there. To request deletion of anything else, contact us below.</p>
 
 <h2>Security</h2>
 <p>All traffic uses HTTPS. Authentication follows OAuth 2.1 with PKCE; the connector validates a short-lived
