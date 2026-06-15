@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.78] - 2026-06-15
+
+### Added
+- The OAuth token store (clients, authorization codes, access and refresh tokens) now uses Postgres when `DATABASE_URL`, `WEBCAKE_POSTGRES_URL`, or `WEBCAKE_DATABASE_URL` is set: tokens survive a `serve` restart and are shared across instances behind a load balancer; the required tables are created automatically on first startup; the server falls back to the previous in-memory store when Postgres is not configured, so single-instance `serve`, stdio/`npx`, and the offline smoke gate require no infrastructure change.
+- The draft-source cache used by `create_page`, `update_page`, `add_section`, and `patch_page` for failure recovery now uses Redis when `REDIS_URL` or `WEBCAKE_REDIS_URL` is set: drafts survive a `serve` restart and are shared across instances; the server falls back to in-memory when Redis is not configured, so the cache loss behavior (model re-sends the source) is unchanged for single-instance deployments.
+- The image re-host deduplication cache now uses Redis when `REDIS_URL` or `WEBCAKE_REDIS_URL` is set: the `original URL → CDN URL` map is shared across `serve` instances and survives restarts, preventing repeated uploads of the same image; falls back to in-memory when Redis is not configured, and a cache miss still only re-uploads rather than failing.
+
 ## [1.0.77] - 2026-06-15
 
 ### Added
