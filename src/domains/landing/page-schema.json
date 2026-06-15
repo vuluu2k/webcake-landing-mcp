@@ -46,8 +46,11 @@
         "fontGeneral": { "type": "string", "description": "Default page font-family, e.g. \"'Roboto', sans-serif\"." },
         "width_section": {
           "type": "object",
-          "description": "Canvas reference widths.",
-          "properties": { "desktop": { "type": "number" }, "mobile": { "type": "number" } }
+          "description": "The canvas width per breakpoint (px) — the coordinate space every element's top/left/width lives in. Editor-allowed values ONLY: desktop 960 or 1200, mobile 420 or 360 (default 960/420). Choose 1200 for wide/multi-column/editorial layouts or when cloning a reference wider than 960 (e.g. Google Stitch ~1280) so columns aren't squished; 360 mobile to match a ~360–390 design. Changing it does NOT rescale existing coords.",
+          "properties": {
+            "desktop": { "type": "number", "enum": [960, 1200], "description": "960 or 1200." },
+            "mobile": { "type": "number", "enum": [420, 360], "description": "420 or 360." }
+          }
         },
         "country": { "type": "string", "description": "Dialing/locale code, e.g. \"84\"." },
         "currency": { "type": "string", "description": "Page currency (the editor's canonical home for currency).", "examples": ["VND", "USD"] },

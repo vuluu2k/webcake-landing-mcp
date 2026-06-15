@@ -2,7 +2,7 @@
 
 > Plan **resumable** — đánh dấu `[x]` khi xong, để phiên sau (hoặc Claude) tiếp tục đúng chỗ.
 > Kiến thức nền + quy trình: skill [`connector-directory`](../.claude/skills/connector-directory/SKILL.md).
-> Cập nhật lần cuối: 2026-06-08.
+> Cập nhật lần cuối: 2026-06-15.
 
 Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong · `[-]` bỏ qua/không cần.
 
@@ -17,24 +17,34 @@ Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong · `[-]` bỏ 
 - [x] Remote MCP `serve` mode: [src/http.ts](../src/http.ts) phục vụ `/mcp` (Streamable HTTP, stateful sessions), host công khai `https://mcp.toolvn.io.vn/mcp`.
 - [x] Multi-user qua JWT tĩnh: [src/persistence/config.ts](../src/persistence/config.ts) `configFromHeaders` (`Authorization: Bearer` / `x-webcake-jwt` / `?jwt=`).
 - [x] Icon + OG + favicon đã phục vụ trong serve mode.
+- [x] **Phase 3 (tool safety annotations) ĐÃ XONG** — cả 20 tool đã có `title` + `readOnlyHint`/`destructiveHint`/`openWorldHint` (xem [src/tools/](../src/tools/)). Không phải làm lại.
 
 ---
 
-## Phase 0 — Quyết định phạm vi
-- [ ] Chốt: chỉ cần **Level A** (add-by-URL, xong rồi) hay làm **Level B** (lên directory)?
-- [ ] Nếu Level B: nhắm **Claude trước**, **ChatGPT trước**, hay **cả hai**? (Claude bắt buộc OAuth; ChatGPT linh hoạt hơn nhưng nên có OAuth.)
-- [ ] Xác nhận host production ổn định + domain cố định cho submission (`mcp.toolvn.io.vn` hay domain khác?).
+## Phase 0 — Quyết định phạm vi ✅ ĐÃ CHỐT (2026-06-15)
+- [x] Phạm vi: **Level B — lên directory cả Claude + ChatGPT.**
+- [x] Domain production: **`mcp.toolvn.io.vn`** (host serve mode hiện tại).
+- [x] Backend đã có OAuth 2.1 chưa? → **CHƯA.** `landing_page_backend` (Phoenix) chỉ có JWT HS256 (`JWT_KEY`) + login qua **PancakeID OAuth**; có bảng `api_keys` + `/api/v1/external/oauth/token` (refresh, `GATEWAY_JWT_KEY`) nhưng KHÔNG có `/authorize`/`/register`/PKCE/introspection.
+- [x] `builderx_spa` (Vue + Express) login PancakeID → backend `/oauth2/pancakeid/login` → phát **`ljwt`** (landing JWT) + đã có route **`/mcp-connect`** trả `ljwt` về client (đúng cơ chế `login` của MCP).
 
-## Phase 1 — OAuth 2.1 Authorization Server (khối lớn nhất)
-> Cần một Authorization Server (AS) để user đăng nhập Webcake và nhận token. 2 hướng:
-> **(a)** Webcake backend tự expose OAuth endpoints; **(b)** dựng lớp AS mỏng đứng trước Webcake login.
-- [ ] **Quyết định (a) vs (b).** Hỏi team backend Webcake xem có sẵn `/authorize` + `/token` + introspection không (`landing_page_backend`).
-- [ ] Định nghĩa scope (vd `pages:read`, `pages:write`) và cách map access-token → Webcake JWT/identity.
-- [ ] Endpoint `authorize`: redirect tới Webcake login, lấy consent, trả `code` (PKCE S256 bắt buộc).
-- [ ] Endpoint `token`: đổi `code` + `code_verifier` → access-token (ngắn hạn) + refresh-token.
-- [ ] **Dynamic Client Registration (DCR)** `POST /register` (hoặc CIMD) để Claude/ChatGPT tự đăng ký client.
-- [ ] Đăng ký redirect URI của Claude: `https://claude.ai/api/mcp/auth_callback` (và của ChatGPT khi submit).
-- [ ] Lưu trữ token/refresh + cách thu hồi (revoke) theo user.
+## Phase 1 — OAuth 2.1: dựng AS MỎNG ngay trong MCP server (KHÔNG sửa Elixir)
+> **Hướng đã chọn = (b) lớp AS mỏng đứng trước login hiện có**, vì:
+> dựng full OAuth AS trong `landing_page_backend` tốn ~8–13 ngày Elixir; còn MCP repo (Node) ta tự kiểm soát,
+> và `builderx_spa` đã có `/mcp-connect` trả `ljwt`. Nên MCP host **tự làm Authorization Server**: bọc login
+> PancakeID/ljwt sẵn có, rồi tự mint access-token riêng map về `ljwt`. Toàn bộ code nằm trong repo này
+> ([src/http.ts](../src/http.ts) + module oauth mới) — không đụng backend.
+>
+> Luồng: Claude/ChatGPT → `/authorize` (PKCE) → redirect user sang builderx_spa login (PancakeID) → lấy `ljwt`
+> qua cơ chế `/mcp-connect` → MCP phát `code` → `/token` đổi `code`+`code_verifier` → access-token (ngắn hạn,
+> opaque/JWT) lưu map → `ljwt`. Resource server (chính MCP) validate access-token → resolve ra `ljwt`.
+- [ ] Tạo module `src/auth/oauth-server.ts` (in-memory store cho clients/codes/tokens; có thể nâng lên Redis sau).
+- [ ] Định nghĩa scope tối thiểu (vd `landing:read`, `landing:write`) + map access-token → `ljwt`/identity.
+- [ ] `GET /authorize`: nhận `client_id,redirect_uri,code_challenge(S256),state,scope`; redirect user sang builderx_spa login; sau khi có `ljwt` → phát `code` 1 lần, redirect về `redirect_uri?code=...&state=...`.
+- [ ] `POST /token`: verify `code`+`code_verifier` (S256) → mint access-token (ngắn hạn) + refresh-token; lưu map token→ljwt.
+- [ ] `POST /register` (**Dynamic Client Registration**) để Claude/ChatGPT tự đăng ký client_id.
+- [ ] Whitelist redirect URI Claude: `https://claude.ai/api/mcp/auth_callback` (+ ChatGPT khi submit).
+- [ ] Revoke + hết hạn token theo user (refresh rotation).
+- [ ] (Phối hợp builderx_spa) đảm bảo `/mcp-connect` trả `ljwt` được cho redirect server-to-server (không chỉ loopback localhost) — đây là điểm DUY NHẤT có thể cần sửa ngoài repo này.
 
 ## Phase 2 — Biến serve mode thành OAuth Protected Resource
 - [ ] Host `GET /.well-known/oauth-protected-resource` (trỏ tới AS ở Phase 1) trong [src/http.ts](../src/http.ts).
@@ -43,14 +53,14 @@ Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong · `[-]` bỏ 
 - [ ] Trả `401` + header `WWW-Authenticate: Bearer resource_metadata=...` khi thiếu/sai token (để client khởi động OAuth).
 - [ ] Test luồng OAuth end-to-end bằng `mcp-remote` hoặc MCP Inspector trước khi đụng tới Claude/ChatGPT.
 
-## Phase 3 — Tool safety annotations
+## Phase 3 — Tool safety annotations ✅ ĐÃ XONG
 > Directory yêu cầu mỗi tool có `title` + annotation an toàn. SDK ≥1.29 hỗ trợ.
-- [ ] reference (`get_generation_guide`, `list_elements`, `get_element`, `get_page_schema`) → `readOnlyHint: true`.
-- [ ] generation (`new_element`, `new_page_skeleton`, `validate_page`) → `readOnlyHint: true`.
-- [ ] media (`search_images`) → `readOnlyHint: true`.
-- [ ] persistence READ (`list_organizations`, `list_pages`, `get_page`) → `readOnlyHint: true`.
-- [ ] persistence WRITE (`create_page`, `update_page`, `add_section`) → `destructiveHint: true` (+ `title`).
-- [ ] Thêm `title` người-đọc cho cả 14 tool. Sửa trong [src/tools/](../src/tools/), chạy `npm run build && npm run smoke`.
+- [x] reference (`get_generation_guide`, `list_elements`, `get_element`, `get_page_schema`) → `readOnlyHint: true`.
+- [x] generation (`new_element`, `new_page_skeleton`, `validate_page`) → `readOnlyHint: true`.
+- [x] media (`search_images`) → `readOnlyHint: true`.
+- [x] persistence READ (`list_organizations`, `list_pages`, `find_pages`, `get_page`) → `readOnlyHint: true`.
+- [x] persistence WRITE (`update_page`, `patch_page`, `publish_page`) → `destructiveHint: true`; `create_page`/`add_section` → `destructiveHint: false` (append-only) (+ `title`).
+- [x] Tất cả 20 tool đã có `title` người-đọc. (Còn lại: rà soát lần cuối trước khi submit.)
 
 ## Phase 4 — Chuẩn bị hồ sơ submission
 - [ ] Icon (ChatGPT: 64×64 px, <5KB) — đã có asset trong [src/branding.ts](../src/branding.ts)/`src/og.png`, export đúng kích cỡ.
@@ -73,10 +83,12 @@ Trạng thái: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong · `[-]` bỏ 
 ---
 
 ## Quyết định còn mở (điền khi biết)
-- [ ] Webcake backend có sẵn OAuth chưa? (quyết định Phase 1 (a)/(b))
-- [ ] Access-token: tự ký JWT của mình hay introspection về Webcake?
-- [ ] Domain chính thức cho connector production?
-- [ ] Có cần UI components (ChatGPT Apps SDK) hay chỉ MCP tools thuần?
+- [x] Webcake backend có sẵn OAuth chưa? → CHƯA → chọn hướng (b): AS mỏng trong MCP server.
+- [x] Domain chính thức cho connector production? → `mcp.toolvn.io.vn`.
+- [ ] Access-token: opaque (lookup map trong store) hay JWT tự ký (HS/RS256)? → khuyến nghị opaque + store để revoke dễ.
+- [ ] Store cho clients/codes/tokens: in-memory (1 instance) hay Redis (nếu scale nhiều instance)?
+- [ ] `ljwt` sống 365 ngày — access-token MCP nên ngắn hơn nhiều (vd 1h) + refresh; có cần map refresh→re-login không?
+- [ ] Có cần UI components (ChatGPT Apps SDK) hay chỉ MCP tools thuần? → mặc định MCP tools thuần.
 
 ## Cách resume nhanh
 1. Mở file này, tìm dòng `[~]`/`[ ]` đầu tiên chưa xong.

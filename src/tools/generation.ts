@@ -32,10 +32,23 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 6) New page skeleton ------------------------------------------------------
   server.tool(
     "new_page_skeleton",
-    "Returns an empty but complete top-level page source { page:[], popup:[], settings:{...defaults}, options:{...}, cartConfigs:{} } matching the real editor shape.",
-    { mobileOnly: z.boolean().optional().describe("true if the page renders mobile-only.") },
+    "Returns an empty but complete top-level page source { page:[], popup:[], settings:{...defaults}, options:{...}, cartConfigs:{} } matching the real editor shape. Pass desktopWidth/mobileWidth to set the canvas width (settings.width_section) up front — pick desktop 1200 for wide/multi-column/editorial pages or when cloning a reference wider than 960 (e.g. Google Stitch ~1280), else 960; then place every element's coords in that width's space.",
+    {
+      mobileOnly: z.boolean().optional().describe("true if the page renders mobile-only."),
+      desktopWidth: z.union([z.literal(960), z.literal(1200)]).optional().describe("Desktop canvas width (settings.width_section.desktop). 960 (default, simple/narrow) or 1200 (wide/multi-column/editorial, or cloning a >960 reference)."),
+      mobileWidth: z.union([z.literal(420), z.literal(360)]).optional().describe("Mobile canvas width (settings.width_section.mobile). 420 (default) or 360 (to match a ~360–390 mobile design)."),
+    },
     { title: "New Page Skeleton", readOnlyHint: true, openWorldHint: false },
-    async ({ mobileOnly }) => text(domain.createPageSource({ mobileOnly: mobileOnly ?? false }))
+    async ({ mobileOnly, desktopWidth, mobileWidth }) =>
+      text(
+        domain.createPageSource({
+          mobileOnly: mobileOnly ?? false,
+          settings:
+            desktopWidth || mobileWidth
+              ? { width_section: { desktop: desktopWidth ?? 960, mobile: mobileWidth ?? 420 } }
+              : undefined,
+        })
+      )
   );
 
   // 7) Validate page ----------------------------------------------------------

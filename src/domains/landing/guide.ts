@@ -16,7 +16,7 @@ OUTPUT (top-level page source — matches the real editor shape)
 - "page" is an array of SECTIONS stacked vertically (index 0 = top). Each item MUST be type "section" (or "dynamic_page").
 - "popup" is a SEPARATE top-level array of popup elements — do NOT nest popups inside "page". A button opens one via a click event { action:"open_popup", target:"<popup id>" }.
 - All other elements (text, image, button, form…) live inside a section's "children".
-- "settings" carries SEO + page config: title, description, keywords, robots, canonical, favicon, fontGeneral, width_section {desktop:960,mobile:420}, country, currency, fb_tracking_code, tiktok_script, extra_css, extra_script, bhet (head code), bbet (body-end code) (call new_page_skeleton for a ready default).
+- "settings" carries SEO + page config: title, description, keywords, robots, canonical, favicon, fontGeneral, width_section {desktop:960|1200, mobile:420|360 — the canvas width CHOICE; see the canvas-width rule below}, country, currency, fb_tracking_code, tiktok_script, extra_css, extra_script, bhet (head code), bbet (body-end code) (call new_page_skeleton for a ready default).
 
 ELEMENT NODE (every element)
 { "id": "<unique ~8-char [A-Za-z0-9_]>", "type": "<type>",
@@ -35,7 +35,7 @@ FULL ELEMENT CATALOG (all ${ELEMENT_TYPES.length} types — the complete menu, n
 COORDINATE SYSTEM (critical)
 - Absolute-positioning canvas (NOT flexbox). Children carry top/left/width/height in px (numbers).
 - section has NO top/left; it has height (canvas height, default ${CANVAS.defaultSectionHeight}) and position:"relative".
-- Canvas width is FIXED: desktop = ${CANVAS.desktopWidth}px, mobile = ${CANVAS.mobileWidth}px (settings.width_section). Provide BOTH breakpoints; do not overlap elements within a section.
+- Canvas width is a per-breakpoint CHOICE you set in settings.width_section — desktop ${CANVAS.desktopWidthOptions.join(" or ")}px, mobile ${CANVAS.mobileWidthOptions.join(" or ")}px (these are the ONLY allowed values; editor default ${CANVAS.desktopWidth}/${CANVAS.mobileWidth}). PICK the width to fit the design, then place EVERY element's top/left/width in THAT coordinate space (changing width does NOT rescale elements — coords are absolute in the chosen width): use desktop 1200 for wide, multi-column, or editorial layouts and ALWAYS when cloning a reference drawn wider than 960 (e.g. a Google Stitch screen at ~1280 — clone at 1200 and map its coords by ×1200/sourceWidth, so 2-/3-column bands aren't crushed into 960 leaving big empty gaps); use 960 for simple, single-column, text-led pages. Mobile: 360 to match a ~360–390 design, else 420. Set settings.width_section.desktop/mobile to your choice up front. Provide BOTH breakpoints; do not overlap elements within a section.
 - Every child must stay on-canvas: 0 ≤ left and left + width ≤ canvas width (${CANVAS.desktopWidth} desktop / ${CANVAS.mobileWidth} mobile). Same for top + height ≤ section height.
 
 CENTERING & ALIGNMENT (do the math — do NOT eyeball \`left\`; off-center layouts are the #1 defect)

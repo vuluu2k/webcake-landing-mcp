@@ -16,8 +16,8 @@ End-to-end walkthroughs (build from a brief, surgical edit, inspect a type) live
 
 ### Step 1: Read the guide first — `get_generation_guide`
 
-Always call this **first**. It returns the output shape, coordinate system (desktop ≈ 960px,
-mobile ≈ 420px), event vocabulary, and the end-to-end workflow.
+Always call this **first**. It returns the output shape, coordinate system (desktop canvas 960 or 1200px — a `settings.width_section` choice; pick 1200 for wide/multi-column or when cloning a >960 reference;
+mobile 420 or 360px), event vocabulary, and the end-to-end workflow.
 
 ```
 get_generation_guide({})

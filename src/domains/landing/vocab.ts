@@ -5,7 +5,20 @@
  * Derived from assets/render_v4/event/index.js.
  */
 
-export const CANVAS = { desktopWidth: 960, mobileWidth: 420, defaultSectionHeight: 800 };
+// Canvas width is a per-breakpoint CHOICE (settings.width_section), NOT a single
+// fixed value — the editor's Page Configuration offers desktop 960|1200 and
+// mobile 420|360. desktopWidth/mobileWidth are the DEFAULTS (the editor default);
+// desktopWidthOptions/mobileWidthOptions are the full allowed sets. Pick 1200 for
+// wide/multi-column/editorial layouts and when cloning a reference wider than 960
+// (e.g. Google Stitch ~1280) so columns aren't squished; pick 360 mobile to
+// match a ~360–390 mobile design. Source: landing_page_backend Page Configuration.
+export const CANVAS = {
+  desktopWidth: 960,
+  mobileWidth: 420,
+  defaultSectionHeight: 800,
+  desktopWidthOptions: [960, 1200] as const,
+  mobileWidthOptions: [420, 360] as const,
+};
 
 /**
  * Element types the runtime animator handles.

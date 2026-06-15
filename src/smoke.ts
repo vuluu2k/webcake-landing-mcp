@@ -198,6 +198,31 @@ console.log("== validate: accepts JSON string input ==");
 const r3 = validatePage(JSON.stringify(good));
 check("string input parsed & valid", r3.valid, r3.errors);
 
+console.log("== canvas width is a CHOICE (settings.width_section 960|1200 / 420|360) ==");
+{
+  // createPageSource sets the chosen width up front.
+  const wide = landingDomain.createPageSource({ settings: { width_section: { desktop: 1200, mobile: 360 } } }) as any;
+  check("width: createPageSource honors width_section override", wide.settings.width_section.desktop === 1200 && wide.settings.width_section.mobile === 360, wide.settings.width_section);
+
+  // An element at left:1000 width:180 (right edge 1180) overflows a 960 canvas but FITS a 1200 canvas.
+  const mk = (deskW: number) => {
+    const p = JSON.parse(JSON.stringify(good));
+    p.settings.width_section = { desktop: deskW, mobile: 420 };
+    p.page[0].children[0].responsive.desktop.styles = { top: 100, left: 1000, width: 180, height: 44 };
+    return p;
+  };
+  const at960 = validatePage(mk(960));
+  check("width: overflow flagged against the 960 canvas", at960.warnings.some((w) => /exceeds canvas 960/.test(w)), at960.warnings);
+  const at1200 = validatePage(mk(1200));
+  check("width: SAME element fits the 1200 canvas (no overflow warning)", !at1200.warnings.some((w) => /exceeds canvas/.test(w)), at1200.warnings);
+  check("width: 1200 canvas page is valid", at1200.valid, at1200.errors);
+
+  // Only the editor-allowed widths pass — a stray width is a schema error.
+  const badW = JSON.parse(JSON.stringify(good));
+  badW.settings.width_section = { desktop: 1000, mobile: 420 };
+  check("width: non-allowed desktop width (1000) rejected by schema enum", !validatePage(badW).valid, validatePage(badW).errors);
+}
+
 console.log("== validate: custom CSS/class/JS escape hatches (beyond-element capability) ==");
 {
   const clone = () => JSON.parse(JSON.stringify(good));

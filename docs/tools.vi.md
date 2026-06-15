@@ -16,8 +16,7 @@ Các luồng đầy đủ đầu-cuối (dựng từ brief, sửa đúng chỗ, 
 
 ### Bước 1: Đọc guide trước — `get_generation_guide`
 
-Luôn gọi cái này **đầu tiên**. Nó trả về hình dạng output, hệ toạ độ (desktop ≈ 960px,
-mobile ≈ 420px), bộ từ vựng sự kiện, và workflow đầu-cuối.
+Luôn gọi cái này **đầu tiên**. Nó trả về hình dạng output, hệ toạ độ (canvas desktop 960 hoặc 1200px — lựa chọn ở `settings.width_section`; chọn 1200 cho layout rộng/nhiều cột hoặc khi clone thiết kế rộng hơn 960; mobile 420 hoặc 360px), bộ từ vựng sự kiện, và workflow đầu-cuối.
 
 ```
 get_generation_guide({})
