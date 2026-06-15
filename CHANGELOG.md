@@ -6,6 +6,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.74] - 2026-06-13
+
+### Added
+- `ingest_html` and `ingest_url` now extract Tailwind gradient utilities (`bg-gradient-to-*`/`from-*`/`via-*`/`to-*`) from the page's class attributes, resolve the color stops through the palette from `tailwind.config`, and return them as `gradients` in the AST — covering Stitch CTA and hero backgrounds where the Play CDN never emits the resolved CSS.
+- `ingest_html` and `ingest_url` now detect per-section hover and transition effects from Tailwind utility classes (`hover:`, `group-hover:`, `active:`) and return them as `hover_effects` on each `IngestedSection`, normalized to effect names (`scale`, `image-zoom`, `lift`, `slide`, `fade`, `underline`, `shadow`, `bg-color-change`, `text-color-change`, `border-color-change`) so the model can reproduce them via Webcake hover events instead of producing a static page.
+- `validate_page` now warns when `specials.custom_css` or `specials.custom_class` is set on an element but `specials.customAdvance` is not `true`, since the renderer silently drops both without that flag.
+- `validate_page` now warns when `specials.custom_css` contains a CSS selector, `:hover`, `@keyframes`, or media query — those constructs corrupt the element's `#w-<id>{…}` declaration rule and must instead go in `settings.extra_css`.
+
+### Changed
+- Schema descriptions for `settings.extra_css` and `settings.extra_script` are improved; two previously undocumented page-level injection fields `settings.bhet` (raw HTML block injected before `</head>` — webfonts, `<meta>`, analytics pixels) and `settings.bbet` (raw HTML block injected before `</body>` — chat widgets, GTM `<noscript>`, third-party embeds) are now documented in the schema.
+- `specials` schema description now documents the universal escape-hatch keys available on any element: `customAdvance` (boolean gate — must be `true` for `custom_css`/`custom_class` to take effect), `custom_css` (CSS declarations injected inside the element's `#w-<id>{…}` rule), and `custom_class` (extra class names added to `#w-<id>`, targetable from `settings.extra_css`); section-only `isCustomTracking`/`customTracking` for per-section tracking snippets are also documented.
+- Server instructions now prescribe an explicit "BEYOND ELEMENT CAPABILITY" escape-hatch path: reach for `specials.custom_css`/`specials.custom_class` (with `specials.customAdvance:true`) for per-element CSS beyond built-in specials, and `settings.extra_css`/`settings.extra_script`/`settings.bhet`/`settings.bbet` for page-level CSS, JS, and arbitrary HTML injection (hover rules, `@keyframes`, analytics pixels, webfont links), rather than leaving effects out; the Google Stitch reference-input documentation is updated to include `gradients` and `hover_effects` in the list of AST fields returned.
+
 ## [1.0.73] - 2026-06-13
 
 ### Added
