@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.81] - 2026-06-16
+
+### Changed
+- The Playwright screenshot engine that backs `render_preview`'s `GET /api/render/screenshot` route now defaults to JPEG output instead of PNG, reducing the base64 payload the model receives by roughly 5–10× with no meaningful loss for a layout-and-colour comparison; the format, quality, and pixel density are tunable via three new environment variables: `RENDER_SCREENSHOT_FORMAT` (`jpeg` or `png`, default `jpeg`), `RENDER_SCREENSHOT_QUALITY` (1–100, default 72, JPEG only), and `RENDER_SCREENSHOT_SCALE` (deviceScaleFactor 0–2, default 1).
+
 ## [1.0.80] - 2026-06-16
 
 ### Added
