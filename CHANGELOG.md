@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.83] - 2026-06-16
+
+### Added
+- The server web guide (`GET /`) now includes a bilingual video guides section with per-app installation walkthrough cards (Claude, Codex, Antigravity); cards with a recorded video show a YouTube thumbnail poster that opens a privacy-friendly `youtube-nocookie` embed in a lightbox modal on click, while cards without a video yet show a "coming soon" placeholder.
+- The server web guide (`GET /`) now has a sticky section navigation bar that lets readers jump between sections (How it works, What you build, Clone a page, Connect, Videos, FAQ) and highlights the active section as the page scrolls.
+
 ## [1.0.82] - 2026-06-16
 
 ### Added
