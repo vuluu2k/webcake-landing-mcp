@@ -27,7 +27,7 @@ import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { text } from "../mcp/response.js";
+import { text, image } from "../mcp/response.js";
 import {
   searchPexels,
   searchImagesViaProxy,
@@ -35,6 +35,13 @@ import {
   resolvePexelsProxyBase,
   pexelsKeyFromHeaders,
 } from "../persistence/pexels-client.js";
+import {
+  captureScreenshot,
+  resolveScreenshotProxyBase,
+  screenshotProxyBaseFromHeaders,
+  resolveMicrolinkKey,
+  microlinkKeyFromHeaders,
+} from "../persistence/screenshot-client.js";
 import { uploadImageMultipart } from "../persistence/webcake-client.js";
 import { resolveIconSvg } from "../persistence/icon-client.js";
 import { configFromHeaders, ENVIRONMENTS, stripTrailingSlash } from "../persistence/config.js";
@@ -52,6 +59,19 @@ function resolveApiBase(headers: Record<string, string | string[] | undefined> |
   }
   // Default to prod.
   return ENVIRONMENTS.prod.apiBase;
+}
+
+/** Resolve the public preview base (for building /preview/<id> URLs) from headers → env → WEBCAKE_ENV preset → prod default. No JWT needed. */
+function resolvePreviewBase(headers: Record<string, string | string[] | undefined> | undefined): string {
+  const overrides = configFromHeaders(headers);
+  if (overrides.previewBase) return stripTrailingSlash(overrides.previewBase)!;
+  if (process.env.WEBCAKE_PREVIEW_BASE) return stripTrailingSlash(process.env.WEBCAKE_PREVIEW_BASE)!;
+  const envName = overrides.env ?? process.env.WEBCAKE_ENV;
+  if (envName && envName in ENVIRONMENTS) {
+    const p = ENVIRONMENTS[envName as keyof typeof ENVIRONMENTS].previewBase;
+    if (p) return stripTrailingSlash(p)!;
+  }
+  return ENVIRONMENTS.prod.previewBase;
 }
 
 const UPLOAD_FETCH_TIMEOUT_MS = 60_000; // 60 s — large bodies can be slow to transfer
@@ -275,6 +295,52 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         usage:
           "For each icons[<ref>].svg, make a rectangle in that card's icon slot: copy the svg into BOTH responsive.desktop.config.svgMask AND responsive.mobile.config.svgMask, set styles.background to the icon color, and keep the box SQUARE (width === height) — without styles.background the masked icon is invisible, and a non-square box stretches it. For any ok:false ref, fall back to an emoji inline or skip — never leave a feature card iconless.",
       });
+    }
+  );
+
+  // 13c) Render a page/URL to a screenshot the model can SEE --------------------
+  server.tool(
+    "render_preview",
+    "Renders a PUBLIC URL to a PNG and returns it as an image so the model can SEE the result and compare it visually to the reference — the fidelity-check step of the clone loop (build → see → patch_page → re-check). Pass `page_id` to shoot a created page's preview (/preview/<id>) or `url` for any public page (e.g. the reference you're cloning). full_page defaults to true (whole scrollable page). AGENT-FIRST: if YOU already have a screenshot/browser capability (a shell + headless browser, or a screenshot tool), screenshot the preview URL YOURSELF instead — it's fresh and unlimited; use this tool only when you cannot. ENGINE: zero-config via Microlink's free tier (rate-limited ~50/day PER IP, so heavy looping can hit HTTP 429 — then this returns ok:false and you should SKIP the visual check that round, not fail); a host can set RENDER_SCREENSHOT_BASE (or the x-render-screenshot-base header) to a keyed proxy, or MICROLINK_API_KEY / x-microlink-key for a higher quota. NOTE: a no-domain preview only renders for ~10 minutes after the last publish — call this promptly after create_page/publish_page, and re-publish before re-checking a stale page.",
+    {
+      page_id: z.string().optional().describe("A created page's id — screenshots its /preview/<id> URL (built from the preview base). Provide page_id OR url."),
+      url: z.string().optional().describe("Any public http(s) URL to screenshot (e.g. the reference page being cloned). Wins over page_id."),
+      full_page: z.boolean().optional().describe("Capture the whole scrollable page (default true) vs just the viewport."),
+      width: z.number().int().min(320).max(2560).optional().describe("Viewport width in px (default 1280; use ~960/1200 to match the page canvas, ~420 for mobile)."),
+    },
+    { title: "Render Preview Screenshot", readOnlyHint: true, openWorldHint: true },
+    async ({ page_id, url, full_page, width }, extra) => {
+      const headers = extra?.requestInfo?.headers;
+      let target = url?.trim();
+      if (!target && page_id) {
+        target = `${resolvePreviewBase(headers)}/preview/${encodeURIComponent(page_id)}`;
+      }
+      if (!target) {
+        return text({ ok: false, error: "Pass `page_id` (to shoot its /preview/<id>) or `url`." });
+      }
+      const resolved = {
+        proxyBase: resolveScreenshotProxyBase(screenshotProxyBaseFromHeaders(headers)),
+        microlinkKey: resolveMicrolinkKey(microlinkKeyFromHeaders(headers)),
+      };
+      const r = await captureScreenshot(target, { fullPage: full_page !== false, width }, resolved, Date.now());
+      if (!r.ok) {
+        return text({
+          ok: false,
+          url: target,
+          status: r.status,
+          via: r.via,
+          quota_exhausted: r.quota_exhausted ?? false,
+          error: r.error,
+          hint: r.quota_exhausted
+            ? "Screenshot quota/rate-limit reached — SKIP the visual check this round (do not block the build), or set a keyed engine (RENDER_SCREENSHOT_BASE / MICROLINK_API_KEY) and retry."
+            : "Couldn't capture the screenshot. If you have your own browser/screenshot ability, shoot the URL yourself; otherwise skip the visual check. Note the /preview/<id> link expires ~10 min after the last publish — re-publish if stale.",
+        });
+      }
+      return image(
+        r.dataBase64!,
+        r.mimeType ?? "image/png",
+        `Rendered ${target} (${r.bytes} bytes, via ${r.via}). Compare this to the reference: check section order, colors, spacing, image placement, and text. For each mismatch, patch_page the offending element by id, re-publish, then render_preview again until it matches.`
+      );
     }
   );
 

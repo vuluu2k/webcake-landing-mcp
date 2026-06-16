@@ -8,6 +8,22 @@ export function text(value: unknown) {
 }
 
 /**
+ * Wrap a base64 image as an MCP image content block, optionally followed by a
+ * text block (notes/metadata the model should read). Used by render_preview so a
+ * multimodal model can SEE the rendered page and compare it to the reference.
+ */
+export function image(dataBase64: string, mimeType = "image/png", note?: unknown) {
+  const content: Array<
+    | { type: "image"; data: string; mimeType: string }
+    | { type: "text"; text: string }
+  > = [{ type: "image" as const, data: dataBase64, mimeType }];
+  if (note !== undefined) {
+    content.push({ type: "text" as const, text: typeof note === "string" ? note : JSON.stringify(note, null, 2) });
+  }
+  return { content };
+}
+
+/**
  * Directive shipped alongside every non-empty validation-warnings list.
  * Warnings are design defects the customer WILL see (text overlapping the
  * element below, off-canvas boxes, empty bands, dead event targets, missing

@@ -53,6 +53,10 @@ what categories of data the connector handles, why, who receives it, and how lon
   <li><strong>Images.</strong> External image URLs in a page are re-hosted to the Webcake CDN on save. Optional
   stock-photo search uses the Pexels API and icon lookup uses the Iconify API. <em>Purpose:</em> to supply the
   visuals for your page.</li>
+  <li><strong>Page preview screenshots.</strong> When you ask the assistant to visually check a page, the page's
+  <em>public</em> preview URL is sent to a screenshot service (by default Microlink; optionally a self-hosted
+  renderer) which returns a picture of the page. <em>Purpose:</em> so the assistant can see the rendered result and
+  compare it to your reference. Only the public URL is sent — never your access token or page-source JSON.</li>
 </ul>
 
 <h2>What we store and for how long</h2>
@@ -75,6 +79,8 @@ what categories of data the connector handles, why, who receives it, and how lon
   and serves your pages; governed by Webcake's own terms.</li>
   <li><strong>Pexels</strong> (pexels.com) — stock-photo search, only when you request images.</li>
   <li><strong>Iconify</strong> (iconify.design) — resolves icon names to SVG, only when a page uses icons.</li>
+  <li><strong>Microlink</strong> (api.microlink.io) — renders a page's public preview URL to a screenshot, only when
+  you request a visual check. A self-hosted renderer can be configured instead; only the public URL is sent.</li>
 </ul>
 
 <h2>Data we do NOT collect</h2>

@@ -22,6 +22,8 @@ import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsPr
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
 import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
+import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
+import { isPrivateHost, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
 import { iconifyCandidates } from "./persistence/icon-client.js";
 import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl } from "./persistence/rehost.js";
 
@@ -2026,6 +2028,43 @@ console.log("== upload_images: localContentType (ext + magic, pure offline) ==")
 
   // both unknown → undefined
   check("localContentType: unknown magic + unknown ext → undefined", localContentType("xyz", unknownBuf) === undefined);
+}
+
+// == render_preview: buildMicrolinkUrl (pure offline) ==
+{
+  console.log("\n== render_preview: buildMicrolinkUrl (pure offline) ==");
+  const u = buildMicrolinkUrl("https://www.webcake.me/preview/abc", { fullPage: true, width: 1280 }, 999);
+  const sp = new URL(u).searchParams;
+  check("buildMicrolinkUrl: hits api.microlink.io", u.startsWith("https://api.microlink.io/?"));
+  check("buildMicrolinkUrl: screenshot=true", sp.get("screenshot") === "true");
+  check("buildMicrolinkUrl: fullPage=true by default", sp.get("fullPage") === "true");
+  check("buildMicrolinkUrl: force=true (cache bypass)", sp.get("force") === "true");
+  check("buildMicrolinkUrl: embed returns PNG bytes", sp.get("embed") === "screenshot.url");
+  check("buildMicrolinkUrl: nonce busts the target url", (sp.get("url") ?? "").includes("_=999"));
+  check("buildMicrolinkUrl: viewport.width passed through", sp.get("viewport.width") === "1280");
+  const noFull = new URL(buildMicrolinkUrl("https://x.test", { fullPage: false }, 1)).searchParams;
+  check("buildMicrolinkUrl: fullPage=false honored", noFull.get("fullPage") === "false");
+  check("buildMicrolinkUrl: width omitted → no viewport.width", noFull.get("viewport.width") === null);
+}
+
+// == /api/render/screenshot: SSRF url guard (pure offline) ==
+{
+  console.log("\n== render screenshot route: SSRF url guard (pure offline) ==");
+  // private / loopback / link-local hosts are blocked
+  check("isPrivateHost: localhost", isPrivateHost("localhost"));
+  check("isPrivateHost: 127.0.0.1", isPrivateHost("127.0.0.1"));
+  check("isPrivateHost: 10.x", isPrivateHost("10.1.2.3"));
+  check("isPrivateHost: 192.168.x", isPrivateHost("192.168.0.5"));
+  check("isPrivateHost: 172.16-31.x", isPrivateHost("172.20.0.1") && isPrivateHost("172.16.0.1") && isPrivateHost("172.31.255.255"));
+  check("isPrivateHost: 172.15/172.32 are PUBLIC", !isPrivateHost("172.15.0.1") && !isPrivateHost("172.32.0.1"));
+  check("isPrivateHost: 169.254 link-local", isPrivateHost("169.254.1.1"));
+  check("isPrivateHost: IPv6 ::1 / ULA", isPrivateHost("::1") && isPrivateHost("fd00::1"));
+  check("isPrivateHost: public host", !isPrivateHost("www.webcake.me") && !isPrivateHost("8.8.8.8"));
+  // url validation (RENDER_ALLOW_PRIVATE not set in smoke)
+  check("isAllowedScreenshotUrl: public https ok", isAllowedScreenshotUrl("https://www.webcake.me/preview/abc").ok);
+  check("isAllowedScreenshotUrl: ftp rejected", !isAllowedScreenshotUrl("ftp://x.test/a").ok);
+  check("isAllowedScreenshotUrl: localhost rejected", !isAllowedScreenshotUrl("http://localhost:5800/preview/1").ok);
+  check("isAllowedScreenshotUrl: garbage rejected", !isAllowedScreenshotUrl("not a url").ok);
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

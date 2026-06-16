@@ -22,6 +22,8 @@ deploy/coolify/
 | `POST /mcp` | MCP endpoint (an `initialize` opens a session; reuse the returned `mcp-session-id`) |
 | `GET /mcp` · `DELETE /mcp` | session stream / teardown |
 | `GET /health` · `GET /` | health probe → `{ "ok": true, … }` (used by the container healthcheck) |
+| `GET /api/images/search` | shared Pexels proxy for `search_images` (holds the host's `PEXELS_API_KEY`) |
+| `GET /api/render/screenshot` | self-hosted Playwright screenshot engine for `render_preview` (see [Screenshot engine](#screenshot-engine-render_preview)) |
 
 The server is **multi-user**: every request carries its own Webcake credentials, so
 no secret is baked into the image (see [Authentication](#authentication)).
@@ -80,6 +82,49 @@ Set values in Coolify's **Environment Variables** UI (never commit secrets):
 | `WEBCAKE_APP_BASE` | optional | overrides the `WEBCAKE_ENV` app base (editor/preview links) |
 | `WEBCAKE_ORG_ID` | optional | default organization for `create_page` |
 | `WEBCAKE_JWT` | optional | **single-tenant only** — a shared server secret; omit for multi-user |
+
+## Screenshot engine (`render_preview`)
+
+The `render_preview` tool screenshots a page so the model can SEE it and compare it
+to a reference (the clone-fidelity check). It picks an engine in this order:
+
+1. **Microlink** (`api.microlink.io`) — zero-config, but its free tier is rate-limited
+   **per IP**, so on a shared multi-user host it's exhausted almost immediately.
+2. **This host's own Playwright route** (`GET /api/render/screenshot`) — unlimited.
+
+The image **bundles Playwright + Chromium** so the route works out of the box. The
+compose file wires the fallover and lets you pick which engine goes **first** — the
+other is the automatic fallback:
+
+```yaml
+RENDER_SCREENSHOT_BASE: http://127.0.0.1:8787   # the container calls its own route
+RENDER_SCREENSHOT_PRIMARY: microlink            # Microlink first, Playwright fallback
+```
+
+- `microlink` (the compose default) — try Microlink first, fall back to this host's
+  Playwright. Microlink's free tier is **per IP**, so on a shared multi-user host it
+  exhausts fast and every call then wastes a `429` before falling to Playwright — set
+  `MICROLINK_API_KEY` for a real quota if you keep this order.
+- `proxy` — try this host's Playwright first (unlimited), Microlink as fallback. Best
+  for a shared host; avoids the wasted Microlink attempt.
+
+**Build arg — install or skip Playwright.** `ENABLE_PLAYWRIGHT` (default `1`) controls
+whether the build installs Playwright + Chromium (~+350 MB image). To skip it (smaller
+image, Microlink-only), set the build arg to `0` in Coolify → the service → **Build →
+Build Arguments**, and remove the two `RENDER_SCREENSHOT_*` lines from the compose env.
+`PLAYWRIGHT_VERSION` (default pinned) sets the Playwright release; its bundled Chromium
+always matches it.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `RENDER_SCREENSHOT_BASE` | `http://127.0.0.1:8787` | host serving `/api/render/screenshot`; the container points at itself |
+| `RENDER_SCREENSHOT_PRIMARY` | `microlink` | `microlink` (Microlink first) or `proxy` (Playwright first) |
+| `MICROLINK_API_KEY` | optional | raises the Microlink per-IP free quota |
+| `RENDER_ALLOW_PRIVATE` | unset | allow screenshotting private/loopback targets (off by default; SSRF guard) |
+
+Verify after deploy:
+`curl -o /tmp/s.png "https://mcp.example.com/api/render/screenshot?url=https://example.com&full_page=true"`
+→ a PNG (HTTP 200, `image/png`). A `503` means the image was built with `ENABLE_PLAYWRIGHT=0`.
 
 ## Connect a client
 

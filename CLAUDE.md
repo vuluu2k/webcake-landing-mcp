@@ -71,13 +71,13 @@ Surrounding the domain:
 - [src/index.ts](src/index.ts) — thin entry: subcommand dispatch — `install|uninstall|--help` runs the bundled installer, `login` grabs the JWT via the browser and saves `~/.webcake-landing-mcp/auth.json` (see [src/auth/login.ts](src/auth/login.ts)), `serve [--port N]` (or `PORT` env) starts the remote HTTP server, no subcommand starts the stdio server.
 - [src/server.ts](src/server.ts) — `createServer()`: builds the `McpServer` with the domain's `instructions` and registers the tool groups. Used by BOTH transports.
 - [src/http.ts](src/http.ts) — remote **Streamable HTTP** transport (stateful sessions) so the server can be a Claude "custom connector" via a URL. Each request's headers carry the caller's own Webcake JWT (multi-user).
-- [src/tools/](src/tools/) — the 21 tools as five group modules (`reference.ts`, `generation.ts`, `media.ts`, `ingest.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain` (media needs no domain). The `text()` helper lives in [src/mcp/response.ts](src/mcp/response.ts). Persistence + media tools resolve credentials per request from `extra.requestInfo.headers` (HTTP), else env.
+- [src/tools/](src/tools/) — the 22 tools as five group modules (`reference.ts`, `generation.ts`, `media.ts`, `ingest.ts`, `persistence.ts`) wired by `tools/index.ts`; each depends only on the injected `Domain` (media needs no domain). The `text()` + `image()` helpers live in [src/mcp/response.ts](src/mcp/response.ts). Persistence + media tools resolve credentials per request from `extra.requestInfo.headers` (HTTP), else env.
 - [src/persistence/](src/persistence/) — the Webcake backend: `config.ts` (`readConfig` precedence: per-request overrides → env → the saved `auth.json` written by `login`; `configFromHeaders` for the HTTP `x-webcake-*` / `Authorization: Bearer` headers), `webcake-client.ts` (create/update/list pages, list orgs + JWT-redacted dry-run previews), `rehost.ts` (pure collect+rewrite of external image URLs — see auto-host below), `pexels-client.ts` (the `search_images` stock-photo client — direct Pexels with a key, else the shared `mcp.toolvn.io.vn` proxy), `types.ts`.
 - [src/install.ts](src/install.ts) — bundled IDE installer; writes the MCP server block into claude-desktop / claude-code / cursor / windsurf / augment / codex / antigravity / gemini (CLI) / cline / kiro / opencode config files.
 
-The 21 tools fall into five groups: **reference** (`get_generation_guide`, `list_elements`, `get_element`,
+The 22 tools fall into five groups: **reference** (`get_generation_guide`, `list_elements`, `get_element`,
 `get_page_schema` — no env needed), **generation** (`new_element`, `new_page_skeleton`, `validate_page`),
-**media** (`search_images` — Pexels stock photos; needs a Pexels key but no Webcake env; `get_icon_svg` — resolves Material Symbols / Font Awesome icon names to inline SVG via Iconify, no creds; `upload_images` — re-hosts external images to Webcake; no creds needed), **ingest**
+**media** (`search_images` — Pexels stock photos; needs a Pexels key but no Webcake env; `get_icon_svg` — resolves Material Symbols / Font Awesome icon names to inline SVG via Iconify, no creds; `upload_images` — re-hosts external images to Webcake; no creds needed; `render_preview` — screenshots a page's `/preview/<id>` (or any URL) to a PNG the model can SEE and compare to the reference [the clone-fidelity check]; zero-config via Microlink's free per-IP tier, host can point `RENDER_SCREENSHOT_BASE` at a keyed proxy, graceful skip on 429; prefer the agent's own screenshot ability when it has one), **ingest**
 (`ingest_html`, `ingest_url` — no env needed), and
 **persistence** (`list_organizations`, `create_page`, `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page`, `publish_page` — need env).
 `find_pages` searches the account's pages by name / domain / id (AND-combined) via the dedicated `/api/v1/ai/search_pages` backend endpoint — the lookup step before an edit; it falls back to filtering `list_pages` client-side (name/id only) if that route is missing (older backend → 404).
@@ -125,6 +125,21 @@ With a key — `PEXELS_API_KEY` env (loaded from `.env` at startup by [src/env.t
 is just this server in `serve` mode serving `GET /api/images/search` with its own `PEXELS_API_KEY` (see
 [src/http.ts](src/http.ts)). Free Pexels key: https://www.pexels.com/api/. A `.env` (gitignored; template
 [.env.example](.env.example)) is the convenient place to set these locally.
+
+The **`render_preview`** tool screenshots a page's `/preview/<id>` (or any URL) to a PNG the model can SEE
+(the clone-fidelity check). Engine resolution (mirrors the Pexels pattern, with AUTO-FALLOVER) lives in
+[src/persistence/screenshot-client.ts](src/persistence/screenshot-client.ts): `captureScreenshot` tries the
+`RENDER_SCREENSHOT_PRIMARY` engine first (`microlink`, default, or `proxy`) and falls over to the other when
+the first fails — so the free **Microlink** tier (`api.microlink.io`, no key, rate-limited ~50/day **per IP**;
+optional `MICROLINK_API_KEY` / `x-microlink-key` for more) is used up first, then traffic auto-switches to the
+**self-hosted Playwright** route. That route is `GET /api/render/screenshot?url=…&full_page=…&width=…` served by
+this server in `serve` mode (point `RENDER_SCREENSHOT_BASE` / `x-render-screenshot-base` at the host;
+[src/http.ts](src/http.ts) → [src/persistence/screenshot-playwright.ts](src/persistence/screenshot-playwright.ts)).
+**Playwright is NOT a package dependency** (keeps `npx` light — no Chromium download); it's lazy-imported, so the
+route replies 503 unless the VPS installs it: `npm i playwright && npx playwright install --with-deps chromium`
+(or `npm i playwright-core` + `CHROME_BIN=/path/to/chrome` to reuse a system browser). The route blocks
+private/loopback targets (SSRF; opt out with `RENDER_ALLOW_PRIVATE=1`). The AGENT should prefer its OWN screenshot
+ability (e.g. a chrome-devtools MCP) over this tool — see the `instructions`/`GENERATION_GUIDE` "VISUAL CHECK".
 
 ## Release flow
 

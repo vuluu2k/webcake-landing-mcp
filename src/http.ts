@@ -21,6 +21,7 @@ import { ICON_SVG, ICON_MIME } from "./branding.js";
 import { guideHtml, ogImageSvg, normalizeLang } from "./web-guide.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { searchPexels, resolvePexelsKey, type PexelsSearchParams } from "./persistence/pexels-client.js";
+import { captureWithPlaywright, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
 import { resolveEnv, ENVIRONMENTS, stripTrailingSlash } from "./persistence/config.js";
 import { buildConnectUrl } from "./auth/login.js";
 import {
@@ -37,6 +38,7 @@ import {
 
 const MCP_PATH = "/mcp";
 const IMAGES_PATH = "/api/images/search";
+const RENDER_SCREENSHOT_PATH = "/api/render/screenshot";
 
 // OAuth 2.1 endpoints (the embedded thin Authorization Server — see auth/oauth-server.ts).
 const WELL_KNOWN_PR = "/.well-known/oauth-protected-resource";
@@ -345,6 +347,40 @@ async function handleImageSearch(req: IncomingMessage, res: ServerResponse) {
   return sendImgJson(result.ok ? 200 : result.status || 502, result);
 }
 
+/**
+ * Self-hosted screenshot route: GET /api/render/screenshot?url=…&full_page=…&width=…
+ * Renders the target URL with Playwright (this VPS's own headless Chromium) and
+ * returns the PNG bytes — the UNLIMITED engine `render_preview` falls over to when
+ * Microlink's free quota is hit (point RENDER_SCREENSHOT_BASE at this host). Returns
+ * 503 when Playwright isn't installed here. Blocks private/loopback targets (SSRF).
+ */
+async function handleRenderScreenshot(req: IncomingMessage, res: ServerResponse) {
+  const cors = { "access-control-allow-origin": "*", "access-control-allow-headers": "*" };
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, cors);
+    return res.end();
+  }
+  const sendErr = (status: number, body: unknown) => {
+    res.writeHead(status, { "content-type": "application/json", ...cors });
+    res.end(JSON.stringify(body));
+  };
+  const sp = new URL(req.url ?? "/", "http://x").searchParams;
+  const target = sp.get("url")?.trim();
+  if (!target) return sendErr(400, { ok: false, error: "Pass ?url=<public http(s) URL>." });
+  const allow = isAllowedScreenshotUrl(target);
+  if (!allow.ok) return sendErr(400, { ok: false, error: allow.error });
+
+  const fullPage = sp.get("full_page") !== "false";
+  const width = sp.get("width") ? Number(sp.get("width")) : undefined;
+  const r = await captureWithPlaywright(target, { fullPage, width });
+  if (!r.ok) {
+    // 503 when the engine is absent (caller should fall back / skip), 502 otherwise.
+    return sendErr(r.reason === "not_installed" ? 503 : 502, { ok: false, error: r.error });
+  }
+  res.writeHead(200, { "content-type": "image/png", "cache-control": "no-store", ...cors });
+  return res.end(r.png);
+}
+
 export async function startHttpServer(port: number): Promise<void> {
   // mcp-session-id -> live transport (each bound to its own McpServer instance).
   const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -410,6 +446,9 @@ export async function startHttpServer(port: number): Promise<void> {
 
     // Shared image proxy (for `npx` clients without their own Pexels key).
     if (path === IMAGES_PATH) return handleImageSearch(req, res);
+
+    // Self-hosted screenshot engine (Playwright) — the unlimited fallback for render_preview.
+    if (path === RENDER_SCREENSHOT_PATH) return handleRenderScreenshot(req, res);
 
     // OAuth 2.1 endpoints (always served; see handleOAuth). Returns true if handled.
     if (await handleOAuth(req, res, path)) return;

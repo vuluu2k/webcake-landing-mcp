@@ -39,11 +39,12 @@
 - **Claude redirect URI** (auto via DCR): `https://claude.ai/api/mcp/auth_callback`.
 - Scopes: `landing:read`, `landing:write`.
 
-## Tools (20) — tên + annotation an toàn
+## Tools (22) — tên + annotation an toàn
 **Read-only (`readOnlyHint`)** — no writes:
 `get_generation_guide`, `list_elements`, `get_element`, `get_page_schema`,
-`new_element`, `new_page_skeleton`, `validate_page`, `search_images`,
-`ingest_html`, `ingest_url`, `list_organizations`, `list_pages`, `find_pages`, `get_page`.
+`new_element`, `new_page_skeleton`, `validate_page`, `search_images`, `get_icon_svg`,
+`render_preview`, `ingest_html`, `ingest_url`, `list_organizations`, `list_pages`,
+`find_pages`, `get_page`.
 
 **Write (`destructiveHint`)** — modify the user's Webcake account:
 `update_page`, `patch_page`, `publish_page` (destructive: true);
@@ -72,7 +73,7 @@
 ## HƯỚNG DẪN NỘP
 
 ### Điều kiện tiên quyết (làm trước khi submit)
-1. **Deploy production** `mcp.toolvn.io.vn` với code mới (OAuth). Đã có sẵn [coolify/Dockerfile](../coolify/Dockerfile) + [coolify/docker-compose.yml](../coolify/docker-compose.yml) (env OAuth set sẵn, build context = repo root). Trên Coolify: New Resource → Docker Compose → trỏ repo → **Docker Compose Location = `/coolify/docker-compose.yml`** → set domain `mcp.toolvn.io.vn` (port 8787) + điền secret `PEXELS_API_KEY` trong Environment UI → Deploy. (Đã build + run thử local: healthy, /mcp trả 401 đúng.)
+1. **Deploy production** `mcp.toolvn.io.vn` với code mới (OAuth). Đã có sẵn [deploy/coolify/Dockerfile](../deploy/coolify/Dockerfile) + [deploy/coolify/docker-compose.yml](../deploy/coolify/docker-compose.yml) (env OAuth set sẵn, build context = repo root). Trên Coolify: New Resource → Docker Compose → trỏ repo → **Base Directory = `/`**, **Docker Compose Location = `/deploy/coolify/docker-compose.yml`** → set domain `mcp.toolvn.io.vn` (port 8787) + điền secret `PEXELS_API_KEY` trong Environment UI → Deploy. (Đã build + run thử local: healthy, /mcp trả 401 đúng.)
 2. **builderx_spa `/mcp-connect`** đã sửa (allowlist host connector) — chỉ cần **deploy production** bản này.
 3. **Verify** end-to-end production bằng MCP Inspector (URL = `https://mcp.toolvn.io.vn/mcp`) — phải qua được OAuth.
 4. Chuẩn bị test account + screenshots + PNG icon ở trên.
