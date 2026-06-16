@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.80] - 2026-06-16
+
+### Added
+- New `render_preview` tool screenshots a page's `/preview/<id>` or any public URL and returns a PNG the model can see, enabling a visual-compare-and-patch loop after `create_page` or `publish_page`; uses Microlink as a zero-config free engine (~50 shots/day per IP; returns `ok:false` on HTTP 429 so the build loop skips the visual check gracefully rather than failing), auto-falls over to a self-hosted Playwright engine when `RENDER_SCREENSHOT_BASE` (or the per-request `x-render-screenshot-base` header) is configured; `MICROLINK_API_KEY` / `x-microlink-key` raises the Microlink quota; `RENDER_SCREENSHOT_PRIMARY` controls which engine is tried first.
+- `serve` hosts now expose `GET /api/render/screenshot` — a Playwright (headless Chromium) screenshot engine that `render_preview` falls over to from Microlink when `RENDER_SCREENSHOT_BASE` points at the host; returns `503` when Playwright is not installed (`npm i playwright && npx playwright install --with-deps chromium` on the VPS, or `playwright-core` + `CHROME_BIN` to reuse a system browser); blocks private and loopback targets by default to prevent SSRF (opt out with `RENDER_ALLOW_PRIVATE=1`).
+
+### Changed
+- `get_generation_guide` and server instructions now include an explicit VISUAL CHECK step in the page-building workflow: after `create_page` auto-publishes or after `publish_page`, screenshot the rendered page with the agent's own browser capability (preferred, unlimited) or via `render_preview` as fallback, compare it to the reference (section order, colors, spacing, image placement, text), `patch_page` each mismatch by id, re-publish, and repeat for 2–3 rounds until the page matches.
+- Privacy Policy at `/privacy` is updated to disclose that a page's public preview URL is sent to Microlink (or a self-configured renderer) when the model performs a visual check, and adds Microlink to the third-party services list.
+
 ## [1.0.79] - 2026-06-15
 
 ### Changed
