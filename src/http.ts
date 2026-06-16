@@ -377,8 +377,8 @@ async function handleRenderScreenshot(req: IncomingMessage, res: ServerResponse)
     // 503 when the engine is absent (caller should fall back / skip), 502 otherwise.
     return sendErr(r.reason === "not_installed" ? 503 : 502, { ok: false, error: r.error });
   }
-  res.writeHead(200, { "content-type": "image/png", "cache-control": "no-store", ...cors });
-  return res.end(r.png);
+  res.writeHead(200, { "content-type": r.mimeType, "cache-control": "no-store", ...cors });
+  return res.end(r.data);
 }
 
 export async function startHttpServer(port: number): Promise<void> {

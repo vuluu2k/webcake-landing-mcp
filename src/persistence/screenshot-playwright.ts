@@ -64,8 +64,25 @@ async function getBrowser(): Promise<any | null> {
 }
 
 export type PwShotResult =
-  | { ok: true; png: Buffer }
+  | { ok: true; data: Buffer; mimeType: string }
   | { ok: false; error: string; reason?: "not_installed" };
+
+/**
+ * Output tuning (env-controlled, so the VPS operator picks the size/quality
+ * tradeoff). Default JPEG — a full-page landing screenshot is ~5–10× smaller as
+ * JPEG than PNG with no loss that matters for a layout/colour comparison, which
+ * shrinks the base64 the model receives. `scale` (deviceScaleFactor) renders at a
+ * lower pixel density to cut dimensions too; 1 = crisp, 0.5 = quarter the pixels.
+ */
+function outputOpts(): { type: "jpeg" | "png"; quality?: number; scale: number } {
+  const fmt = (process.env.RENDER_SCREENSHOT_FORMAT ?? "jpeg").toLowerCase();
+  const type = fmt === "png" ? "png" : "jpeg";
+  const q = parseInt(process.env.RENDER_SCREENSHOT_QUALITY ?? "", 10);
+  const quality = type === "jpeg" ? (Number.isFinite(q) && q >= 1 && q <= 100 ? q : 72) : undefined;
+  const s = parseFloat(process.env.RENDER_SCREENSHOT_SCALE ?? "");
+  const scale = Number.isFinite(s) && s > 0 && s <= 2 ? s : 1;
+  return { type, quality, scale };
+}
 
 /** Screenshot a URL with Playwright. Never throws. */
 export async function captureWithPlaywright(
@@ -93,15 +110,20 @@ export async function captureWithPlaywright(
     }
     let ctx: any;
     try {
+      const out = outputOpts();
       ctx = await browser.newContext({
         viewport: { width: opts.width && Number.isFinite(opts.width) ? Math.round(opts.width) : 1280, height: 900 },
-        deviceScaleFactor: 1,
+        deviceScaleFactor: out.scale,
       });
       const page = await ctx.newPage();
       await page.goto(url, { waitUntil: "load", timeout: 30_000 });
       await page.waitForTimeout(1200); // let webfonts/lazy images settle
-      const png = await page.screenshot({ fullPage: opts.fullPage !== false, type: "png" });
-      return { ok: true, png: Buffer.from(png) };
+      const shot = await page.screenshot({
+        fullPage: opts.fullPage !== false,
+        type: out.type,
+        ...(out.type === "jpeg" ? { quality: out.quality } : {}),
+      });
+      return { ok: true, data: Buffer.from(shot), mimeType: out.type === "png" ? "image/png" : "image/jpeg" };
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       // Browser-died errors → reset and retry once; other errors → fail now.
