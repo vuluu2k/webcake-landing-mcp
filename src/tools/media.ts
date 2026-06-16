@@ -27,7 +27,7 @@ import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { text, image } from "../mcp/response.js";
+import { text, image, images } from "../mcp/response.js";
 import {
   searchPexels,
   searchImagesViaProxy,
@@ -37,6 +37,7 @@ import {
 } from "../persistence/pexels-client.js";
 import {
   captureScreenshot,
+  captureScreenshotTiles,
   resolveScreenshotProxyBase,
   screenshotProxyBaseFromHeaders,
   resolveMicrolinkKey,
@@ -301,15 +302,16 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
   // 13c) Render a page/URL to a screenshot the model can SEE --------------------
   server.tool(
     "render_preview",
-    "Renders a PUBLIC URL to a PNG and returns it as an image so the model can SEE the result and compare it visually to the reference — the fidelity-check step of the clone loop (build → see → patch_page → re-check). Pass `page_id` to shoot a created page's preview (/preview/<id>) or `url` for any public page (e.g. the reference you're cloning). full_page defaults to true (whole scrollable page). AGENT-FIRST: if YOU already have a screenshot/browser capability (a shell + headless browser, or a screenshot tool), screenshot the preview URL YOURSELF instead — it's fresh and unlimited; use this tool only when you cannot. ENGINE: zero-config via Microlink's free tier (rate-limited ~50/day PER IP, so heavy looping can hit HTTP 429 — then this returns ok:false and you should SKIP the visual check that round, not fail); a host can set RENDER_SCREENSHOT_BASE (or the x-render-screenshot-base header) to a keyed proxy, or MICROLINK_API_KEY / x-microlink-key for a higher quota. NOTE: a no-domain preview only renders for ~10 minutes after the last publish — call this promptly after create_page/publish_page, and re-publish before re-checking a stale page.",
+    "Renders a PUBLIC URL to a PNG and returns it as an image so the model can SEE the result and compare it visually to the reference — the fidelity-check step of the clone loop (build → see → patch_page → re-check). Pass `page_id` to shoot a created page's preview (/preview/<id>) or `url` for any public page (e.g. the reference you're cloning). full_page defaults to true (whole scrollable page). AGENT-FIRST: if YOU already have a screenshot/browser capability (a shell + headless browser, or a screenshot tool), screenshot the preview URL YOURSELF instead — it's fresh and unlimited; use this tool only when you cannot. ENGINE: zero-config via Microlink's free tier (rate-limited ~50/day PER IP, so heavy looping can hit HTTP 429 — then this returns ok:false and you should SKIP the visual check that round, not fail); a host can set RENDER_SCREENSHOT_BASE (or the x-render-screenshot-base header) to a keyed proxy, or MICROLINK_API_KEY / x-microlink-key for a higher quota. NOTE: a no-domain preview only renders for ~10 minutes after the last publish — call this promptly after create_page/publish_page, and re-publish before re-checking a stale page. TALL PAGES: pass tiles:true to get the page as a STACK of top→bottom band images (each readable at full detail) instead of one full-page image squished small — needs a self-hosted Playwright host (RENDER_SCREENSHOT_BASE); falls back to a single image otherwise.",
     {
       page_id: z.string().optional().describe("A created page's id — screenshots its /preview/<id> URL (built from the preview base). Provide page_id OR url."),
       url: z.string().optional().describe("Any public http(s) URL to screenshot (e.g. the reference page being cloned). Wins over page_id."),
       full_page: z.boolean().optional().describe("Capture the whole scrollable page (default true) vs just the viewport."),
       width: z.number().int().min(320).max(2560).optional().describe("Viewport width in px (default 1280; use ~960/1200 to match the page canvas, ~420 for mobile)."),
+      tiles: z.boolean().optional().describe("Tall pages: return the page as MULTIPLE top→bottom band images (each readable in detail) instead of one squished full-page image. Requires a Playwright host (RENDER_SCREENSHOT_BASE); without one it falls back to a single image."),
     },
     { title: "Render Preview Screenshot", readOnlyHint: true, openWorldHint: true },
-    async ({ page_id, url, full_page, width }, extra) => {
+    async ({ page_id, url, full_page, width, tiles }, extra) => {
       const headers = extra?.requestInfo?.headers;
       let target = url?.trim();
       if (!target && page_id) {
@@ -322,6 +324,31 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         proxyBase: resolveScreenshotProxyBase(screenshotProxyBaseFromHeaders(headers)),
         microlinkKey: resolveMicrolinkKey(microlinkKeyFromHeaders(headers)),
       };
+
+      // Tiles mode (tall pages): a stack of readable top→bottom bands. Needs a
+      // Playwright host; if none is configured, fall through to a single image.
+      if (tiles === true) {
+        const t = await captureScreenshotTiles(target, { width }, resolved, Date.now());
+        if (t.ok && t.tiles && t.tiles.length) {
+          return images(
+            t.tiles.map((b) => ({ dataBase64: b.dataBase64, mimeType: t.mimeType })),
+            `Rendered ${target} as ${t.tiles.length} band(s) top→bottom (page ${t.pageHeight}px @ ${t.width}px wide${t.truncated ? ", TRUNCATED — page taller than the band cap" : ""}). Read the bands in order as one page. Compare each to the reference: section order, colors, spacing, image placement, text. For each mismatch, patch_page the element by id, re-publish, then re-check.`
+          );
+        }
+        if (!t.not_supported) {
+          // A real failure (quota/network) — report it; don't silently single-shot.
+          return text({
+            ok: false,
+            url: target,
+            status: t.status,
+            quota_exhausted: t.quota_exhausted ?? false,
+            error: t.error,
+            hint: "Tiled screenshot failed. Retry without tiles for a single image, or skip the visual check this round.",
+          });
+        }
+        // not_supported → fall through to a single full-page image below.
+      }
+
       const r = await captureScreenshot(target, { fullPage: full_page !== false, width }, resolved, Date.now());
       if (!r.ok) {
         return text({

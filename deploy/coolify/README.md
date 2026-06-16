@@ -124,6 +124,7 @@ always matches it.
 | `RENDER_SCREENSHOT_FORMAT` | `jpeg` | `jpeg` (default, ~5–10× smaller) or `png` — the Playwright engine's output the model receives |
 | `RENDER_SCREENSHOT_QUALITY` | `72` | JPEG quality 1–100 |
 | `RENDER_SCREENSHOT_SCALE` | `1` | deviceScaleFactor (0<s≤2); `<1` renders fewer pixels for a smaller image |
+| `RENDER_SCREENSHOT_BAND_HEIGHT` | `1400` | tile height (CSS px) when `render_preview` is called with `tiles:true` — a tall page is returned as top→bottom bands (max 8) so the model reads each in detail. Tiling needs this Playwright route (Microlink can't tile). |
 
 Verify after deploy:
 `curl -o /tmp/s.png "https://mcp.example.com/api/render/screenshot?url=https://example.com&full_page=true"`

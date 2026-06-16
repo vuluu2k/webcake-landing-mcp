@@ -21,7 +21,7 @@ import { ICON_SVG, ICON_MIME } from "./branding.js";
 import { guideHtml, ogImageSvg, normalizeLang } from "./web-guide.js";
 import { privacyHtml, termsHtml } from "./legal.js";
 import { searchPexels, resolvePexelsKey, type PexelsSearchParams } from "./persistence/pexels-client.js";
-import { captureWithPlaywright, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
+import { captureWithPlaywright, captureTilesWithPlaywright, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
 import { resolveEnv, ENVIRONMENTS, stripTrailingSlash } from "./persistence/config.js";
 import { buildConnectUrl } from "./auth/login.js";
 import {
@@ -372,6 +372,26 @@ async function handleRenderScreenshot(req: IncomingMessage, res: ServerResponse)
 
   const fullPage = sp.get("full_page") !== "false";
   const width = sp.get("width") ? Number(sp.get("width")) : undefined;
+
+  // Tiles mode: split a tall page into horizontal bands, returned as a JSON array
+  // of base64 images (top→bottom) so the model reads each slice at a readable size.
+  if (sp.get("tiles") === "1" || sp.get("tiles") === "true") {
+    const bandHeight = sp.get("band_height") ? Number(sp.get("band_height")) : undefined;
+    const t = await captureTilesWithPlaywright(target, { width, bandHeight });
+    if (!t.ok) return sendErr(t.reason === "not_installed" ? 503 : 502, { ok: false, error: t.error });
+    res.writeHead(200, { "content-type": "application/json", "cache-control": "no-store", ...cors });
+    return res.end(
+      JSON.stringify({
+        ok: true,
+        mimeType: t.mimeType,
+        page_height: t.pageHeight,
+        width: t.width,
+        truncated: t.truncated,
+        tiles: t.tiles.map((b) => ({ y: b.y, height: b.height, data: b.data.toString("base64") })),
+      })
+    );
+  }
+
   const r = await captureWithPlaywright(target, { fullPage, width });
   if (!r.ok) {
     // 503 when the engine is absent (caller should fall back / skip), 502 otherwise.

@@ -24,6 +24,22 @@ export function image(dataBase64: string, mimeType = "image/png", note?: unknown
 }
 
 /**
+ * Like `image()` but returns SEVERAL image blocks (e.g. a tall page tiled into
+ * top→bottom bands), optionally followed by a text note. The model sees each band
+ * at a readable size instead of one over-squished image.
+ */
+export function images(items: Array<{ dataBase64: string; mimeType?: string }>, note?: unknown) {
+  const content: Array<
+    | { type: "image"; data: string; mimeType: string }
+    | { type: "text"; text: string }
+  > = items.map((it) => ({ type: "image" as const, data: it.dataBase64, mimeType: it.mimeType ?? "image/png" }));
+  if (note !== undefined) {
+    content.push({ type: "text" as const, text: typeof note === "string" ? note : JSON.stringify(note, null, 2) });
+  }
+  return { content };
+}
+
+/**
  * Directive shipped alongside every non-empty validation-warnings list.
  * Warnings are design defects the customer WILL see (text overlapping the
  * element below, off-canvas boxes, empty bands, dead event targets, missing

@@ -164,6 +164,71 @@ export async function captureViaProxy(base: string, targetUrl: string, opts: Scr
   }
 }
 
+export type ScreenshotTile = { y: number; height: number; dataBase64: string };
+export type ScreenshotTilesResult = {
+  ok: boolean;
+  status: number;
+  mimeType?: string;
+  pageHeight?: number;
+  width?: number;
+  truncated?: boolean;
+  tiles?: ScreenshotTile[];
+  via?: "proxy";
+  quota_exhausted?: boolean;
+  /** True when no Playwright host is configured (Microlink can't tile) — caller falls back to a single shot. */
+  not_supported?: boolean;
+  error?: string;
+};
+
+/**
+ * Capture a tall page as horizontal BANDS via the self-hosted Playwright route
+ * (`?tiles=1`) so the model reads each slice at a readable size. Microlink can't
+ * tile, so this REQUIRES a proxy host (RENDER_SCREENSHOT_BASE); without one it
+ * returns not_supported and the caller should fall back to a single full-page shot.
+ * Never throws.
+ */
+export async function captureScreenshotTiles(
+  targetUrl: string,
+  opts: { width?: number; bandHeight?: number } = {},
+  resolved: { proxyBase?: string } = {},
+  nonce = 0
+): Promise<ScreenshotTilesResult> {
+  if (!resolved.proxyBase) {
+    return { ok: false, status: 0, not_supported: true, error: "tiling needs a Playwright host (RENDER_SCREENSHOT_BASE); Microlink can't tile" };
+  }
+  const q = new URLSearchParams();
+  q.set("url", targetUrl + (targetUrl.includes("?") ? "&" : "?") + "_=" + nonce);
+  q.set("tiles", "1");
+  q.set("full_page", "true");
+  if (opts.width && Number.isFinite(opts.width)) q.set("width", String(Math.round(opts.width)));
+  if (opts.bandHeight && Number.isFinite(opts.bandHeight)) q.set("band_height", String(Math.round(opts.bandHeight)));
+  const url = `${resolved.proxyBase}${SCREENSHOT_PROXY_PATH}?${q.toString()}`;
+  try {
+    const res = await fetch(url, { method: "GET", headers: { Accept: "application/json" }, signal: AbortSignal.timeout(SCREENSHOT_TIMEOUT_MS) });
+    const ct = (res.headers.get("content-type") ?? "").toLowerCase();
+    if (res.ok && ct.includes("application/json")) {
+      const j: any = await res.json();
+      return {
+        ok: true,
+        status: res.status,
+        mimeType: j.mimeType,
+        pageHeight: j.page_height,
+        width: j.width,
+        truncated: j.truncated === true,
+        tiles: (j.tiles ?? []).map((t: any) => ({ y: t.y, height: t.height, dataBase64: t.data })),
+        via: "proxy",
+      };
+    }
+    const body = (await res.text()).slice(0, 300);
+    return { ok: false, status: res.status, quota_exhausted: res.status === 429, error: `tiles proxy returned HTTP ${res.status}${body ? `: ${body}` : ""}` };
+  } catch (e: any) {
+    if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+      return { ok: false, status: 0, error: `tiles request timed out after ${SCREENSHOT_TIMEOUT_MS}ms` };
+    }
+    return { ok: false, status: 0, error: `network error calling tiles proxy ${resolved.proxyBase}: ${e?.message ?? e}` };
+  }
+}
+
 /**
  * Capture a screenshot with AUTOMATIC FALLOVER between the two engines:
  *   - Microlink direct (free, zero-config) and

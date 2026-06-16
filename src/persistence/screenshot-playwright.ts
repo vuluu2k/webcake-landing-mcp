@@ -84,11 +84,23 @@ function outputOpts(): { type: "jpeg" | "png"; quality?: number; scale: number }
   return { type, quality, scale };
 }
 
-/** Screenshot a URL with Playwright. Never throws. */
-export async function captureWithPlaywright(
-  url: string,
-  opts: { fullPage?: boolean; width?: number } = {}
-): Promise<PwShotResult> {
+/** Default band height (CSS px) for tiling a tall page; env-tunable. */
+function resolveBandHeight(): number {
+  const b = parseInt(process.env.RENDER_SCREENSHOT_BAND_HEIGHT ?? "", 10);
+  return Number.isFinite(b) && b >= 200 ? b : 1400;
+}
+
+/**
+ * Run `fn` against a fresh browser context (viewport width + deviceScaleFactor),
+ * with a single self-heal retry if the cached browser died (crash, or a system
+ * Chrome that closed). Always closes the context. Never throws — the shared
+ * lifecycle for both single-shot and tiled capture.
+ */
+async function withContext<T>(
+  width: number,
+  scale: number,
+  fn: (ctx: any) => Promise<T>
+): Promise<{ ok: true; value: T } | { ok: false; error: string; reason?: "not_installed" }> {
   const pw = await loadPlaywright();
   if (!pw) {
     return {
@@ -97,12 +109,9 @@ export async function captureWithPlaywright(
       error: "playwright is not installed on this host (run: npm i playwright && npx playwright install chromium)",
     };
   }
-  // One shot, with a single self-heal retry: if the cached browser died (crash,
-  // or a system Chrome that closed), drop it and relaunch once.
   for (let attempt = 0; attempt < 2; attempt++) {
     let browser = await getBrowser();
     if (!browser) return { ok: false, error: "failed to launch headless chromium (check CHROME_BIN / playwright install)" };
-    // If the cached handle is already disconnected, force a relaunch.
     if (typeof browser.isConnected === "function" && !browser.isConnected()) {
       browserPromise = null;
       browser = await getBrowser();
@@ -110,23 +119,11 @@ export async function captureWithPlaywright(
     }
     let ctx: any;
     try {
-      const out = outputOpts();
-      ctx = await browser.newContext({
-        viewport: { width: opts.width && Number.isFinite(opts.width) ? Math.round(opts.width) : 1280, height: 900 },
-        deviceScaleFactor: out.scale,
-      });
-      const page = await ctx.newPage();
-      await page.goto(url, { waitUntil: "load", timeout: 30_000 });
-      await page.waitForTimeout(1200); // let webfonts/lazy images settle
-      const shot = await page.screenshot({
-        fullPage: opts.fullPage !== false,
-        type: out.type,
-        ...(out.type === "jpeg" ? { quality: out.quality } : {}),
-      });
-      return { ok: true, data: Buffer.from(shot), mimeType: out.type === "png" ? "image/png" : "image/jpeg" };
+      ctx = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: scale });
+      const value = await fn(ctx);
+      return { ok: true, value };
     } catch (e: any) {
       const msg = String(e?.message ?? e);
-      // Browser-died errors → reset and retry once; other errors → fail now.
       const dead = /closed|disconnected|crash|Target page, context or browser/i.test(msg);
       if (dead && attempt === 0) {
         browserPromise = null;
@@ -138,6 +135,86 @@ export async function captureWithPlaywright(
     }
   }
   return { ok: false, error: "playwright capture failed after retry" };
+}
+
+/** Load a page in `ctx`, wait for it to settle, return the page handle. */
+async function openSettledPage(ctx: any, url: string): Promise<any> {
+  const page = await ctx.newPage();
+  await page.goto(url, { waitUntil: "load", timeout: 30_000 });
+  await page.waitForTimeout(1200); // let webfonts/lazy images settle
+  return page;
+}
+
+/** Screenshot a URL with Playwright (one image — full page or viewport). Never throws. */
+export async function captureWithPlaywright(
+  url: string,
+  opts: { fullPage?: boolean; width?: number } = {}
+): Promise<PwShotResult> {
+  const out = outputOpts();
+  const width = opts.width && Number.isFinite(opts.width) ? Math.round(opts.width) : 1280;
+  const r = await withContext(width, out.scale, async (ctx) => {
+    const page = await openSettledPage(ctx, url);
+    return Buffer.from(
+      await page.screenshot({
+        fullPage: opts.fullPage !== false,
+        type: out.type,
+        ...(out.type === "jpeg" ? { quality: out.quality } : {}),
+      })
+    );
+  });
+  if (!r.ok) return r;
+  return { ok: true, data: r.value, mimeType: out.type === "png" ? "image/png" : "image/jpeg" };
+}
+
+export type PwTilesResult =
+  | { ok: true; mimeType: string; pageHeight: number; width: number; truncated: boolean; tiles: { y: number; height: number; data: Buffer }[] }
+  | { ok: false; error: string; reason?: "not_installed" };
+
+/**
+ * Capture a tall page as a STACK of horizontal bands (top→bottom) via Playwright
+ * `clip` — so the model sees each slice at a readable aspect ratio instead of one
+ * giant image squished (and blurred) to the vision input's long-edge cap. No image
+ * library needed: each band is its own screenshot. Bands are capped at `maxTiles`
+ * (truncated:true when the page is taller than that).
+ */
+export async function captureTilesWithPlaywright(
+  url: string,
+  opts: { width?: number; bandHeight?: number; maxTiles?: number } = {}
+): Promise<PwTilesResult> {
+  const out = outputOpts();
+  const width = opts.width && Number.isFinite(opts.width) ? Math.round(opts.width) : 1280;
+  const bandH = opts.bandHeight && opts.bandHeight >= 200 ? Math.round(opts.bandHeight) : resolveBandHeight();
+  const maxTiles = opts.maxTiles && opts.maxTiles > 0 ? Math.round(opts.maxTiles) : 8;
+  const r = await withContext(width, out.scale, async (ctx) => {
+    const page = await openSettledPage(ctx, url);
+    // String form so tsc doesn't type-check `document` against the Node libs.
+    const pageHeight = Math.ceil(
+      Number(await page.evaluate("Math.max(document.documentElement.scrollHeight, document.body.scrollHeight)")) || 0
+    );
+    const total = Math.max(1, Math.ceil(pageHeight / bandH));
+    const n = Math.min(total, maxTiles);
+    // `clip` is measured against the VIEWPORT, so grow the viewport to cover the
+    // bands we'll capture before clipping (Chromium caps a single shot at ~16384px).
+    const captureHeight = Math.min(pageHeight, n * bandH, 16000);
+    await page.setViewportSize({ width, height: Math.max(captureHeight, 1) });
+    await page.waitForTimeout(300); // reflow after the resize
+    const tiles: { y: number; height: number; data: Buffer }[] = [];
+    for (let i = 0; i < n; i++) {
+      const y = i * bandH;
+      let h = Math.min(bandH, pageHeight - y);
+      if (y + h > captureHeight) h = captureHeight - y; // never clip past the viewport
+      if (h <= 0) break;
+      const shot = await page.screenshot({
+        clip: { x: 0, y, width, height: h },
+        type: out.type,
+        ...(out.type === "jpeg" ? { quality: out.quality } : {}),
+      });
+      tiles.push({ y, height: h, data: Buffer.from(shot) });
+    }
+    return { pageHeight, width, tiles, truncated: total > maxTiles };
+  });
+  if (!r.ok) return r;
+  return { ok: true, mimeType: out.type === "png" ? "image/png" : "image/jpeg", ...r.value };
 }
 
 // ---------------------------------------------------------------------------
