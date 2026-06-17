@@ -40,6 +40,14 @@ function timeoutOrNetworkError(url: string, e: any): { ok: false; status: number
 const UPLOAD_FILE_ENDPOINT = "/external/upload_file";
 const BUILD_ENDPOINT = "/render/build";
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
+/**
+ * Marker sent on every MCP-originated create so the backend can stamp the page's
+ * `by_ai` column — it records that the page was generated through this MCP server
+ * (the backend reads `by_ai` from the create body; the column lives in the
+ * separate landing_page_backend repo). Override via WEBCAKE_BY_AI env if a host
+ * wants a more specific tag.
+ */
+const BY_AI = process.env.WEBCAKE_BY_AI || "mcp";
 const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
 const SEARCH_PAGES_ENDPOINT = "/api/v1/ai/search_pages";
@@ -153,7 +161,8 @@ export function buildRequest(config: WebcakeConfig, name: string, source: unknow
     method: "POST",
     url: `${config.base}${CREATE_ENDPOINT}`,
     headers: authHeaders(config, orgId),
-    body: JSON.stringify({ name, source }),
+    // by_ai marks the page as MCP-generated for the backend's `by_ai` column.
+    body: JSON.stringify({ name, source, by_ai: BY_AI }),
   };
 }
 
