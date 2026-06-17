@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.84] - 2026-06-17
+
+### Added
+- `create_page` now sends a `by_ai` field in the create request body (default value `"mcp"`) so the backend can stamp each MCP-generated page in its `by_ai` column; set the `WEBCAKE_BY_AI` environment variable to override the tag per deployment.
+
 ## [1.0.83] - 2026-06-16
 
 ### Added
