@@ -6,6 +6,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.83] - 2026-06-16
+
+### Added
+- The server web guide (`GET /`) now includes a bilingual video guides section with per-app installation walkthrough cards (Claude, Codex, Antigravity); cards with a recorded video show a YouTube thumbnail poster that opens a privacy-friendly `youtube-nocookie` embed in a lightbox modal on click, while cards without a video yet show a "coming soon" placeholder.
+- The server web guide (`GET /`) now has a sticky section navigation bar that lets readers jump between sections (How it works, What you build, Clone a page, Connect, Videos, FAQ) and highlights the active section as the page scrolls.
+
+## [1.0.82] - 2026-06-16
+
+### Added
+- `render_preview` now accepts a `tiles` parameter: pass `tiles:true` to receive the page as a stack of top-to-bottom horizontal band images instead of one full-page image squished to the model's long-edge cap, so each section is readable at full detail; requires a self-hosted Playwright host (`RENDER_SCREENSHOT_BASE`), and falls back to a single full-page image when none is configured.
+- `serve` hosts now accept `?tiles=1` (or `?tiles=true`) on the `GET /api/render/screenshot` Playwright route, returning a JSON response with a `tiles` array (each entry carrying `y`, `height`, and a base64 `data` field) instead of a raw image; `band_height` query parameter overrides the default band height per request.
+- New `RENDER_SCREENSHOT_BAND_HEIGHT` environment variable sets the default CSS-pixel band height used by the tiling engine on `serve` hosts (default 1400 px; must be ≥ 200).
+
 ## [1.0.81] - 2026-06-16
 
 ### Changed

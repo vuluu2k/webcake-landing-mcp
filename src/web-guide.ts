@@ -35,6 +35,17 @@ const GITHUB_URL = "https://github.com/vuluu2k/webcake-landing-mcp";
 const NPM_URL = "https://www.npmjs.com/package/webcake-landing-mcp";
 const DOCS_URL = `${GITHUB_URL}#readme`;
 
+// Per-app video walkthroughs for connecting the MCP, rendered as cards in the
+// guide — each card embeds the YouTube video in a 16:9 iframe. `youtube` is the
+// video ID (privacy-friendly youtube-nocookie embed). Claude has a recorded
+// walkthrough; Codex/Antigravity are placeholders (empty `youtube` → a matching
+// "coming soon" card) until their videos are published — just fill in the ID.
+const VIDEO_GUIDES: Array<{ app: string; icon: string; youtube: string }> = [
+  { app: "Claude", icon: "brain", youtube: "NY-YMbSnlOE" },
+  { app: "Codex", icon: "terminal", youtube: "" },
+  { app: "Antigravity", icon: "rocket", youtube: "" },
+];
+
 export type Lang = "vi" | "en";
 export const LANGS: Lang[] = ["vi", "en"];
 export function normalizeLang(input: string | undefined | null): Lang {
@@ -200,6 +211,10 @@ type Strings = {
   m2Sub: string;
   m2Steps: string[];
   m2Note: string;
+  videoH2: string;
+  videoSub: string;
+  videoCta: string;
+  videoSoon: string;
   afterH2: string;
   examples: Array<{ icon: string; t: string }>;
   newH2: string;
@@ -211,6 +226,7 @@ type Strings = {
   starBtn: string;
   footGuide: string;
   switchLabel: string; // name of the OTHER language, shown on the toggle
+  nav: Array<{ href: string; label: string }>; // sticky section-nav links
 };
 
 const T: Record<Lang, Strings> = {
@@ -328,6 +344,11 @@ const T: Record<Lang, Strings> = {
     ],
     m2Note:
       "⚠️ Link có chứa mã đăng nhập riêng của bạn — hãy coi như mật khẩu, đừng chia sẻ cho ai.",
+    videoH2: "Video hướng dẫn cài đặt",
+    videoSub:
+      "Xem video làm theo từng bước cho đúng ứng dụng AI bạn đang dùng.",
+    videoCta: "Xem video",
+    videoSoon: "Sắp có",
     afterH2: "Kết nối xong, bạn chỉ cần nói",
     examples: [
       {
@@ -353,6 +374,14 @@ const T: Record<Lang, Strings> = {
     starBtn: "Tặng sao trên GitHub",
     footGuide: "Hướng dẫn",
     switchLabel: "English",
+    nav: [
+      { href: "#flow", label: "Cách hoạt động" },
+      { href: "#build", label: "Tạo được gì" },
+      { href: "#clone", label: "Copy trang" },
+      { href: "#connect", label: "Kết nối" },
+      { href: "#video", label: "Video" },
+      { href: "#faq", label: "Hỏi đáp" },
+    ],
   },
   en: {
     sub: "Let AI build & edit your Webcake landing pages, just by talking to it",
@@ -468,6 +497,10 @@ const T: Record<Lang, Strings> = {
     ],
     m2Note:
       "⚠️ The link contains your personal login code — treat it like a password and never share it.",
+    videoH2: "Video install guides",
+    videoSub: "Follow a step-by-step video for the AI app you use.",
+    videoCta: "Watch video",
+    videoSoon: "Coming soon",
     afterH2: "Once connected, just say",
     examples: [
       {
@@ -493,6 +526,14 @@ const T: Record<Lang, Strings> = {
     starBtn: "Star on GitHub",
     footGuide: "Docs",
     switchLabel: "Tiếng Việt",
+    nav: [
+      { href: "#flow", label: "How it works" },
+      { href: "#build", label: "What you build" },
+      { href: "#clone", label: "Clone a page" },
+      { href: "#connect", label: "Connect" },
+      { href: "#video", label: "Videos" },
+      { href: "#faq", label: "FAQ" },
+    ],
   },
 };
 
@@ -647,11 +688,11 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
      (the toggle); [data-theme="light"] forces light even on a dark OS. */
   :root{--g:#1DB954;--g7:#178f43;--ink:#11231b;--mut:#5e6d65;--bg:#f5f9f7;--card:#ffffff;
     --line:rgba(16,40,30,.09);--shadow:0 1px 2px rgba(16,40,30,.05),0 6px 20px -12px rgba(16,40,30,.18);--code:#0e1714;
-    --ic-fg:#178f43;--btn-hover:#178f43}
+    --ic-fg:#178f43;--btn-hover:#178f43;--navbg:rgba(245,249,247,.82)}
   @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--ink:#e8f0ec;--mut:#9aaba2;--bg:#0b110e;--card:#141b17;
-    --line:rgba(255,255,255,.07);--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a;--ic-fg:#6fe79a;--btn-hover:#21c264}}
+    --line:rgba(255,255,255,.07);--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a;--ic-fg:#6fe79a;--btn-hover:#21c264;--navbg:rgba(11,17,14,.82)}}
   :root[data-theme="dark"]{--ink:#e8f0ec;--mut:#9aaba2;--bg:#0b110e;--card:#141b17;
-    --line:rgba(255,255,255,.07);--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a;--ic-fg:#6fe79a;--btn-hover:#21c264}
+    --line:rgba(255,255,255,.07);--shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -14px rgba(0,0,0,.7);--code:#070f0b;--g7:#5ee08a;--ic-fg:#6fe79a;--btn-hover:#21c264;--navbg:rgba(11,17,14,.82)}
   *{box-sizing:border-box}
   /* Smooth scrolling only AFTER first load — applied globally it makes the
      browser *animate* scroll-position restoration on reload, which reads as a
@@ -696,7 +737,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     color:var(--g7);background:rgba(29,185,84,.10);border:1px solid var(--line)}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--g);box-shadow:0 0 0 0 rgba(29,185,84,.5);animation:pulse 2s infinite}
   @keyframes pulse{70%{box-shadow:0 0 0 7px rgba(29,185,84,0)}100%{box-shadow:0 0 0 0 rgba(29,185,84,0)}}
-  h2{font-size:1.32rem;margin:46px 0 16px;font-weight:800;letter-spacing:-.01em}
+  h2{font-size:1.32rem;margin:46px 0 16px;font-weight:800;letter-spacing:-.01em;scroll-margin-top:72px}
   .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;color:var(--ic-fg);
     background:rgba(29,185,84,.11);border:1px solid var(--line);transition:transform .2s ease}
   .ic .i{width:22px;height:22px}
@@ -753,6 +794,49 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   .btn:hover{transform:translateY(-1px);background:var(--btn-hover)}
   .btn.ghost{background:var(--card);color:var(--ink);border:1px solid var(--line);box-shadow:none}
   .btn.ghost:hover{border-color:var(--g);background:var(--card)}
+  /* Video-guide cards: a 16:9 clickable poster (YouTube thumbnail + play badge)
+     that opens the video in the modal below, or a matching "coming soon"
+     placeholder — so every card lines up to the same height. */
+  .vid-head{display:flex;align-items:center;gap:11px;margin-bottom:14px}
+  .vid-head .ic{margin-bottom:0}
+  .vid-head h3{margin:0;font-size:1.04rem}
+  .vid-play,.vid-soon{aspect-ratio:16/9;border-radius:12px;overflow:hidden;width:100%}
+  .vid-play{position:relative;display:block;padding:0;cursor:pointer;background:#000;
+    border:1px solid var(--line);transition:transform .2s ease,box-shadow .2s ease}
+  .vid-play:hover{transform:translateY(-2px);box-shadow:0 12px 28px -14px rgba(16,40,30,.5)}
+  .vid-play img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;border:0}
+  .vid-play::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.18);transition:background .2s ease}
+  .vid-play:hover::after{background:rgba(0,0,0,.04)}
+  .vid-play .pbtn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:54px;height:54px;
+    border-radius:50%;background:rgba(29,185,84,.92);display:grid;place-items:center;z-index:1;
+    box-shadow:0 6px 18px -4px rgba(0,0,0,.5);transition:transform .2s ease,background .2s ease}
+  .vid-play:hover .pbtn{transform:translate(-50%,-50%) scale(1.08);background:var(--g)}
+  .vid-play .pbtn svg{width:23px;height:23px;color:#fff;margin-left:3px}
+  .vid-soon{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+    color:var(--mut);font-size:.9rem;font-weight:600;background:rgba(29,185,84,.05);border:1px dashed var(--line)}
+  .vid-soon .i{width:24px;height:24px}
+  /* Video modal (lightbox): a single overlay reused for every card's video. */
+  .modal{position:fixed;inset:0;z-index:200;display:none;align-items:center;justify-content:center;
+    padding:24px;background:rgba(4,10,7,.74);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+  .modal.open{display:flex}
+  .modal-box{position:relative;width:min(960px,100%);aspect-ratio:16/9;background:#000;border-radius:14px;
+    overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,.8)}
+  .modal-box iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .modal-x{position:absolute;top:-13px;right:-13px;width:38px;height:38px;border-radius:50%;cursor:pointer;
+    background:var(--g);color:#fff;border:2px solid #fff;display:grid;place-items:center;z-index:2;
+    box-shadow:0 4px 14px -2px rgba(0,0,0,.5)}
+  .modal-x svg{width:18px;height:18px}
+  @media(max-width:640px){.modal{padding:14px}.modal-x{top:-11px;right:-11px;width:34px;height:34px}}
+  /* Sticky section nav — pins to the top once you scroll past the hero so the
+     reader can jump to any section; horizontally scrollable on narrow screens. */
+  .nav{position:sticky;top:0;z-index:60;display:flex;gap:6px;align-items:center;overflow-x:auto;
+    margin:18px -20px 6px;padding:9px 20px;background:var(--navbg);border-bottom:1px solid var(--line);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);scrollbar-width:none}
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{flex:0 0 auto;font-size:.84rem;font-weight:600;color:var(--mut);text-decoration:none;
+    padding:7px 13px;border-radius:999px;white-space:nowrap;transition:color .15s ease,background .15s ease}
+  .nav a:hover{color:var(--g7);background:rgba(29,185,84,.10)}
+  .nav a.active{color:var(--g7);background:rgba(29,185,84,.13)}
   .uses{display:grid;gap:14px;grid-template-columns:1fr 1fr;padding:0;margin:0;list-style:none}
   @media(max-width:640px){.uses{grid-template-columns:1fr}}
   .uses li{display:flex;gap:13px;padding:16px 18px;align-items:flex-start;transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease}
@@ -887,7 +971,11 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     <a class="btn ghost" href="${GITHUB_URL}">${icon("star")} ${t.ctaStar}</a>
   </div>
 
-  <h2 class="reveal">${t.flowH2}</h2>
+  <nav class="nav" aria-label="${L === "en" ? "Sections" : "Mục lục"}">
+    ${t.nav.map((n) => `<a href="${n.href}">${n.label}</a>`).join("\n    ")}
+  </nav>
+
+  <h2 id="flow" class="reveal">${t.flowH2}</h2>
   <div class="glass flow reveal">
     ${t.flow
       .map(
@@ -911,7 +999,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
       .join("\n    ")}
   </div>
 
-  <h2 class="reveal">${t.buildH2}</h2>
+  <h2 id="build" class="reveal">${t.buildH2}</h2>
   <ul class="uses">
     ${t.uses
       .map(
@@ -921,7 +1009,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
       .join("\n    ")}
   </ul>
 
-  <h2 class="reveal">${t.cloneH2}</h2>
+  <h2 id="clone" class="reveal">${t.cloneH2}</h2>
   <p class="flow-cap reveal" style="margin-bottom:16px">${t.cloneSub}</p>
   <div class="grid">
     ${t.clone
@@ -953,6 +1041,19 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     <p class="note">${t.m2Note}</p>
   </div>
 
+  <h2 id="video" class="reveal">${t.videoH2}</h2>
+  <p class="flow-cap reveal" style="margin-bottom:16px">${t.videoSub}</p>
+  <div class="grid">
+    ${VIDEO_GUIDES.map(
+      (v) =>
+        `<div class="glass card vid reveal"><div class="vid-head">${tile(v.icon)}<h3>${v.app}</h3></div>${
+          v.youtube
+            ? `<button type="button" class="vid-play" data-yt="${v.youtube}" data-title="${v.app} — ${t.videoCta}" aria-label="${v.app} — ${t.videoCta}"><img src="https://i.ytimg.com/vi/${v.youtube}/hqdefault.jpg" alt="" loading="lazy"><span class="pbtn"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span></button>`
+            : `<div class="vid-soon">${icon("clock")}<span>${t.videoSoon}</span></div>`
+        }</div>`,
+    ).join("\n    ")}
+  </div>
+
   <h2 class="reveal">${t.afterH2}</h2>
   <ul class="feat">
     ${t.examples
@@ -980,7 +1081,7 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
       : ""
   }
 
-  <h2 class="reveal">${t.faqH2}</h2>
+  <h2 id="faq" class="reveal">${t.faqH2}</h2>
   ${faq.map((f) => `<details class="glass reveal"><summary>${f.q}</summary><p>${f.a}</p></details>`).join("\n  ")}
 
   <div class="glass star reveal">
@@ -996,6 +1097,13 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
     <a href="${NPM_URL}">${icon("package")} npm</a>
     <a href="${selfPath === "/" ? "/health" : "/health"}">Health</a>
   </footer>
+
+  <div class="modal" id="vmodal" role="dialog" aria-modal="true" aria-label="${t.videoH2}">
+    <div class="modal-box">
+      <button type="button" class="modal-x" id="vclose" aria-label="Close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      <iframe id="vframe" title="${t.videoH2}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+    </div>
+  </div>
 
 </div>
 <script>
@@ -1053,6 +1161,47 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
   // Enable smooth scrolling only after the browser has restored scroll position
   // on (re)load — applying it globally animates that restore into a jerky scroll.
   window.addEventListener('load',function(){requestAnimationFrame(function(){html.classList.add('smooth');});});
+
+  // Video lightbox — clicking a card poster opens the YouTube embed in a modal.
+  // The iframe src is only set on open (no YouTube network/tracking until the
+  // user clicks) and cleared on close (which stops playback). Esc, the backdrop
+  // and the × button all close it; focus is restored to the trigger on close.
+  var modal=document.getElementById('vmodal'),vframe=document.getElementById('vframe'),
+      vclose=document.getElementById('vclose'),lastFocus=null;
+  function openVideo(id,title){
+    if(!modal||!vframe||!id)return;
+    vframe.src='https://www.youtube-nocookie.com/embed/'+id+'?autoplay=1&rel=0';
+    if(title)vframe.title=title;
+    lastFocus=document.activeElement;
+    modal.classList.add('open');document.body.style.overflow='hidden';
+    if(vclose)vclose.focus();
+  }
+  function closeVideo(){
+    if(!modal||!modal.classList.contains('open'))return;
+    modal.classList.remove('open');vframe.src='';document.body.style.overflow='';
+    if(lastFocus&&lastFocus.focus)lastFocus.focus();
+  }
+  document.querySelectorAll('.vid-play').forEach(function(b){
+    b.addEventListener('click',function(){openVideo(b.getAttribute('data-yt'),b.getAttribute('data-title')||'');});
+  });
+  if(vclose)vclose.addEventListener('click',closeVideo);
+  if(modal)modal.addEventListener('click',function(e){if(e.target===modal)closeVideo();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeVideo();});
+
+  // Sticky-nav scrollspy — highlight the link for the section currently on screen.
+  var navLinks={};
+  document.querySelectorAll('.nav a').forEach(function(a){navLinks[a.getAttribute('href').slice(1)]=a;});
+  var spySecs=[].slice.call(document.querySelectorAll('h2[id]'));
+  var spyTick=false;
+  function spy(){
+    spyTick=false;var cur=null;
+    spySecs.forEach(function(s){if(s.getBoundingClientRect().top<=96)cur=s.id;});
+    Object.keys(navLinks).forEach(function(id){navLinks[id].classList.toggle('active',id===cur);});
+  }
+  if(spySecs.length&&Object.keys(navLinks).length){
+    window.addEventListener('scroll',function(){if(!spyTick){spyTick=true;requestAnimationFrame(spy);}},{passive:true});
+    spy();
+  }
 })();
 </script>
 </body></html>`;
