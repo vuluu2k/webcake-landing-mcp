@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-06-20
+
+### Added
+- `create_page`, `add_section`, and `validate_page` now apply a deterministic layout auto-fix before validating or saving: off-canvas children are pulled back on-canvas (left clamped to `[0, canvasW − width]`; negative `top` set to 0); wrapped `text-block` heights are resized to the estimated real rendered line count using the same font-metrics estimate the validator uses for warnings; elements sitting below a reflowed block are pushed downward to clear the spill; and parent containers are grown to contain the corrected subtree — the fix is conservative (only adds whitespace or pulls boxes inward, never moves intentionally layered elements such as badge overlays or backdrops), idempotent, and applied only to new-page tools (`update_page` and `patch_page` are intentionally excluded to avoid moving elements on existing pages).
+- Every layout correction applied by `create_page`, `add_section`, or `validate_page` is now surfaced in the new `auto_fixed` response field along with an `auto_fixed_notice` directive, replacing the previous validate→warn→`patch_page`→re-validate round-trip with zero round-trips for these two defect classes on new-page builds.
+
 ## [1.0.84] - 2026-06-17
 
 ### Added
