@@ -907,7 +907,7 @@ check(
 console.log("== expand: image-block published background derives from specials.src (placeholder seed must not win) ==");
 {
   const mk = (src: string) => ({
-    page: [{ id: "s", type: "section", responsive: { desktop: { styles: { height: 300 } }, mobile: { styles: { height: 300 } } }, children: [
+    page: [{ id: "lsec1", type: "section", responsive: { desktop: { styles: { height: 300 } }, mobile: { styles: { height: 300 } } }, children: [
       { id: "im", type: "image-block", responsive: { desktop: { styles: { top: 0, left: 0, width: 100, height: 80 } }, mobile: { styles: { top: 0, left: 0, width: 100, height: 80 } } }, specials: { src } },
     ] }], popup: [], settings: {}, options: {}, cartConfigs: {},
   });
@@ -1841,14 +1841,14 @@ console.log("== validator: pill/badge label alignment ==");
       responsive: { desktop: { styles: { height: 400 } }, mobile: { styles: { height: 400 } } },
       children: [
         {
-          id: "pill", type: "rectangle",
+          id: "pill1", type: "rectangle",
           responsive: {
             desktop: { styles: { top: 100, left: 330, width: 300, height: 36, borderRadius: "999px", background: "rgba(59,130,246,0.15)", ...pillOpts } },
             mobile: { styles: { top: 100, left: 60, width: 300, height: 36, borderRadius: "999px", background: "rgba(59,130,246,0.15)", ...pillOpts } },
           },
         },
         {
-          id: "label", type: "text-block",
+          id: "label1", type: "text-block",
           responsive: {
             desktop: { styles: { top: textTop, left: textLeft, width: textW, height: 20, fontSize: 14, fontWeight: 600, textAlign: "center", ...textOpts } },
             mobile: { styles: { top: textTop, left: textLeft - 270, width: textW, height: 20, fontSize: 14, fontWeight: 600, textAlign: "center", ...textOpts } },
@@ -2065,6 +2065,90 @@ console.log("== upload_images: localContentType (ext + magic, pure offline) ==")
   check("isAllowedScreenshotUrl: ftp rejected", !isAllowedScreenshotUrl("ftp://x.test/a").ok);
   check("isAllowedScreenshotUrl: localhost rejected", !isAllowedScreenshotUrl("http://localhost:5800/preview/1").ok);
   check("isAllowedScreenshotUrl: garbage rejected", !isAllowedScreenshotUrl("not a url").ok);
+}
+
+console.log("== autofix-layout: clamps off-canvas + reflows wrapped-text overlap (reported, idempotent) ==");
+{
+  // Hero with: a too-short H1 box whose long text WRAPS (renderer height:auto, so
+  // it spills onto the subheading right below), plus an off-canvas CTA. autofix
+  // should push the subheading down and pull the CTA back on-canvas — clearing
+  // the very warnings the validator would otherwise emit.
+  const page = {
+    page: [
+      {
+        id: "heroSec", type: "section",
+        responsive: { desktop: { styles: { height: 400, background: "rgba(17,24,39,1)" } }, mobile: { styles: { height: 400, background: "rgba(17,24,39,1)" } } },
+        children: [
+          {
+            id: "head1", type: "text-block",
+            responsive: {
+              desktop: { styles: { top: 40, left: 80, width: 300, height: 40, fontSize: 40, fontWeight: "bold", color: "rgba(255,255,255,1)" } },
+              mobile: { styles: { top: 40, left: 20, width: 380, height: 40, fontSize: 30, fontWeight: "bold", color: "rgba(255,255,255,1)" } },
+            },
+            specials: { text: "This headline is intentionally long enough to wrap onto several lines inside a narrow box", tag: "h1" },
+          },
+          {
+            id: "subh1", type: "text-block",
+            responsive: {
+              desktop: { styles: { top: 92, left: 80, width: 300, height: 24, fontSize: 16, color: "rgba(255,255,255,1)" } },
+              mobile: { styles: { top: 92, left: 20, width: 380, height: 24, fontSize: 16, color: "rgba(255,255,255,1)" } },
+            },
+            specials: { text: "Short subheading", tag: "p" },
+          },
+          {
+            id: "cta1", type: "button",
+            responsive: {
+              desktop: { styles: { top: 320, left: 900, width: 160, height: 44, background: "rgba(246,4,87,1)" } },
+              mobile: { styles: { top: 320, left: 40, width: 160, height: 44, background: "rgba(246,4,87,1)" } },
+            },
+            specials: { text: "Go" },
+          },
+        ],
+      },
+    ],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi", fontGeneral: "Roboto" },
+  };
+
+  const expanded: any = landingDomain.expand(page);
+  const subTopBefore = expanded.page[0].children[1].responsive.desktop.styles.top;
+  const fixes = landingDomain.autofixLayout!(expanded);
+  check("autofix: returns a non-empty change list", fixes.length > 0, fixes);
+
+  const subTopAfter = expanded.page[0].children[1].responsive.desktop.styles.top;
+  check("autofix: pushed the subheading below the wrapped headline", subTopAfter > subTopBefore, { subTopBefore, subTopAfter });
+  const ctaLeftAfter = expanded.page[0].children[2].responsive.desktop.styles.left;
+  check("autofix: pulled the off-canvas CTA on-canvas (left+width ≤ 960)", ctaLeftAfter + 160 <= 960, ctaLeftAfter);
+
+  const post = validatePage(expanded);
+  check("autofix: result still validates", post.valid, post.errors);
+  check("autofix: cleared the wrapped-text spill + off-canvas warnings", !post.warnings.some((w) => /spill onto|exceeds canvas/.test(w)), post.warnings);
+
+  // Idempotent: a second pass over the fixed tree changes nothing.
+  const fixes2 = landingDomain.autofixLayout!(expanded);
+  check("autofix: idempotent (second pass is a no-op)", fixes2.length === 0, fixes2);
+
+  // No-op on an already-correct page (the canonical `good` fixture).
+  const cleanFixes = landingDomain.autofixLayout!(landingDomain.expand(good));
+  check("autofix: no changes on an already-valid page", cleanFixes.length === 0, cleanFixes);
+
+  // Intentional layering (a label declared INSIDE a pill rectangle's box) is NOT
+  // treated as an overlap to reflow.
+  const layered = {
+    page: [
+      {
+        id: "lsec1", type: "section",
+        responsive: { desktop: { styles: { height: 300, background: "rgba(255,255,255,1)" } }, mobile: { styles: { height: 300, background: "rgba(255,255,255,1)" } } },
+        children: [
+          { id: "pill1", type: "rectangle", responsive: { desktop: { styles: { top: 40, left: 80, width: 160, height: 36, background: "rgba(0,88,188,1)", borderRadius: "18px" } }, mobile: { styles: { top: 40, left: 20, width: 160, height: 36, background: "rgba(0,88,188,1)", borderRadius: "18px" } } }, specials: {} },
+          { id: "label1", type: "text-block", responsive: { desktop: { styles: { top: 48, left: 96, width: 130, height: 20, fontSize: 14, color: "rgba(255,255,255,1)", textAlign: "center" } }, mobile: { styles: { top: 48, left: 36, width: 130, height: 20, fontSize: 14, color: "rgba(255,255,255,1)", textAlign: "center" } } }, specials: { text: "NEW", tag: "span" } },
+        ],
+      },
+    ],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi", fontGeneral: "Roboto" },
+  };
+  const layExp: any = landingDomain.expand(layered);
+  landingDomain.autofixLayout!(layExp);
+  check("autofix: leaves intentional layering (label over pill) in place", layExp.page[0].children[1].responsive.desktop.styles.top === 48, layExp.page[0].children[1].responsive.desktop.styles);
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

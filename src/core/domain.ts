@@ -58,6 +58,16 @@ export interface Domain {
   /** The canonical JSON Schema (Draft 2020-12) for this domain's source. */
   schema: object;
   /**
+   * Optional: deterministically fix the layout defects this domain can resolve
+   * without guessing intent — applied IN PLACE to an already-`expand`ed source
+   * (off-canvas boxes pulled on-canvas, elements below wrapped text pushed down
+   * to clear the spill, containers grown to fit). Returns a human-readable list
+   * of every change so the correction is transparent. Run AFTER expand and
+   * BEFORE validate/persist; idempotent (a second pass is a no-op). A domain
+   * without auto-fixable geometry omits it; the tools call it optionally.
+   */
+  autofixLayout?(input: unknown): string[];
+  /**
    * Optional: deterministically rebuild a parsed absolute-canvas builder export
    * (the `canvas` payload from the ingest tools — LadiPage-family / Webcake-
    * published HTML) into a ready-to-save source for THIS domain. A domain that
