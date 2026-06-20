@@ -21,6 +21,7 @@ import { createPageSource } from "./page.js";
 import { canvasToPageSource } from "./canvas-to-source.js";
 import type { IngestedCanvas } from "../../persistence/html-ingest.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
+import { autofixLayout } from "./autofix-layout.js";
 import { expandSource } from "../../core/expand.js";
 import { compactSource } from "../../core/compact.js";
 
@@ -282,5 +283,14 @@ export const landingDomain: Domain = {
     }
   },
   schema: pageSchema,
+  // Applies the deterministic layout fixes IN PLACE to an already-expanded tree
+  // (off-canvas clamp + wrapped-text downward reflow) and returns the change log.
+  autofixLayout: (input) => {
+    try {
+      return autofixLayout(input);
+    } catch {
+      return []; // never let a layout-fix corner case block the build
+    }
+  },
   canvasToSource: (canvas, meta) => canvasToPageSource(canvas as IngestedCanvas, meta),
 };

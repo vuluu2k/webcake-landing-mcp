@@ -12,7 +12,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
-import { text, warningsField } from "../mcp/response.js";
+import { text, warningsField, autoFixedField } from "../mcp/response.js";
 import { readConfig, configFromHeaders } from "../persistence/config.js";
 import {
   buildRequestRedacted,
@@ -101,7 +101,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 9) Create page (persist) --------------------------------------------------
   server.tool(
     "create_page",
-    "Persists a page source to the configured Webcake backend: creates a NEW page, saves the source, then AUTO-PUBLISHES it (builds the rendered app on the build host + publishes via the editor's publish_html route) so the preview renders immediately — set publish:false to skip, and note the no-domain preview link still expires ~10 minutes after each publish (publish_page with custom_domain gives a permanent URL). A failed auto-publish never fails the create (result.publish says how to retry). Validates first. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. Organization resolution on the real run (dry_run=false): (1) explicit organization_id wins; pass the string 'personal' to save without any org. (2) WEBCAKE_ORG_ID env / x-webcake-org-id header wins. (3) Otherwise list_organizations is called: 0 orgs or lookup fails → personal (no org); exactly 1 org → used automatically (result includes organization_auto_selected:true); 2+ orgs → returns ok:false with the org list and asks the caller to re-call with organization_id. Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Persists a page source to the configured Webcake backend: creates a NEW page, saves the source, then AUTO-PUBLISHES it (builds the rendered app on the build host + publishes via the editor's publish_html route) so the preview renders immediately — set publish:false to skip, and note the no-domain preview link still expires ~10 minutes after each publish (publish_page with custom_domain gives a permanent URL). A failed auto-publish never fails the create (result.publish says how to retry). Auto-fixes the deterministically-resolvable layout defects first (off-canvas boxes pulled on-canvas; elements below wrapped text pushed down to clear the spill; containers grown to fit) and reports them in auto_fixed — so the saved tree is corrected without a patch round-trip. Then validates. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. Organization resolution on the real run (dry_run=false): (1) explicit organization_id wins; pass the string 'personal' to save without any org. (2) WEBCAKE_ORG_ID env / x-webcake-org-id header wins. (3) Otherwise list_organizations is called: 0 orgs or lookup fails → personal (no org); exactly 1 org → used automatically (result includes organization_auto_selected:true); 2+ orgs → returns ok:false with the org list and asks the caller to re-call with organization_id. Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       source: z
         .any()
@@ -168,6 +168,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const draftOrgId = cachedDraft?.organization_id;
       const orgId = explicitOrgId ?? draftOrgId;
 
+      // Deterministic layout auto-fix (off-canvas clamp + wrapped-text reflow)
+      // BEFORE validate/persist, so the saved tree is the corrected one and the
+      // dominant validate→patch→re-validate loop is skipped for those defects.
+      // Mutates `expanded` in place — the draft cached below is the fixed tree.
+      const autoFixed = domain.autofixLayout?.(expanded) ?? [];
+
       const result = domain.validate(expanded);
       if (!result.valid) {
         // Cache the failed source so the model can fix ONLY the broken elements via
@@ -182,6 +188,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           created: false,
           reason: "validation_failed",
           errors: result.errors,
+          ...autoFixedField(autoFixed),
           ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
@@ -225,6 +232,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         return text({
           dry_run: true,
           validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
+          ...autoFixedField(autoFixed),
           ...(largePageAdvisory ? { large_page_advisory: largePageAdvisory } : {}),
           env_ready: missing.length === 0,
           missing_env: missing,
@@ -334,6 +342,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           created: true,
           ...outcome,
           publish: publishOutcome,
+          ...autoFixedField(autoFixed),
           ...warningsField(result.warnings),
           ...(organizationAutoSelected ? { organization_auto_selected: true } : {}),
           ...(organizationNote ? { note: organizationNote } : {}),
@@ -688,6 +697,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         expandedShell = domain.expand(shell);
       }
 
+      // Same deterministic layout auto-fix as create_page, on the section shell
+      // (off-canvas clamp + wrapped-text reflow) before validate/append.
+      const autoFixed = domain.autofixLayout?.(expandedShell) ?? [];
+
       const newSections = Array.isArray(expandedShell?.page) ? expandedShell.page : [];
       const labels = newSections.map(sectionLabel);
 
@@ -711,6 +724,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           added: false,
           reason: "validation_failed",
           errors: result.errors,
+          ...autoFixedField(autoFixed),
           ...warningsField(result.warnings),
           draft_id: existingDraftId,
           hint:
@@ -742,6 +756,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           sections_added: newSections.length,
           section_labels: labels,
           validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
+          ...autoFixedField(autoFixed),
           draft_id: existingDraftId,
           request: buildAppendRequestRedacted(config, page_id, newSections),
           note: "The backend appends these to the END of `page` and rejects duplicate element ids across the live tree.",
@@ -775,6 +790,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           status: outcome.status,
           error: outcome.error,
           ...(outcome.rehost ? { rehost: outcome.rehost } : {}),
+          ...autoFixedField(autoFixed),
           ...warningsField(result.warnings),
           ...(outcome.ok ? {} : {
             draft_id: existingDraftId,

@@ -53,3 +53,17 @@ export const WARNINGS_NOTICE =
 export function warningsField(warnings: string[] | undefined) {
   return warnings && warnings.length > 0 ? { warnings, warnings_notice: WARNINGS_NOTICE } : {};
 }
+
+/**
+ * Directive shipped alongside an auto-fix change list. Unlike warnings, these
+ * defects were ALREADY corrected deterministically on this call (positions /
+ * heights changed in the saved tree), so the model needs no action — just
+ * awareness that coordinates moved.
+ */
+export const AUTO_FIXED_NOTICE =
+  "These layout defects were auto-corrected on this call (off-canvas boxes pulled on-canvas; elements below wrapped text pushed down to clear the spill; containers grown to fit). The new coordinates/heights are what got validated and saved — no action needed. If you re-emit this source later, keep these positions (or re-fetch with get_page) rather than reverting to the originals.";
+
+/** Spread helper: {} when nothing was auto-fixed, else { auto_fixed, auto_fixed_notice }. */
+export function autoFixedField(autoFixed: string[] | undefined) {
+  return autoFixed && autoFixed.length > 0 ? { auto_fixed: autoFixed, auto_fixed_notice: AUTO_FIXED_NOTICE } : {};
+}

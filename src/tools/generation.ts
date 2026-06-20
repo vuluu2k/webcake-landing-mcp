@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
 import { sparseTemplate } from "../core/compact.js";
-import { text, warningsField } from "../mcp/response.js";
+import { text, warningsField, autoFixedField } from "../mcp/response.js";
 
 export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 5) New element ------------------------------------------------------------
@@ -54,7 +54,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 7) Validate page ----------------------------------------------------------
   server.tool(
     "validate_page",
-    "Validates a page source against the schema + semantic rules (unique ids, dangling event targets, children only on containers, missing field_name, top-level types) plus form-data bindings (duplicate field_name within one form, dangling option-event promoId / connectedSurvey / connectedForm / set_field_value targets). Returns errors (blocking — fix before persisting) and warnings (visible design defects — fix these too and re-validate to an empty list; only a demonstrably false positive may remain).",
+    "Validates a page source against the schema + semantic rules (unique ids, dangling event targets, children only on containers, missing field_name, top-level types) plus form-data bindings (duplicate field_name within one form, dangling option-event promoId / connectedSurvey / connectedForm / set_field_value targets). FIRST auto-fixes the layout defects that can be resolved deterministically (off-canvas boxes pulled on-canvas; elements below wrapped text pushed down to clear the spill — the same corrections create_page/add_section apply on save) and reports them in auto_fixed. Then returns errors (blocking — fix before persisting) and warnings (visible design defects — fix these too and re-validate to an empty list; only a demonstrably false positive may remain).",
     {
       page: z
         .any()
@@ -64,8 +64,12 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
     async ({ page }) => {
       // Hydrate sparse nodes (the model may omit boilerplate) before validating,
       // so what we check is the same full tree that create_page/add_section persist.
-      const result = domain.validate(domain.expand(page));
-      return text({ ...result, ...warningsField(result.warnings) });
+      const expanded = domain.expand(page);
+      // Apply the same deterministic layout auto-fix create_page/add_section run,
+      // so validate reflects (and reports) the tree that would actually be saved.
+      const autoFixed = domain.autofixLayout?.(expanded) ?? [];
+      const result = domain.validate(expanded);
+      return text({ ...result, ...autoFixedField(autoFixed), ...warningsField(result.warnings) });
     }
   );
 }
