@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-21
+
+### Added
+- New `layout` tool computes exact `top/left/width/height` coordinates for both breakpoints so the model never hand-calculates `left`/`top` (the number-one source of off-center defects); four modes — `center` (one box centered on the canvas), `row` (N boxes in a horizontally-centered desktop row that auto-stacks into a single mobile column), `grid` (N uniform cells in `cols` columns, block-centered; stacks on mobile), and `stack` (a vertical list down the shared content column on both breakpoints) — honour the page-margin axis (content column 80..880 desktop / 20..400 mobile by default), support 960/1200 and 420/360 canvases, accept left/right alignment, and flag off-canvas or over-wide inputs in `notes`; the tool is pure math with no network or environment requirement.
+
+### Fixed
+- The MCP `serverInfo.version` field reported a hard-coded `"1.0.0"` to all clients regardless of the installed package version; it now reads the real version from `package.json` at runtime, so MCP clients and the connector registry always see the correct version.
+
 ## [1.1.0] - 2026-06-20
 
 ### Added
