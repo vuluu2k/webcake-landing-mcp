@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-06-21
+
+### Changed
+- Server instructions and `get_generation_guide` now restrict the visual-check step to three explicit triggers — cloning a reference to compare pixel fidelity, the user explicitly asking to see or verify the look, or a specific aesthetic doubt that `validate_page` cannot judge — so the model no longer screenshots by default after every build; when a screenshot is warranted, a single shot replaces the previous two-to-three-round loop, reducing unnecessary token use and round-trip latency on ordinary page builds.
+
 ## [1.2.0] - 2026-06-21
 
 ### Added
