@@ -10,8 +10,10 @@ import {
   ELEMENT_TYPES,
   ELEMENTS,
 } from "./domains/landing/elements/index.js";
+import { readFileSync } from "node:fs";
 import { landingDomain } from "./domains/landing/index.js";
 import { computeLayout } from "./domains/landing/layout.js";
+import { pkgVersion } from "./server.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
@@ -2184,6 +2186,13 @@ console.log("== layout: exact centering/row/grid/stack coordinates (both breakpo
   const rightWide = computeLayout({ mode: "row", count: 2, itemWidth: 300, itemHeight: 120, gap: 40, canvasDesktop: 1200, align: "right", marginDesktop: 80 });
   const lastRight = rightWide.desktop[1].left + rightWide.desktop[1].width;
   check("layout: align right ends at canvas − margin (1200 − 80 = 1120)", lastRight === 1120, { lastRight, desktop: rightWide.desktop });
+}
+
+console.log("== server: MCP serverInfo.version follows package.json (no hardcoded constant) ==");
+{
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  check("server: pkgVersion() equals package.json version", pkgVersion() === pkg.version, { pkgVersion: pkgVersion(), pkg: pkg.version });
+  check("server: version is semver-shaped", /^\d+\.\d+\.\d+/.test(pkgVersion()), pkgVersion());
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);
