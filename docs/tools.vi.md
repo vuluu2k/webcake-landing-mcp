@@ -58,6 +58,16 @@ validate_page({ source })
 
 `validate_page` **errors là chặn**; warnings (chữ tràn đè phần tử bên dưới, vượt canvas, dải trống cuối section, event target lửng lơ, thiếu `field_name`) không chặn lưu nhưng là **lỗi hiển thị phải sửa** — mọi response có warnings đều kèm `warnings_notice` yêu cầu model sửa và validate lại đến khi danh sách rỗng (chỉ được giữ lại warning chứng minh được là false positive).
 
+### Bước 4b: Toạ độ layout chính xác — `layout`
+
+```
+# Toán căn giữa / hàng / lưới / xếp chồng cho CẢ HAI breakpoint — không tính tay left/top.
+layout({ mode: "row", count: 3, itemWidth: 250, itemHeight: 200, gap: 24, top: 80 })
+→ { desktop: [ {top,left,width,height}, … ], mobile: [ … ], summary, notes }
+```
+
+`layout` trả về `top/left/width/height` chính xác cho từng item trên desktop VÀ mobile, theo đúng thứ tự bạn truyền vào — thả thẳng mỗi box vào `responsive.<bp>.styles` của element. Mode: **center** (một box), **row** (hàng ngang → tự xếp chồng thành một cột trên mobile), **grid** (`cols`×hàng → xếp chồng trên mobile), **stack** (danh sách dọc). Tôn trọng trục page-margin (cột nội dung 80..880 desktop / 20..400 mobile) và cảnh báo input vượt canvas / quá rộng trong `notes`. Toán thuần, không cần env. `create_page` vẫn auto-fix off-canvas/overlap còn sót, nhưng `layout` cho hình học đúng ý ngay từ đầu.
+
 ### Bước 5: Lưu — `list_organizations` / `create_page` / `update_page`
 
 ```

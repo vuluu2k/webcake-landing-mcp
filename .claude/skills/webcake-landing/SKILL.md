@@ -1,6 +1,6 @@
 ---
 name: webcake-landing
-description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 22 tools, intake questions, and the create/edit workflow with organization targeting, reference-input ingest, and dry-run safety.
+description: Generate and edit Webcake landing pages from a requirement using the webcake-landing MCP tools. Covers the page-source model, the 23 tools, intake questions, and the create/edit workflow with organization targeting, reference-input ingest, and dry-run safety.
 metadata:
   author: Vũ Lưu
   version: "2026.06.05"
@@ -13,11 +13,13 @@ metadata:
 > `page_source` from a brief, and to edit existing pages. The same rules are served at
 > runtime via the server `instructions` (src/domains/landing/instructions.ts) — this skill is the long form.
 
-## Tools (20)
+## Tools (21)
 
 Reference/validation (no backend/env needed):
 `get_generation_guide`, `list_elements`, `get_element`, `new_element`,
-`new_page_skeleton`, `get_page_schema`, `validate_page`.
+`new_page_skeleton`, `get_page_schema`, `validate_page`, `layout` (exact
+centering/row/grid/stack coordinates for BOTH breakpoints — call it instead of
+hand-computing `left`/`top`; row/grid auto-stack on mobile).
 
 Media (works out of the box; no Webcake credentials required for either tool):
 `search_images` — real stock photos, ONLY for image slots with NO source image (nothing supplied by the user, nothing in the reference HTML/URL); returns hotlinkable URLs (`src.large` hero, `src.medium` card) to drop into an image element's `specials.src`. Works out of the box via a shared proxy; optional own key via `PEXELS_API_KEY` env / `x-pexels-key` header — free at https://www.pexels.com/api/. On `ok:false` (or no fitting photo) → find a real image yourself via web search/fetch and re-host it with `upload_images`; `https://placehold.co/<w>x<h>` is the LAST resort only after both fail.

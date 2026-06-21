@@ -59,6 +59,16 @@ validate_page({ source })
 
 `validate_page` **errors are blocking**; warnings (text spilling onto the element below, off-canvas bounds, empty bands, dangling event target, missing `field_name`) don't block the save but are **visible defects the agent must fix too** — every response carrying warnings includes a `warnings_notice` directive telling the model to fix and re-validate until the list is empty (only a demonstrably false positive may remain).
 
+### Step 4b: Exact layout coordinates — `layout`
+
+```
+# Centering / row / grid / stack math for BOTH breakpoints — no hand-computed left/top.
+layout({ mode: "row", count: 3, itemWidth: 250, itemHeight: 200, gap: 24, top: 80 })
+→ { desktop: [ {top,left,width,height}, … ], mobile: [ … ], summary, notes }
+```
+
+`layout` returns the exact `top/left/width/height` for each item on desktop AND mobile, in the order you passed them — drop each box straight into an element's `responsive.<bp>.styles`. Modes: **center** (one box), **row** (horizontal row → auto-stacks into one mobile column), **grid** (`cols`×rows → stacks on mobile), **stack** (vertical list). It honours the page-margin axis (content column 80..880 desktop / 20..400 mobile) and flags off-canvas / over-wide inputs in `notes`. Pure math, no env. `create_page` still auto-fixes any residual off-canvas/overlap, but `layout` gets the intended geometry right up front.
+
 ### Step 5: Persist — `list_organizations` / `create_page` / `update_page`
 
 ```

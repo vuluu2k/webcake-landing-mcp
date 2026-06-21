@@ -72,4 +72,43 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
       return text({ ...result, ...autoFixedField(autoFixed), ...warningsField(result.warnings) });
     }
   );
+
+  // 7b) Layout coordinates -----------------------------------------------------
+  server.tool(
+    "layout",
+    "Computes EXACT on-canvas coordinates (top/left/width/height) for a group of elements, for BOTH breakpoints, following the guide's layout math — so you NEVER hand-compute `left`/`top` (the #1 source of off-center defects) or write a script to do it. Drop the returned boxes straight into each element's responsive.<bp>.styles (results are in the same order you passed items). Four modes: 'center' (one box centered on the canvas); 'row' (N boxes in a horizontally-centered row on desktop that STACK into a single mobile column — feature cards / stats / logo strip); 'grid' (N uniform cells in `cols` columns, block centered; stacks on mobile); 'stack' (a vertical list down the shared content column on both breakpoints). Honours the page-margin axis (content column 80..880 desktop / 20..400 mobile by default). Pure math — no env, no network. `notes` flags off-canvas / over-wide inputs.",
+    {
+      mode: z.enum(["center", "row", "grid", "stack"]).describe("Layout pattern. center=one box; row=horizontal row (stacks on mobile); grid=cols×rows (stacks on mobile); stack=vertical list."),
+      items: z
+        .array(z.object({ width: z.number(), height: z.number() }))
+        .optional()
+        .describe("Explicit per-item sizes in order (row/stack may vary sizes). Provide this OR count+itemWidth+itemHeight."),
+      count: z.number().int().positive().optional().describe("Uniform shortcut: number of identical boxes (use with itemWidth/itemHeight)."),
+      itemWidth: z.number().optional().describe("Uniform item width (with count)."),
+      itemHeight: z.number().optional().describe("Uniform item height (with count)."),
+      gap: z.number().optional().describe("Horizontal gap between row/grid items (px). Default 24."),
+      rowGap: z.number().optional().describe("Vertical gap between grid rows / stacked items (px). Default = gap."),
+      cols: z.number().int().positive().optional().describe("Grid columns. Default min(itemCount, 3)."),
+      top: z.number().optional().describe("Desktop start y inside the section (px). Default 0."),
+      mobileTop: z.number().optional().describe("Mobile start y (px). Default = top."),
+      canvasDesktop: z.number().optional().describe("Desktop canvas width. Default 960 (use 1200 for wide pages)."),
+      canvasMobile: z.number().optional().describe("Mobile canvas width. Default 420 (use 360 to match a narrow design)."),
+      marginDesktop: z.number().optional().describe("Desktop page margin / content inset. Default 80."),
+      marginMobile: z.number().optional().describe("Mobile page margin / content inset. Default 20."),
+      align: z.enum(["center", "left", "right"]).optional().describe("Horizontal alignment of the block within the canvas. Default center."),
+      mobileItemWidth: z.number().optional().describe("Stacked-mobile item width (row/grid). Default = mobile content width."),
+    },
+    { title: "Compute Layout Coordinates", readOnlyHint: true, openWorldHint: false },
+    async (opts) => {
+      if (!domain.computeLayout) {
+        return text({ error: "This domain does not provide layout coordinates." });
+      }
+      if (!opts.items?.length && !(opts.count && (opts.itemWidth != null || opts.itemHeight != null))) {
+        return text({
+          error: "Provide either `items` (an array of {width,height}) or `count` + `itemWidth` + `itemHeight`.",
+        });
+      }
+      return text(domain.computeLayout(opts));
+    }
+  );
 }
