@@ -10,7 +10,10 @@ import {
   ELEMENT_TYPES,
   ELEMENTS,
 } from "./domains/landing/elements/index.js";
+import { readFileSync } from "node:fs";
 import { landingDomain } from "./domains/landing/index.js";
+import { computeLayout } from "./domains/landing/layout.js";
+import { pkgVersion } from "./server.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
@@ -2149,6 +2152,47 @@ console.log("== autofix-layout: clamps off-canvas + reflows wrapped-text overlap
   const layExp: any = landingDomain.expand(layered);
   landingDomain.autofixLayout!(layExp);
   check("autofix: leaves intentional layering (label over pill) in place", layExp.page[0].children[1].responsive.desktop.styles.top === 48, layExp.page[0].children[1].responsive.desktop.styles);
+}
+
+console.log("== layout: exact centering/row/grid/stack coordinates (both breakpoints) ==");
+{
+  // center one box: left = round((canvas - w)/2) on each breakpoint.
+  const c = computeLayout({ mode: "center", itemWidth: 300, itemHeight: 80, count: 1 });
+  check("layout center: desktop left = (960-300)/2 = 330", c.desktop[0].left === 330 && c.desktop[0].width === 300, c.desktop[0]);
+  check("layout center: mobile left = (420-300)/2 = 60", c.mobile[0].left === 60 && c.mobile[0].width === 300, c.mobile[0]);
+
+  // row of 3 (200×150, gap 24, top 100): block 648 centered → startLeft 156.
+  const row = computeLayout({ mode: "row", count: 3, itemWidth: 200, itemHeight: 150, gap: 24, top: 100 });
+  check("layout row: 3 desktop boxes equally spaced from centered start", row.desktop.map((b) => b.left).join(",") === "156,380,604", row.desktop.map((b) => b.left));
+  check("layout row: all desktop tops = 100", row.desktop.every((b) => b.top === 100), row.desktop);
+  check("layout row: mobile stacks single-column (full content width, left 20)", row.mobile.every((b) => b.left === 20 && b.width === 380), row.mobile);
+  check("layout row: mobile tops accumulate height+gap (100, 274, 448)", row.mobile.map((b) => b.top).join(",") === "100,274,448", row.mobile.map((b) => b.top));
+
+  // grid 2×2 (250×200, gap 24, cols 2): block 524 centered → startLeft 218.
+  const grid = computeLayout({ mode: "grid", count: 4, itemWidth: 250, itemHeight: 200, gap: 24, cols: 2, top: 0 });
+  check("layout grid: row 0 at top 0 (left 218, 492)", grid.desktop[0].top === 0 && grid.desktop[0].left === 218 && grid.desktop[1].left === 492, grid.desktop.slice(0, 2));
+  check("layout grid: row 1 at top 224 (200 + 24 rowGap)", grid.desktop[2].top === 224 && grid.desktop[3].top === 224, grid.desktop.slice(2));
+
+  // stack (left-aligned at margin 80, cumulative tops with rowGap 24).
+  const stack = computeLayout({ mode: "stack", items: [{ width: 800, height: 60 }, { width: 800, height: 120 }], top: 40, align: "left" });
+  check("layout stack: first at margin 80 / top 40", stack.desktop[0].left === 80 && stack.desktop[0].top === 40, stack.desktop[0]);
+  check("layout stack: second top = 40 + 60 + 24 = 124", stack.desktop[1].top === 124, stack.desktop[1]);
+
+  // guardrails: an over-wide row is flagged (and would be off-canvas left).
+  const wide = computeLayout({ mode: "row", count: 5, itemWidth: 200, itemHeight: 100, gap: 24 });
+  check("layout: over-wide row produces a note", wide.notes.some((n) => /exceeds|outside/.test(n)), wide.notes);
+
+  // 1200-canvas + right alignment: block hugs the right margin.
+  const rightWide = computeLayout({ mode: "row", count: 2, itemWidth: 300, itemHeight: 120, gap: 40, canvasDesktop: 1200, align: "right", marginDesktop: 80 });
+  const lastRight = rightWide.desktop[1].left + rightWide.desktop[1].width;
+  check("layout: align right ends at canvas − margin (1200 − 80 = 1120)", lastRight === 1120, { lastRight, desktop: rightWide.desktop });
+}
+
+console.log("== server: MCP serverInfo.version follows package.json (no hardcoded constant) ==");
+{
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  check("server: pkgVersion() equals package.json version", pkgVersion() === pkg.version, { pkgVersion: pkgVersion(), pkg: pkg.version });
+  check("server: version is semver-shaped", /^\d+\.\d+\.\d+/.test(pkgVersion()), pkgVersion());
 }
 
 console.log(`\n${failures === 0 ? "ALL GOOD" : failures + " FAILURE(S)"}`);

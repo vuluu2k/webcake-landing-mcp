@@ -68,6 +68,14 @@ export interface Domain {
    */
   autofixLayout?(input: unknown): string[];
   /**
+   * Optional: compute exact on-canvas coordinates (top/left/width/height for
+   * BOTH breakpoints) for a layout pattern — the centering / row / grid / stack
+   * math the guide prescribes — so the model gets perfect geometry instead of
+   * hand-computing `left`/`top` (the #1 source of off-center defects). Opts and
+   * result are domain-defined geometry; the `layout` tool forwards them verbatim.
+   */
+  computeLayout?(opts: unknown): unknown;
+  /**
    * Optional: deterministically rebuild a parsed absolute-canvas builder export
    * (the `canvas` payload from the ingest tools — LadiPage-family / Webcake-
    * published HTML) into a ready-to-save source for THIS domain. A domain that
