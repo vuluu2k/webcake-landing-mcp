@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-17
+
+### Added
+- `upload_images` and the automatic image re-hosting on `create_page`, `update_page`, `add_section`, and `patch_page` now file uploaded images into the organization's media collection (bộ sưu tập) — the same library the editor's media picker reads — creating an `Asset` row so images are re-pickable in the editor, instead of only pushing bytes to the public CDN; the response marks these entries `collection:true` with their `asset_id` (`upload_images`) or `rehost.collection`/`rehost.collection_org_id` (the save path).
+- `upload_images` gains `in_folder` and `organization_id` parameters to target a specific collection folder or a specific organization's collection.
+
+### Changed
+- `upload_images` now requires the organization to be settled before filing into a collection: with 2+ organizations and none chosen it returns `ok:false` with `reason:"organization_required"` plus the organization list, mirroring `create_page`; an account with exactly one organization still auto-selects it, and accounts with no credentials keep falling back to the public CDN endpoint unchanged.
+- Images uploaded via the collection route are now named after their source URL/filename instead of a generic `upload.<ext>` name.
+- Server instructions now ask the user to approve the server's tools once, up front, during intake (to avoid a per-call permission prompt interrupting a page build), and move settling the target organization via `list_organizations` to the start of intake, before any image or page-building work.
+
 ## [1.2.1] - 2026-06-21
 
 ### Changed
