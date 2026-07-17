@@ -187,7 +187,7 @@ server, the `login` browser flow (+ backend contract), and how to grab a JWT by 
 |-------|-------|-------|
 | **Reference** | `get_generation_guide` · `list_elements` · `get_element` · `get_page_schema` | nothing |
 | **Generation** | `new_element` · `new_page_skeleton` · `validate_page` · `layout` (exact centering/row/grid/stack coordinates, both breakpoints) | nothing |
-| **Media** | `search_images` (real Pexels stock photos) · `get_icon_svg` (Material Symbols / Font Awesome icon names → inline SVG via Iconify) · `upload_images` (re-host external images, data: URIs, or local file paths from the user's machine) · `render_preview` (screenshot a page/URL so the model can see + compare it) | nothing |
+| **Media** | `search_images` (real Pexels stock photos) · `get_icon_svg` (Material Symbols / Font Awesome icon names → inline SVG via Iconify) · `upload_images` (re-host external images, data: URIs, or local file paths from the user's machine — files into your media collection when Webcake creds **and** an org are available; the org is required and must match the page's, so settle it up front — 1 org auto-selects, 2+ with none chosen returns `organization_required` + the list; no JWT → the public CDN) · `render_preview` (screenshot a page/URL so the model can see + compare it) | nothing |
 | **Ingest** | `ingest_html` · `ingest_url` (recreate an existing page) | nothing |
 | **Persistence** | `list_organizations` · `create_page` · `list_pages` · `find_pages` · `get_page` · `update_page` · `add_section` · `patch_page` · `publish_page` | `WEBCAKE_API_BASE` + `WEBCAKE_JWT` |
 

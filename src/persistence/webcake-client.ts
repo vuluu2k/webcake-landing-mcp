@@ -38,6 +38,30 @@ function timeoutOrNetworkError(url: string, e: any): { ok: false; status: number
 }
 
 const UPLOAD_FILE_ENDPOINT = "/external/upload_file";
+/**
+ * The builder's OWN media-library upload (AssetsController.upload, router scope
+ * `host: "builder."` → `/api/persona/upload`, piped through :org_check). This is
+ * the "bộ sưu tập" route the editor's media picker calls. Unlike the public
+ * /external/upload_file — which only PUTs bytes to S3 and hands back a CDN URL —
+ * this one also creates the `Image` row AND the `Asset` row in the org's folder,
+ * so the image shows up in the user's collection and can be re-picked later.
+ * Requires a JWT and an `x-org-id` (the controller drops the asset in the org
+ * folder resolved by :org_check; with no org it cannot file the asset).
+ */
+const ASSET_UPLOAD_ENDPOINT = "/api/persona/upload";
+/**
+ * The org's folder listing (AssetsController.get_all_folders_organization_by_type,
+ * builder host, behind :org_check). Needed because `AssetsController.upload`
+ * defaults `folder_id` to the account's PERSONA folder — sending only `x-org-id`
+ * would stamp the asset `organization_id: <org>` while filing it in the personal
+ * folder, and the collection listings query by `folder_id`, so the image would
+ * surface in neither. The editor avoids this by resolving the org's ROOT folder
+ * (`type == -1`) and posting it as `in_folder` (builderx_spa: landingLibrary.js
+ * `folders.find(f => f.type == -1)` → personalApi.upload). We mirror that.
+ */
+const ORG_FOLDERS_ENDPOINT = "/api/organization/folders/all";
+/** The org root folder's `type` discriminator in the folder listing. */
+const ORG_ROOT_FOLDER_TYPE = -1;
 const BUILD_ENDPOINT = "/render/build";
 const CREATE_ENDPOINT = "/api/v1/ai/create_page_from_source";
 /**
@@ -219,7 +243,12 @@ export async function createPage(
 ): Promise<CreateOutcome> {
   // Host external image URLs to the Webcake CDN before storing, so a clone never
   // keeps hotlinked/expiring source URLs. Failures keep the original URL.
-  const { source: hostedSource, report: rehost } = await rehostSourceImages(config.base, source);
+  // `orgId` is the org resolved for THIS create and outranks config.orgId, so the
+  // images are filed into the same collection the page itself lands in.
+  const { source: hostedSource, report: rehost } = await rehostSourceImages(
+    orgId ? { ...config, orgId } : config,
+    source
+  );
   const req = buildRequest(config, name, hostedSource, orgId);
   let res: Response;
   try {
@@ -374,7 +403,7 @@ export async function appendSection(
   sections: unknown
 ): Promise<CreateOutcome & { endpoint_missing?: boolean; section_count?: number; sections_added?: number }> {
   const url = `${config.base}${APPEND_ENDPOINT}`;
-  const { source: hostedSections, report: rehost } = await rehostSourceImages(config.base, sections);
+  const { source: hostedSections, report: rehost } = await rehostSourceImages(config, sections);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -429,7 +458,7 @@ export async function updatePageSource(
   source: unknown
 ): Promise<CreateOutcome> {
   const url = `${config.base}${UPDATE_ENDPOINT}`;
-  const { source: hostedSource, report: rehost } = await rehostSourceImages(config.base, source);
+  const { source: hostedSource, report: rehost } = await rehostSourceImages(config, source);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -745,6 +774,201 @@ export async function uploadImageMultipart(
   return { ok: true, url: hostedUrl, status: res.status };
 }
 
+/**
+ * Upload an image into the account's MEDIA COLLECTION (bộ sưu tập) via the
+ * builder's own media route — the same one the editor's media picker uses.
+ * Creates the Image + Asset rows in the org folder, so the image is re-pickable
+ * in the editor instead of being a loose CDN URL.
+ *
+ * Needs `config.jwt` AND an org — the org is REQUIRED, by project policy: an
+ * image must land in the collection of the org the page belongs to, so the org
+ * is settled up front rather than guessed at upload time.
+ *
+ * The org must reach the backend TWO ways, and both matter:
+ *  1. `x-org-id` — :org_check assigns the organization, stamping the Asset's
+ *     `organization_id`.
+ *  2. `in_folder` — the org's ROOT folder. Without it the controller defaults
+ *     `folder_id` to the persona folder, and since the library lists by
+ *     `folder_id` the asset would appear in NO collection. Passing only the
+ *     header is the subtle failure this guards against.
+ *
+ * `folderId` overrides (1) with an explicit sub-folder. Callers without a
+ * JWT/org should use `uploadImageMultipart` (public, no collection entry).
+ */
+export async function uploadImageToCollection(
+  config: WebcakeConfig,
+  bytes: Uint8Array | Buffer,
+  filename: string,
+  contentType: string,
+  opts: { orgId?: string; folderId?: string } = {}
+): Promise<{ ok: boolean; url?: string; asset_id?: string | number; status?: number; error?: string }> {
+  const builder = config.builderBase ?? config.base;
+  const org = opts.orgId ?? config.orgId;
+  if (!config.jwt) return { ok: false, status: 0, error: "no JWT — cannot upload to the collection" };
+  if (org == null || `${org}` === "") {
+    return { ok: false, status: 0, error: "no org id — an organization must be chosen before uploading to the collection" };
+  }
+  // File into the org's own library. An explicit folderId wins; otherwise resolve
+  // the org root — never let the backend default to the persona folder, which
+  // would strand the asset outside every collection listing.
+  const folderId = opts.folderId ?? (await resolveOrgRootFolderId(config, `${org}`));
+  if (!folderId) {
+    return {
+      ok: false,
+      status: 0,
+      error: `could not resolve the root collection folder for org ${org} — uploading without it would file the image outside the org's collection`,
+    };
+  }
+  const url = `${builder.replace(/\/+$/, "")}${ASSET_UPLOAD_ENDPOINT}`;
+  const form = new FormData();
+  form.append("file", new Blob([bytes], { type: contentType }), filename);
+  form.append("in_folder", `${folderId}`);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      // No Content-Type — fetch sets the multipart boundary from the FormData.
+      // Auth mirrors authHeaders() but without its JSON Content-Type.
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${config.jwt}`,
+        Cookie: `jwt=${config.jwt}`,
+        "x-org-id": `${org}`,
+      },
+      body: form,
+      signal: timeoutSignal(UPLOAD_MULTIPART_TIMEOUT_MS),
+    });
+  } catch (e: any) {
+    const e2 = timeoutOrNetworkError(url, e);
+    return { ok: false, status: e2.status, error: e2.error };
+  }
+  const rawText = await res.text();
+  let json: any = null;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    /* non-JSON */
+  }
+  if (!res.ok || json?.success === false) {
+    const reason = json?.reason ?? json?.message ?? (json ? undefined : rawText.slice(0, 200));
+    return { ok: false, status: res.status, error: `Collection upload returned ${res.status}${reason ? `: ${reason}` : ""}` };
+  }
+  // AssetsController returns {success:true, asset: Asset.json(asset+image)} —
+  // the CDN link is the asset's txtdata, with the joined image row as a backup.
+  const asset = json?.asset ?? json?.data?.asset ?? json?.data;
+  const hostedUrl: string | undefined =
+    (typeof asset?.txtdata === "string" ? asset.txtdata : undefined) ??
+    (typeof asset?.image?.link === "string" ? asset.image.link : undefined);
+  if (!hostedUrl) {
+    return { ok: false, status: res.status, error: "Collection upload succeeded but returned no URL" };
+  }
+  return { ok: true, url: hostedUrl, asset_id: asset?.id, status: res.status };
+}
+
+/**
+ * Memo of {jwt+base → resolved org id} so a multi-image save resolves the org
+ * once instead of calling list_organizations per image. Keyed by JWT so a
+ * multi-user `serve` process never leaks one caller's org to another.
+ */
+const uploadOrgMemo = new Map<string, string | undefined>();
+
+/** Memo of {jwt+builder+org → org root folder id}, same rationale as uploadOrgMemo. */
+const orgFolderMemo = new Map<string, string | undefined>();
+
+/**
+ * Resolve an org's ROOT collection folder id (`type === -1`) — the folder the
+ * editor's media picker treats as that org's library. Uploads must carry it as
+ * `in_folder`, otherwise the backend files the asset in the account's persona
+ * folder and it shows up in neither library (see ORG_FOLDERS_ENDPOINT).
+ *
+ * Returns undefined when the listing fails or has no root folder; the caller
+ * then has no verified org folder to file into.
+ */
+export async function resolveOrgRootFolderId(
+  config: WebcakeConfig,
+  orgId: string
+): Promise<string | undefined> {
+  const builder = config.builderBase ?? config.base;
+  const memoKey = `${builder}|${config.jwt}|${orgId}`;
+  if (orgFolderMemo.has(memoKey)) return orgFolderMemo.get(memoKey);
+  // `type` is required by the controller; organization-image is the media library.
+  const url = `${builder.replace(/\/+$/, "")}${ORG_FOLDERS_ENDPOINT}?type=organization-image`;
+  let resolved: string | undefined;
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { ...authHeaders(config, orgId) },
+      signal: timeoutSignal(HTTP_TIMEOUT_MS),
+    });
+    if (res.ok) {
+      const json: any = await res.json().catch(() => null);
+      const folders: any[] = Array.isArray(json?.folders) ? json.folders : [];
+      const root = folders.find((f) => Number(f?.type) === ORG_ROOT_FOLDER_TYPE);
+      if (root?.id != null) resolved = `${root.id}`;
+    }
+  } catch {
+    /* leave undefined — the caller decides how to proceed */
+  }
+  orgFolderMemo.set(memoKey, resolved);
+  return resolved;
+}
+
+/**
+ * Resolve the org to file uploaded assets into — the collection route cannot
+ * file an asset without one (:org_check assigns the organization only when
+ * `x-org-id` is present).
+ *
+ * Mirrors create_page's org policy: an explicit `config.orgId` wins; otherwise
+ * an account with exactly ONE org has it auto-selected. With 0 orgs, or 2+ (too
+ * ambiguous to guess), this returns undefined and the caller uploads to the
+ * public CDN endpoint instead — an image never blocks on an org prompt.
+ */
+export async function resolveCollectionOrgId(config: WebcakeConfig): Promise<string | undefined> {
+  if (config.orgId != null && `${config.orgId}` !== "") return `${config.orgId}`;
+  if (!config.jwt) return undefined;
+  const memoKey = `${config.base}|${config.jwt}`;
+  if (uploadOrgMemo.has(memoKey)) return uploadOrgMemo.get(memoKey);
+  const res = await listOrganizations(config);
+  let resolved: string | undefined;
+  if (res.ok && res.organizations && res.organizations.length === 1) {
+    resolved = `${res.organizations[0].id}`;
+  }
+  uploadOrgMemo.set(memoKey, resolved);
+  return resolved;
+}
+
+/**
+ * Upload an image, PREFERRING the media collection and falling back to the
+ * public CDN endpoint. This is the single entry point every upload path uses so
+ * that images land in the user's bộ sưu tập whenever we have the credentials to
+ * file them, while a credential-less run (`npx`, no env) still works exactly as
+ * before. A collection failure is never fatal — it degrades to the public upload
+ * and reports which route produced the URL.
+ *
+ * Requires a JWT AND an org: by policy the org is settled up front and the image
+ * belongs in THAT org's collection. Without either, the public endpoint is used
+ * (the URL works but no Asset row exists) — callers that must not silently skip
+ * the collection should check the org themselves and refuse first.
+ */
+export async function uploadImagePreferCollection(
+  config: WebcakeConfig,
+  bytes: Uint8Array | Buffer,
+  filename: string,
+  contentType: string,
+  opts: { orgId?: string; folderId?: string } = {}
+): Promise<{ ok: boolean; url?: string; asset_id?: string | number; collection: boolean; status?: number; error?: string }> {
+  const org = opts.orgId ?? config.orgId;
+  if (config.jwt && org != null && `${org}` !== "") {
+    const viaCollection = await uploadImageToCollection(config, bytes, filename, contentType, opts);
+    if (viaCollection.ok) return { ...viaCollection, collection: true };
+    console.error(
+      `[upload] collection upload failed (${viaCollection.error}) — falling back to the public CDN endpoint`
+    );
+  }
+  const viaPublic = await uploadImageMultipart(config.base, bytes, filename, contentType);
+  return { ...viaPublic, collection: false };
+}
+
 // ---------------------------------------------------------------------------
 // Server-side image re-host (runs on every real create/update/append save)
 // ---------------------------------------------------------------------------
@@ -762,8 +986,12 @@ function rehostExtFromContentType(ct: string): string {
   return map[sub] ?? (sub.replace("image/", "") || "jpg");
 }
 
-/** Download one remote image and re-upload it to the Webcake CDN; returns the hosted URL or null. */
-async function fetchAndHostOne(apiBase: string, src: string): Promise<string | null> {
+/**
+ * Download one remote image and re-upload it to Webcake; returns the hosted URL
+ * or null. Prefers the media collection (so auto-hosted images join the user's
+ * bộ sưu tập) and degrades to the public CDN endpoint without creds/org.
+ */
+async function fetchAndHostOne(config: WebcakeConfig, src: string): Promise<string | null> {
   let res: Response;
   try {
     res = await fetch(src, {
@@ -791,8 +1019,24 @@ async function fetchAndHostOne(apiBase: string, src: string): Promise<string | n
   }
   if (buf.byteLength > REHOST_MAX_BYTES) return null;
   const ext = rehostExtFromContentType(contentType);
-  const up = await uploadImageMultipart(apiBase, Buffer.from(buf), `rehost.${ext}`, contentType);
+  // Name the asset from the source URL so the collection shows something
+  // recognisable instead of a wall of "rehost.jpg" rows.
+  const filename = rehostFilename(src, ext);
+  const up = await uploadImagePreferCollection(config, Buffer.from(buf), filename, contentType);
   return up.ok && up.url ? up.url : null;
+}
+
+/** Derive a human-readable collection filename from the source URL. */
+function rehostFilename(src: string, ext: string): string {
+  let stem = "";
+  try {
+    const p = new URL(src).pathname;
+    stem = decodeURIComponent(p.slice(p.lastIndexOf("/") + 1)).replace(/\.[^.]*$/, "");
+  } catch {
+    /* fall through to the generic name */
+  }
+  stem = stem.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return `${stem || "rehost"}.${ext}`;
 }
 
 /**
@@ -803,9 +1047,15 @@ async function fetchAndHostOne(apiBase: string, src: string): Promise<string | n
  * from the rehost cache (Redis-or-memory, ./rehost-cache.ts). A per-URL failure leaves the original URL untouched and
  * never throws — the save proceeds either way. Returns `{ source }` unchanged
  * with no report when the source has no external images.
+ *
+ * Uploads go to the account's media collection when the config carries a JWT and
+ * an org, else to the public CDN endpoint. The cache is therefore keyed PER ORG:
+ * the hosted URL is content-addressed and identical across orgs, but the Asset
+ * row is per-org, so a shared key would let org B reuse org A's URL and never get
+ * the image filed into its own collection.
  */
 export async function rehostSourceImages(
-  apiBase: string,
+  config: WebcakeConfig,
   source: unknown
 ): Promise<{ source: unknown; report?: RehostReport }> {
   const candidates = collectExternalImageUrls(source);
@@ -814,21 +1064,31 @@ export async function rehostSourceImages(
   const capped = candidates.slice(0, MAX_REHOST_PER_SAVE);
   const skipped = candidates.length - capped.length;
 
+  // Resolve the collection org ONCE for the whole save, then pin it onto the
+  // config every upload sees — otherwise each image would re-resolve it.
+  // No org resolvable → the images take the public endpoint rather than the
+  // collection. This never blocks the save: a page's images are not worth
+  // failing a write over, and create_page already refuses to save at all when
+  // the org is ambiguous, so by this point an org is normally settled.
+  const orgId = config.jwt ? await resolveCollectionOrgId(config) : undefined;
+  if (orgId) config = { ...config, orgId };
+  const scope = config.jwt && orgId ? `org:${orgId}` : "public";
+
   // Resolve from cache first; upload the rest with a small concurrency pool.
-  const cacheHits = await Promise.all(capped.map((u) => rehostGet(u)));
+  const cacheHits = await Promise.all(capped.map((u) => rehostGet(u, scope)));
   const toUpload = capped.filter((_, i) => !cacheHits[i]);
   for (let i = 0; i < toUpload.length; i += REHOST_CONCURRENCY) {
     const batch = toUpload.slice(i, i + REHOST_CONCURRENCY);
-    const hosted = await Promise.all(batch.map((u) => fetchAndHostOne(apiBase, u)));
+    const hosted = await Promise.all(batch.map((u) => fetchAndHostOne(config, u)));
     await Promise.all(
-      batch.map((u, j) => (hosted[j] ? rehostSet(u, hosted[j]!) : Promise.resolve()))
+      batch.map((u, j) => (hosted[j] ? rehostSet(u, hosted[j]!, scope) : Promise.resolve()))
     );
   }
 
   const map = new Map<string, string>();
   const failed: string[] = [];
   for (const u of capped) {
-    const h = await rehostGet(u);
+    const h = await rehostGet(u, scope);
     if (h) map.set(u, h);
     else failed.push(u);
   }
@@ -839,6 +1099,8 @@ export async function rehostSourceImages(
     rehosted: map.size,
     failed: failed.length,
     skipped,
+    collection: Boolean(config.jwt && orgId),
+    ...(orgId ? { collection_org_id: orgId } : {}),
     ...(failed.length ? { failed_urls: failed.slice(0, 8) } : {}),
   };
   return { source: rewritten, report };

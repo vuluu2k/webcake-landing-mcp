@@ -43,9 +43,41 @@ import {
   resolveMicrolinkKey,
   microlinkKeyFromHeaders,
 } from "../persistence/screenshot-client.js";
-import { uploadImageMultipart } from "../persistence/webcake-client.js";
+import {
+  uploadImageMultipart,
+  uploadImagePreferCollection,
+  resolveCollectionOrgId,
+  listOrganizations,
+} from "../persistence/webcake-client.js";
 import { resolveIconSvg } from "../persistence/icon-client.js";
-import { configFromHeaders, ENVIRONMENTS, stripTrailingSlash } from "../persistence/config.js";
+import { configFromHeaders, ENVIRONMENTS, readConfig, stripTrailingSlash } from "../persistence/config.js";
+
+/**
+ * One entry's upload outcome. `collection` records whether the image was filed
+ * into the account's media collection (an Asset the editor's picker can re-pick)
+ * or merely pushed to the public CDN.
+ */
+type UploadEntryResult =
+  | { ok: true; url: string; collection: boolean; asset_id?: string | number }
+  | { ok: false; error: string };
+
+/**
+ * Name the uploaded asset after its source file so the collection lists
+ * something recognisable rather than a wall of identical "upload.jpg" rows.
+ */
+function uploadFilename(entry: string, ext: string): string {
+  let stem = "";
+  if (!entry.startsWith("data:")) {
+    try {
+      const path = /^https?:\/\//i.test(entry) ? new URL(entry).pathname : entry;
+      stem = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)).replace(/\.[^.]*$/, "");
+    } catch {
+      /* fall through to the generic name */
+    }
+  }
+  stem = stem.replace(/[^\w.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return `${stem || "upload"}.${ext}`;
+}
 
 /** Resolve just the API base (no JWT required) from per-request headers → env → WEBCAKE_ENV preset → prod default. */
 function resolveApiBase(headers: Record<string, string | string[] | undefined> | undefined): string {
@@ -374,7 +406,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
   // 14) Upload images to Webcake -----------------------------------------------
   server.tool(
     "upload_images",
-    "Converts external image URLs (typically collected from ingest_html/ingest_url results), data: URIs, or LOCAL FILE PATHS from the user's computer into Webcake-hosted URLs (statics.pancake.vn) by reading/downloading each image and re-uploading it to the Webcake backend via multipart upload (200 MB backend limit). Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone), the user supplies their own image URLs, OR the user provides local image files from their machine — pass the path directly in `urls`; NEVER upload a user's local file to a third-party host (catbox, imgur, transfer.sh…) to obtain a URL first. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 entries per call in parallel, with a 200 MB per-image cap. No Webcake credentials required (the upload endpoint is public). UPLOADS BY DEFAULT (dry_run defaults to FALSE — unlike the page-persistence tools, this touches no account data, so the default is the real upload): the call downloads/reads each entry, uploads it, and returns the images map (original URL → hosted URL); WAIT for that map before assembling the page and never fall back to a placeholder for a slot whose upload succeeded. Pass dry_run:true only to preview what would be processed without any network/filesystem activity. Use search_images instead when you need stock photos. Local file paths are only permitted when the MCP server runs locally (stdio mode); on the remote HTTP transport they are rejected per-entry.",
+    "Converts external image URLs (typically collected from ingest_html/ingest_url results), data: URIs, or LOCAL FILE PATHS from the user's computer into Webcake-hosted URLs (statics.pancake.vn) by reading/downloading each image and re-uploading it to the Webcake backend via multipart upload (200 MB backend limit). Use this whenever the page is built from a reference HTML/URL (BOTH intents — adapt AND clone), the user supplies their own image URLs, OR the user provides local image files from their machine — pass the path directly in `urls`; NEVER upload a user's local file to a third-party host (catbox, imgur, transfer.sh…) to obtain a URL first. The returned URLs go directly into specials.src — same as search_images results. Processes up to 20 entries per call in parallel, with a 200 MB per-image cap. UPLOAD TARGET: with Webcake credentials (WEBCAKE_JWT) AND an organization, each image is filed into that ORG's MEDIA COLLECTION (bộ sưu tập) — the same library the editor's media picker reads — so the user can re-pick it later; the response marks those entries collection:true with their asset_id. THE ORG IS REQUIRED and must be the same one the page is created in: pass organization_id, or set WEBCAKE_ORG_ID / x-webcake-org-id; it is auto-selected only when the account has exactly ONE org. With 2+ orgs and none chosen this returns ok:false + reason:'organization_required' and the org list — settle the org (ask the user) and re-call, exactly as with create_page. WITHOUT credentials it falls back to the public CDN endpoint: the URLs still work and the page still renders, but the images do NOT appear in any collection (collection:false). UPLOADS BY DEFAULT (dry_run defaults to FALSE — unlike the page-persistence tools, this touches no page data, so the default is the real upload): the call downloads/reads each entry, uploads it, and returns the images map (original URL → hosted URL); WAIT for that map before assembling the page and never fall back to a placeholder for a slot whose upload succeeded. Pass dry_run:true only to preview what would be processed without any network/filesystem activity. Use search_images instead when you need stock photos. Local file paths are only permitted when the MCP server runs locally (stdio mode); on the remote HTTP transport they are rejected per-entry.",
     {
       urls: z
         .array(z.string())
@@ -387,15 +419,51 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
           "• Local file paths from the user's machine: absolute POSIX paths (/home/user/photo.jpg), home-dir paths (~/Pictures/logo.png), file:// URIs, or Windows drive paths (C:\\Users\\…). Local paths are only allowed when the server runs in stdio mode (the user's own machine); they are rejected on the remote HTTP transport.\n" +
           "Up to 200 MB per image (the backend multipart limit)."
         ),
+      in_folder: z
+        .string()
+        .optional()
+        .describe("Collection folder id to file the uploaded assets into (the media library's folder). Omit to use the account's root folder. Ignored when the upload falls back to the public CDN endpoint (no credentials)."),
+      organization_id: z
+        .string()
+        .optional()
+        .describe("Organization whose media collection the images are filed into — REQUIRED when the account has 2+ orgs, and it must match the org the page is created in. Omit only to use WEBCAKE_ORG_ID / x-webcake-org-id, or to auto-select when the account has exactly ONE org; with 2+ orgs and none given the call returns reason:'organization_required' with the org list. Ignored when there are no credentials (public CDN fallback)."),
       dry_run: z
         .boolean()
         .optional()
         .describe("Default FALSE — the call actually reads/downloads and uploads, returning hosted URLs. Set true to only preview the endpoint and entries that WOULD be processed, without any network or filesystem activity (local paths: reports whether the file exists and its size)."),
     },
     { title: "Upload Images to Webcake", readOnlyHint: false, openWorldHint: true },
-    async ({ urls, dry_run }, extra) => {
+    async ({ urls, in_folder, organization_id, dry_run }, extra) => {
       const isDry = dry_run === true;
-      const base = resolveApiBase(extra?.requestInfo?.headers);
+      const headers = extra?.requestInfo?.headers;
+      const base = resolveApiBase(headers);
+
+      // Full creds (JWT + org) let the upload file each image into the account's
+      // media collection. Missing/partial creds are NOT an error here — this tool
+      // has always worked without them, so it degrades to the public endpoint.
+      const { config: credConfig } = readConfig({
+        ...configFromHeaders(headers),
+        ...(organization_id ? { orgId: organization_id } : {}),
+      });
+      // The org must be settled BEFORE any image work: an image belongs in the
+      // collection of the org its page lives in, and that cannot be guessed.
+      // With creds but an ambiguous org (2+ and none chosen) we refuse rather
+      // than quietly dumping the images outside every collection — mirroring
+      // create_page, which refuses to save for the same reason.
+      const uploadOrgId = credConfig ? await resolveCollectionOrgId(credConfig) : undefined;
+      if (credConfig && !uploadOrgId) {
+        const orgs = await listOrganizations(credConfig);
+        if (orgs.ok && orgs.organizations && orgs.organizations.length > 1) {
+          return text({
+            ok: false,
+            reason: "organization_required",
+            organizations: orgs.organizations.map((o) => ({ id: o.id, name: o.name, is_default: o.is_default })),
+            error:
+              "This account has multiple organizations, so the images have no collection to go into. Re-call upload_images with organization_id set to the org this page belongs to — the SAME org you pass to create_page. Ask the user which one if it is not settled yet.",
+          });
+        }
+      }
+      const uploadConfig = credConfig && uploadOrgId ? { ...credConfig, orgId: uploadOrgId } : null;
 
       // Stdio transport: extra.requestInfo is undefined (no HTTP request headers).
       // HTTP transport: extra.requestInfo is always present.
@@ -428,7 +496,14 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         return text({
           ok: true,
           dry_run: true,
-          endpoint: `${base}/external/upload_file`,
+          endpoint: uploadConfig
+            ? `${uploadConfig.builderBase ?? uploadConfig.base}/api/persona/upload`
+            : `${base}/external/upload_file`,
+          collection: Boolean(uploadConfig),
+          ...(uploadConfig ? { collection_org_id: uploadConfig.orgId } : {}),
+          collection_note: uploadConfig
+            ? `Images will be filed into the media collection of org ${uploadConfig.orgId} and be re-pickable in the editor.`
+            : "No credentials (WEBCAKE_JWT) resolved — images will go to the public CDN endpoint. The URLs work and the page renders, but the images will NOT appear in any collection.",
           urls_to_upload: urlsInfo,
           action_required:
             "DRY RUN ONLY — nothing was uploaded and NO hosted URLs exist yet. Do NOT build the page and do NOT fall back to placeholders: re-call upload_images WITHOUT dry_run (uploads by default; batch >20 entries into multiple calls) and WAIT for the returned images map before filling any specials.src / gallery link / background.",
@@ -437,7 +512,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
 
       // Process each entry in parallel; per-entry failures don't fail the whole call.
       const results = await Promise.all(
-        deduped.map(async (originalEntry): Promise<[string, { ok: true; url: string } | { ok: false; error: string }]> => {
+        deduped.map(async (originalEntry): Promise<[string, UploadEntryResult]> => {
           try {
             let bytes: Buffer;
             let contentType: string;
@@ -530,25 +605,36 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
             }
 
             const ext = extFromContentType(contentType);
-            const filename = `upload.${ext}`;
-            const result = await uploadImageMultipart(base, bytes, filename, contentType);
+            const filename = uploadFilename(originalEntry, ext);
+            // With creds + an org, file the image into the account's media
+            // collection so it is re-pickable in the editor; otherwise fall back
+            // to the public CDN endpoint (unchanged zero-config behaviour).
+            const result = uploadConfig
+              ? await uploadImagePreferCollection(uploadConfig, bytes, filename, contentType, { folderId: in_folder })
+              : { ...(await uploadImageMultipart(base, bytes, filename, contentType)), collection: false as const };
             if (!result.ok) {
               return [originalEntry, { ok: false, error: result.error ?? "Upload failed" }];
             }
-            return [originalEntry, { ok: true, url: result.url! }];
+            return [
+              originalEntry,
+              { ok: true, url: result.url!, collection: result.collection, ...(result.asset_id != null ? { asset_id: result.asset_id } : {}) },
+            ];
           } catch (e: any) {
             return [originalEntry, { ok: false, error: `Unexpected error: ${e?.message ?? e}` }];
           }
         })
       );
 
-      const images: Record<string, { ok: true; url: string } | { ok: false; error: string }> = {};
+      const images: Record<string, UploadEntryResult> = {};
       let uploaded = 0;
       let failed = 0;
+      let inCollection = 0;
       for (const [entry, result] of results) {
         images[entry] = result;
-        if (result.ok) uploaded++;
-        else failed++;
+        if (result.ok) {
+          uploaded++;
+          if (result.collection) inCollection++;
+        } else failed++;
       }
 
       return text({
@@ -556,6 +642,12 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         images,
         uploaded,
         failed,
+        collection_uploads: inCollection,
+        ...(uploadConfig ? { collection_org_id: uploadConfig.orgId } : {}),
+        collection_note:
+          inCollection > 0
+            ? `${inCollection} image(s) were filed into the media collection (bộ sưu tập) of org ${uploadConfig?.orgId} and are re-pickable in the editor.`
+            : "Images went to the public CDN endpoint, NOT the media collection — no credentials were resolved. The URLs work and the page renders; to file them into the collection, set WEBCAKE_JWT and an org (WEBCAKE_ORG_ID, or pass organization_id).",
         usage:
           "Put images[<original>].url into EVERY element that used <original> (image specials.src, gallery item.link, section/box background url(...)). Slots whose entry uploaded ok MUST use the hosted URL — never a placeholder. Only for entries marked ok:false, fall back to the image-source chain (search_images → your own web search + re-upload → placeholder LAST)." +
           (failed > 0 ? ` ${failed} entr${failed === 1 ? "y" : "ies"} failed — handle them via that fallback chain now.` : ""),

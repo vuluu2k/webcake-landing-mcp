@@ -49,6 +49,15 @@ export type RehostReport = {
   failed: number;
   /** over the per-save cap — original URL left in place */
   skipped: number;
+  /**
+   * true when uploads went to the account's MEDIA COLLECTION (bộ sưu tập) — i.e.
+   * a JWT and an org were available, so each image also got an Asset row and is
+   * re-pickable in the editor's media picker. false means they went to the public
+   * CDN endpoint: the URLs work, but the images are not in the collection.
+   */
+  collection: boolean;
+  /** the org the assets were filed into (when collection is true) */
+  collection_org_id?: string;
   /** sample of failed source URLs (truncated) */
   failed_urls?: string[];
 };
