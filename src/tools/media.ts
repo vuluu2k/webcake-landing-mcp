@@ -34,6 +34,9 @@ import {
   resolvePexelsKey,
   resolvePexelsProxyBase,
   pexelsKeyFromHeaders,
+  annotateVariantSizes,
+  IMAGE_SIZE_GUIDE,
+  type PexelsPhoto,
 } from "../persistence/pexels-client.js";
 import {
   captureScreenshot,
@@ -227,7 +230,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
   // 13) Search images ---------------------------------------------------------
   server.tool(
     "search_images",
-    "Searches Pexels stock photos (see https://www.pexels.com/api/) by short English subject queries. Returns hotlinkable URLs at several sizes (src.large for heroes/banners, src.medium for cards/thumbs), `avg_color` for matching section backgrounds, plus photographer name and attribution URL. BATCH MODE: pass `queries: [...]` to fetch multiple subjects in PARALLEL — e.g. ['fresh coffee cup','barista pouring','interior cafe'] for hero + about + gallery — returns { queries: { [q]: result } } so the caller picks one image per slot in a single round-trip; default `pick='best'` returns only the top photo per query (compact, drop-in for specials.src), `pick='all'` returns the full list. `query` (single) returns the full result like before. Works out of the box via a shared hosted proxy; set PEXELS_API_KEY env or x-pexels-key header to use your own quota. ONLY for image slots with NO source image: when the user supplied images or the reference HTML/URL contains image URLs (ingest AST images/background_images/og_image), re-host THOSE via upload_images instead of searching stock photos.",
+    "Searches Pexels stock photos (see https://www.pexels.com/api/) by short English subject queries. Returns hotlinkable URLs at several sizes, `avg_color` for matching section backgrounds, plus photographer name and attribution URL. PICK BY SIZE, NOT JUST TOPIC: each photo carries a `sizes` map (delivered WxH px per variant) and the response includes a `size_guide` — match the variant width to the slot's rendered width (hero/banner → src.large ~940px or src.large2x ~1880px retina; card/thumb → src.medium ~350px; avatar → src.tiny), because a too-small variant stretched across a big slot pixelates ('vỡ ảnh') and src.original / an oversized variant in a small card bloats the page ('nặng trang'). BATCH MODE: pass `queries: [...]` to fetch multiple subjects in PARALLEL — e.g. ['fresh coffee cup','barista pouring','interior cafe'] for hero + about + gallery — returns { queries: { [q]: result } } so the caller picks one image per slot in a single round-trip; default `pick='best'` returns only the top photo per query (compact, drop-in for specials.src), `pick='all'` returns the full list. `query` (single) returns the full result like before. Works out of the box via a shared hosted proxy; set PEXELS_API_KEY env or x-pexels-key header to use your own quota. ONLY for image slots with NO source image: when the user supplied images or the reference HTML/URL contains image URLs (ingest AST images/background_images/og_image), re-host THOSE via upload_images instead of searching stock photos.",
     {
       query: z.string().optional().describe("Single subject query — backward-compat. Prefer `queries` when the page needs 2+ images."),
       queries: z
@@ -259,6 +262,11 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         const params = { query: q, perPage: per_page, page, orientation, size, color };
         return key ? searchPexels(key, params) : searchImagesViaProxy(base, params);
       };
+      // Annotate a photo with the delivered pixel size of each src variant so the
+      // model can match variant width to the slot's rendered width (too small →
+      // pixelated, too big → heavy page). Non-mutating: returns an enriched copy.
+      const withSizes = (p: PexelsPhoto) => ({ ...p, sizes: annotateVariantSizes(p) });
+
       // Dedup + parallelize so two slots asking for the same subject only cost one call.
       const unique = [...new Set(list)];
       const results = await Promise.all(unique.map(runOne));
@@ -272,7 +280,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
             hint: "Couldn't fetch images — set PEXELS_API_KEY (env) or the x-pexels-key header for your own Pexels key (free at https://www.pexels.com/api/), or fall back to https://placehold.co/<width>x<height> placeholders.",
           });
         }
-        return text(r);
+        return text({ ...r, photos: (r.photos ?? []).map(withSizes), size_guide: IMAGE_SIZE_GUIDE });
       }
 
       // Batch mode → { queries: { [q]: best-photo-or-full } }.
@@ -287,10 +295,10 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         }
         out[q] =
           mode === "all"
-            ? r
-            : { ok: true, photo: r.photos?.[0] ?? null, total_results: r.total_results };
+            ? { ...r, photos: (r.photos ?? []).map(withSizes) }
+            : { ok: true, photo: r.photos?.[0] ? withSizes(r.photos[0]) : null, total_results: r.total_results };
       }
-      return text({ queries: out });
+      return text({ queries: out, size_guide: IMAGE_SIZE_GUIDE });
     }
   );
 

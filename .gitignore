@@ -10,3 +10,4 @@ src/changelog.json
 
 # MCPB desktop-extension bundle (build artifact)
 *.mcpb
+.DS_Store

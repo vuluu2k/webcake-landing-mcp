@@ -21,7 +21,7 @@ import { parseHtml, extractTailwindConfig } from "./persistence/html-ingest.js";
 import { warningsField } from "./mcp/response.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
 import { toEditorUrl, toEditorLoginUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
-import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT } from "./persistence/pexels-client.js";
+import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT, variantPixels, annotateVariantSizes } from "./persistence/pexels-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
 import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
@@ -1238,6 +1238,27 @@ console.log("== pexels: key resolution + photo normalization (offline, no networ
   const q = buildSearchQuery({ query: "coffee cup", perPage: 3, orientation: "landscape" });
   check("buildSearchQuery encodes query + per_page + orientation", q.get("query") === "coffee cup" && q.get("per_page") === "3" && q.get("orientation") === "landscape");
   check("buildSearchQuery clamps per_page to 1..80", buildSearchQuery({ query: "x", perPage: 999 }).get("per_page") === "80" && buildSearchQuery({ query: "x", perPage: 0 }).get("per_page") === "1");
+
+  // variantPixels: parse the delivered pixel size from a Pexels src-variant URL.
+  const large = variantPixels("https://images.pexels.com/photos/1/x.jpeg?auto=compress&cs=tinysrgb&h=650&w=940", 4000, 2600);
+  check("variantPixels: large reads w+h from query", large.w === 940 && large.h === 650, large);
+  const large2x = variantPixels("https://images.pexels.com/photos/1/x.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940", 4000, 2600);
+  check("variantPixels: dpr=2 doubles both sides (retina)", large2x.w === 1880 && large2x.h === 1300, large2x);
+  const medium = variantPixels("https://images.pexels.com/photos/1/x.jpeg?auto=compress&cs=tinysrgb&h=350", 4000, 2000);
+  check("variantPixels: h-only derives width from native aspect (2:1 → 700×350)", medium.w === 700 && medium.h === 350, medium);
+  const original = variantPixels("https://images.pexels.com/photos/1/x.jpeg", 4000, 2600);
+  check("variantPixels: no query → native size", original.w === 4000 && original.h === 2600, original);
+  check("variantPixels: unparseable URL → native size", variantPixels("not a url", 800, 600).w === 800);
+
+  const annotated = annotateVariantSizes(normalizePhoto({
+    id: 1, width: 3840, height: 2160,
+    src: {
+      original: "https://images.pexels.com/photos/1/x.jpeg",
+      large: "https://images.pexels.com/photos/1/x.jpeg?h=650&w=940",
+      medium: "https://images.pexels.com/photos/1/x.jpeg?h=350",
+    },
+  }));
+  check("annotateVariantSizes maps every variant to {w,h}", annotated.original.w === 3840 && annotated.large.w === 940 && annotated.medium.h === 350, annotated);
 }
 
 console.log("== draft-cache: page draft round-trip (create_page failure flow) ==");

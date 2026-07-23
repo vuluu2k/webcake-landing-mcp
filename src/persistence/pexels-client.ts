@@ -90,6 +90,55 @@ export function normalizePhoto(p: any): PexelsPhoto {
   };
 }
 
+/**
+ * Delivered pixel size of ONE Pexels src-variant URL. Pexels encodes the size in
+ * the query string (`w`, `h`, and `dpr` for retina): `large`/`large2x` carry
+ * `w`+`h` (large2x adds `dpr=2` → the file is twice as many pixels), `medium`/
+ * `small` carry only `h` (width follows the native aspect ratio), and `original`
+ * has NO query params → it is the full native resolution. `dpr` multiplies both
+ * sides because the served file really is that many pixels. Pure + defensive:
+ * an unparseable URL or a variant with no size hint falls back to native w/h.
+ */
+export function variantPixels(url: string, nativeW: number, nativeH: number): { w: number; h: number } {
+  const aspect = nativeW > 0 && nativeH > 0 ? nativeW / nativeH : 1;
+  let q: URLSearchParams;
+  try {
+    q = new URL(url).searchParams;
+  } catch {
+    return { w: nativeW || 0, h: nativeH || 0 };
+  }
+  const dprRaw = parseInt(q.get("dpr") ?? "1", 10);
+  const dpr = Number.isFinite(dprRaw) && dprRaw > 0 ? dprRaw : 1;
+  const wRaw = parseInt(q.get("w") ?? "", 10);
+  const hRaw = parseInt(q.get("h") ?? "", 10);
+  const hasW = Number.isFinite(wRaw) && wRaw > 0;
+  const hasH = Number.isFinite(hRaw) && hRaw > 0;
+  if (!hasW && !hasH) return { w: nativeW || 0, h: nativeH || 0 }; // original / no size hint
+  const baseW = hasW ? wRaw : Math.round(hRaw * aspect);
+  const baseH = hasH ? hRaw : Math.round(wRaw / aspect);
+  return { w: baseW * dpr, h: baseH * dpr };
+}
+
+/** Map every src variant of a photo to its delivered {w,h} in px (see variantPixels). */
+export function annotateVariantSizes(photo: PexelsPhoto): Record<string, { w: number; h: number }> {
+  const out: Record<string, { w: number; h: number }> = {};
+  for (const [variant, url] of Object.entries(photo.src ?? {})) {
+    if (typeof url === "string" && url) out[variant] = variantPixels(url, photo.width, photo.height);
+  }
+  return out;
+}
+
+/**
+ * How to pick the RIGHT variant: match the delivered width to the slot's rendered
+ * width — too small pixelates ("vỡ ảnh"), too big bloats the page ("nặng trang").
+ * Returned in search_images responses so the model chooses by size, not just topic.
+ */
+export const IMAGE_SIZE_GUIDE =
+  "Match the src variant's delivered WIDTH (see each photo's `sizes` map) to the slot's RENDERED width — aim for ~1–2× it (extra headroom = crisp on retina), then STOP. " +
+  "Rules of thumb on the 960/1200 canvas: full-bleed hero/banner (~900–1200px wide) → src.large (940px) or src.large2x (1880px, retina); half-hero / product shot (~450–650px) → src.large or src.medium; feature card / thumbnail (~260–360px) → src.medium (~350px); avatar / logo / small icon (~64–120px) → src.tiny (280px). " +
+  "NEVER stretch a small variant across a big slot — upscaling looks broken/pixelated ('vỡ ảnh'). NEVER drop src.original (full-res, often several MB) or an oversized variant into a small card — it makes the page slow and heavy ('nặng trang'). " +
+  "Also check the photo's NATIVE width/height: if a photo's native width is smaller than the slot, it cannot fill it crisply — choose a higher-resolution photo (or a smaller slot) rather than upscaling.";
+
 export type PexelsSearchParams = {
   query: string;
   perPage?: number;
