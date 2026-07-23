@@ -1317,13 +1317,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 15) Publish page (go live) -------------------------------------------------
   server.tool(
     "publish_page",
-    "Publishes an EXISTING page LIVE via the editor's publish_html route: builds the rendered app on the Webcake build host (POST <buildBase>/render/build; prod default https://build.webcake.io, override with WEBCAKE_BUILD_BASE env / x-webcake-build-base header), then creates/updates the PagePublishedV2 record — the record ALL public serving reads. With custom_domain the page goes live at that domain (it must already point at Webcake). WITHOUT a domain there is NO permanent public URL: the returned preview link (<previewBase>/preview/<page_id>) only renders for ~10 minutes after the publish, then shows 'Preview page is expired' — tell the user to attach a domain for a lasting URL. If no build host is configured or the build fails, falls back to the LEGACY source-only publish route with a warning (saves a version; nothing goes live; the page stays blank). DEFAULTS to dry_run=true (network-free: does NOT call the build host on dry_run). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Publishes an EXISTING page LIVE via the editor's publish_html route: builds the rendered app on the Webcake build host (POST <buildBase>/render/build; prod default https://build.webcake.io, override with WEBCAKE_BUILD_BASE env / x-webcake-build-base header), then creates/updates the PagePublishedV2 record — the record ALL public serving reads. With custom_domain the page goes live at that domain (it must already point at Webcake); OMIT custom_domain to reuse the page's currently-attached domain (mirrors the editor's publish modal — republishing keeps the page live at the same URL), falling back to a find_pages lookup by id. WITHOUT any domain (the page has none, or you pass custom_domain='') there is NO permanent public URL: the returned preview link (<previewBase>/preview/<page_id>) only renders for ~10 minutes after the publish, then shows 'Preview page is expired' — tell the user to attach a domain for a lasting URL. If no build host is configured or the build fails, falls back to the LEGACY source-only publish route with a warning (saves a version; nothing goes live; the page stays blank). DEFAULTS to dry_run=true (network-free: does NOT call the build host on dry_run). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       page_id: z.string().describe("The page id to publish (must be owned by the account)."),
       custom_domain: z
         .string()
         .optional()
-        .describe("Optional custom domain to serve the page at (e.g. 'shop.example.com' — must already point at Webcake). Omit to publish without a domain (served at the preview-host URL)."),
+        .describe("Optional custom domain to serve the page at (e.g. 'shop.example.com' — must already point at Webcake). OMIT to reuse the page's CURRENTLY-ATTACHED domain (so republishing keeps it live at the same URL, like the editor's publish modal); if the page has none it publishes domain-less (preview-host URL). Pass an empty string '' to force a domain-less publish even when the page has a domain."),
       custom_path: z.string().optional().describe("Optional path under the custom domain (e.g. 'sale')."),
       dry_run: z.boolean().optional().describe("Default TRUE — preview the request without sending. Does NOT call the build host. Set false to actually publish (build + publish)."),
     },
@@ -1340,11 +1340,36 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       if (!res.ok || res.source == null) {
         return text({ published: false, reason: "page_not_found", status: res.status, error: res.error ?? "No source on this page." });
       }
-      const opts = { customDomain: custom_domain, customPath: custom_path };
+      // Resolve the domain to publish to the way the editor's publish modal does:
+      // an explicit arg wins, otherwise reuse the page's CURRENTLY-ATTACHED domain
+      // so a plain publish_page({ page_id }) keeps the page live at the same URL
+      // instead of silently dropping to an ephemeral /preview. The page record from
+      // getPageSource carries it when the backend returns it; if not, fall back to a
+      // find_pages lookup by id (custom_path only comes from the record). Passing
+      // custom_domain:'' explicitly opts OUT (publish domain-less on purpose).
+      let effectiveDomain = custom_domain ?? res.custom_domain ?? undefined;
+      let effectivePath = custom_path ?? res.custom_path ?? undefined;
+      let domainInherited = false;
+      if (custom_domain == null && (effectiveDomain == null || effectiveDomain === "")) {
+        const found = await searchPages(config, { id: page_id, limit: 1 });
+        const row = found.pages?.find((p) => `${p.id}` === `${page_id}`) ?? found.pages?.[0];
+        if (row?.custom_domain) {
+          effectiveDomain = row.custom_domain;
+          domainInherited = true;
+        }
+      } else if (custom_domain == null && effectiveDomain) {
+        domainInherited = true;
+      }
+      // Normalize an empty-string domain to "no domain" so downstream !! checks agree.
+      if (!effectiveDomain) effectiveDomain = undefined;
+
+      const opts = { customDomain: effectiveDomain, customPath: effectivePath };
       const buildBase = config.buildBase;
       // Only the preview window serves a domain-less publish, and only briefly.
-      const previewExpiryNote = custom_domain
-        ? undefined
+      const previewExpiryNote = effectiveDomain
+        ? domainInherited
+          ? `Reused the page's attached domain (${effectiveDomain}) — pass custom_domain to override, or custom_domain:'' to publish without one.`
+          : undefined
         : "No custom_domain — the page has NO permanent public URL. The preview link only renders for ~10 minutes after the publish, then shows 'Preview page is expired'. Attach a custom_domain (already pointed at Webcake) for a lasting URL.";
 
       if (isDry) {
@@ -1353,8 +1378,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           dry_run: true,
           page_id,
           name: res.name,
-          would_publish_to: custom_domain
-            ? `https://${custom_domain}${custom_path ? `/${custom_path}` : ""}`
+          would_publish_to: effectiveDomain
+            ? `https://${effectiveDomain}${effectivePath ? `/${effectivePath}` : ""}`
             : toPreviewUrl(config, `/preview/${page_id}`),
           build_step: buildBase
             ? { would_run: true, build_host: buildBase, note: "Build host will be called on dry_run=false to produce rendered app/app_css, then the page is published live via the editor's publish_html route." }

@@ -353,7 +353,7 @@ export async function searchPages(
 export async function getPageSource(
   config: WebcakeConfig,
   pageId: string
-): Promise<{ ok: boolean; status: number; page_id?: string; name?: string; organization_id?: number | string | null; source?: any; error?: string }> {
+): Promise<{ ok: boolean; status: number; page_id?: string; name?: string; organization_id?: number | string | null; custom_domain?: string | null; custom_path?: string | null; source?: any; error?: string }> {
   const url = `${config.base}${PAGE_SOURCE_ENDPOINT}?page_id=${encodeURIComponent(pageId)}`;
   const r = await getJson(url, config);
   if (!r.ok) return { ok: false, status: r.status, error: r.error };
@@ -364,6 +364,10 @@ export async function getPageSource(
     page_id: d.page_id,
     name: d.name,
     organization_id: d.organization_id ?? null,
+    // The page's currently-attached domain, when the record carries it — lets
+    // publish_page reuse it instead of dropping to a domain-less preview.
+    custom_domain: d.custom_domain ?? null,
+    custom_path: d.custom_path ?? null,
     source: d.source,
   };
 }

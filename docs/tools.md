@@ -99,7 +99,9 @@ add_section({ page_id, sections: [formSection, footerSection], dry_run: false })
 # one that creates the PagePublishedV2 record public serving reads). A custom_domain gives
 # the page its permanent URL; WITHOUT one the only link is /preview/<page_id>, which expires
 # ~10 minutes after the publish. Without a build host it falls back to a source-only save
-# (nothing goes live).
+# (nothing goes live). OMIT custom_domain to reuse the page's currently-attached domain
+# (like the editor's publish modal); pass custom_domain:"" to force a domain-less publish.
+publish_page({ page_id, dry_run: false })  # reuses the page's attached domain
 publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", dry_run: false })
 ```
 
@@ -151,7 +153,7 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | `update_page` | Overwrite an existing page's source with an edited tree. Validates, caches the source as `draft_id`, then saves. On timeout or failure the draft is kept — retry via `update_page({ draft_id, dry_run:false })` or `patch_page({ draft_id, dry_run:false })` (no patches). **Defaults to `dry_run=true`.** |
 | `add_section` | Append section(s) to an existing page without re-sending the whole source (incremental-build path). Always caches the batch as `draft_id`; re-run with `{ page_id, draft_id, dry_run:false }` — no need to re-send sections. Validation failure, timeout, or network error also keeps the draft — fix via `patch_page({ draft_id, patches })` or retry `patch_page({ draft_id, dry_run:false })` with no patches. **Defaults to `dry_run=true`.** |
 | `patch_page` | Edit a page by element id without re-sending the whole source. Targets a live page (`page_id`) OR a cached draft (`draft_id`). Draft kinds: `create_page` (creates page once valid), `add_section` (appends once valid), `update_page`/live-patch (retries updatePageSource). **Empty/omitted patches + `draft_id` = commit-as-is (the universal timeout-retry path).** Live-page path pre-caches the patched source before the network call and returns `draft_id` for recovery. **Defaults to `dry_run=true`.** |
-| `publish_page` | Publish a page LIVE: builds the rendered app via the Webcake build host (`POST <buildBase>/render/build`; prod default `https://build.webcake.io`, override with `WEBCAKE_BUILD_BASE` env / `x-webcake-build-base` header), then publishes via the editor's `publish_html` route — the only one that writes the PagePublishedV2 record public serving reads. With `custom_domain` the page is permanently live at that domain; **without one the only URL is `/preview/<page_id>`, which expires ~10 minutes after the publish**. Without a build host it falls back to a legacy source-only save (nothing goes live). Result includes `live` + `rendered`. **Defaults to `dry_run=true`** (network-free, does NOT call the build host). |
+| `publish_page` | Publish a page LIVE: builds the rendered app via the Webcake build host (`POST <buildBase>/render/build`; prod default `https://build.webcake.io`, override with `WEBCAKE_BUILD_BASE` env / `x-webcake-build-base` header), then publishes via the editor's `publish_html` route — the only one that writes the PagePublishedV2 record public serving reads. With `custom_domain` the page is permanently live at that domain; **omit `custom_domain` to reuse the page's currently-attached domain** (mirrors the editor's publish modal — republishing keeps the same URL; falls back to a `find_pages` lookup by id), and **without any domain the only URL is `/preview/<page_id>`, which expires ~10 minutes after the publish** (pass `custom_domain:""` to force this). Without a build host it falls back to a legacy source-only save (nothing goes live). Result includes `live` + `rendered`. **Defaults to `dry_run=true`** (network-free, does NOT call the build host). |
 
 ---
 
