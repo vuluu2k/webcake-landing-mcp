@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-23
+
+### Changed
+- `publish_page` now reuses the page's currently-attached domain when `custom_domain` is omitted — mirroring the editor's publish modal, a plain `publish_page({ page_id })` republish keeps the page live at its existing domain instead of silently dropping to an ephemeral `/preview/<page_id>` link; the domain is read from `get_page_source`, falling back to a `find_pages` lookup by id, and the dry-run response now notes when a domain was inherited this way. Pass `custom_domain: ''` to explicitly force a domain-less publish.
+
 ## [1.3.0] - 2026-07-17
 
 ### Added
