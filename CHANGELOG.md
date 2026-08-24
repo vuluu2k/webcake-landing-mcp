@@ -6,6 +6,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-08-24
+
+### Added
+- `update_page` now detects when the live page was edited outside this session (e.g. in the Webcake editor) since it was last read, and rejects the overwrite with `reason:"page_changed_externally"` or `reason:"unverified_overwrite"` instead of silently reverting those changes; pass `force:true` after the user confirms to overwrite anyway.
+- `get_page` now returns a `source_version` field; pass it back as `update_page`'s new `base_version` parameter to make the staleness check exact.
+- `update_page` and `patch_page` gain a `force` parameter to bypass the new staleness check when committing a cached `update` draft.
+
+### Changed
+- `get_page` and the source read path used by `update_page`/`add_section`/`patch_page` now normalize numeric style and config values the Webcake editor writes as strings (`fontSize:"59"`, `height:"600"`, `opacity:"50%"`, `top:"unset"`, and similar) back to numbers, so a page hand-tweaked in the editor is no longer locked out of `update_page`/`add_section`/`patch_page`.
+- `page-schema.json` now accepts string/null values for `top`/`left`/`width`/`height`/`zIndex`/`fontSize`/`borderWidth`/`opacity` and other per-breakpoint numeric fields on read, and widens the `borderStyle` and event `type` (trigger) enums to match the editor's own option sets (adds `groove`/`ridge`/`inset`/`outset`/`hidden` border styles and `error`/`delay` event triggers).
+- `validate_page` now warns when `styles.top`/`left`/`width`/`height` on a non-sticky element holds a non-numeric-string value, since the renderer appends `px` verbatim and would emit invalid CSS.
+- Repeated `get_page`/`patch_page` reads of the same page now reuse a cached copy of its source when the backend confirms nothing changed since the last read, avoiding a redundant full download.
+
 ## [1.5.0] - 2026-07-23
 
 ### Added

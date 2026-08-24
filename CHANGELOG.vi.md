@@ -6,6 +6,19 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-08-24
+
+### Added
+- `update_page` nay phát hiện khi trang đang sống đã bị chỉnh sửa bên ngoài phiên làm việc này (ví dụ trong editor Webcake) kể từ lần đọc gần nhất, và từ chối ghi đè với `reason:"page_changed_externally"` hoặc `reason:"unverified_overwrite"` thay vì âm thầm xóa mất những thay đổi đó; truyền `force:true` sau khi người dùng xác nhận để vẫn ghi đè.
+- `get_page` nay trả về trường `source_version`; truyền lại giá trị này vào tham số `base_version` mới của `update_page` để việc kiểm tra tính mới của dữ liệu được chính xác.
+- `update_page` và `patch_page` có thêm tham số `force` để bỏ qua bước kiểm tra mới này khi commit một draft `update` đã cache.
+
+### Changed
+- `get_page` và đường đọc nguồn dùng chung cho `update_page`/`add_section`/`patch_page` nay chuẩn hóa các giá trị style/config dạng số mà editor Webcake lưu thành chuỗi (`fontSize:"59"`, `height:"600"`, `opacity:"50%"`, `top:"unset"`, v.v.) về lại số, nên một trang đã chỉnh tay trong editor không còn bị khóa khỏi `update_page`/`add_section`/`patch_page`.
+- `page-schema.json` nay chấp nhận giá trị string/null cho `top`/`left`/`width`/`height`/`zIndex`/`fontSize`/`borderWidth`/`opacity` và các trường số khác theo từng breakpoint khi đọc, đồng thời mở rộng enum `borderStyle` và `type` (trigger) của event cho khớp với các tùy chọn của chính editor (thêm kiểu viền `groove`/`ridge`/`inset`/`outset`/`hidden` và trigger sự kiện `error`/`delay`).
+- `validate_page` nay cảnh báo khi `styles.top`/`left`/`width`/`height` của một phần tử không sticky mang giá trị chuỗi không phải số thuần túy, vì renderer sẽ nối thêm `px` trực tiếp và tạo ra CSS không hợp lệ.
+- Các lần đọc `get_page`/`patch_page` lặp lại trên cùng một trang nay dùng lại bản sao nguồn đã cache khi backend xác nhận không có gì thay đổi kể từ lần đọc trước, tránh tải lại toàn bộ dữ liệu một cách dư thừa.
+
 ## [1.5.0] - 2026-07-23
 
 ### Added
