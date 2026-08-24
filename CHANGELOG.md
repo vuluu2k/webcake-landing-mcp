@@ -6,6 +6,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-23
+
+### Added
+- `search_images` now returns a `sizes` map on every photo (the delivered width/height in px for each src variant, accounting for retina `dpr`) plus a `size_guide` field explaining how to match a variant's width to the target slot's rendered width, so the model picks `src.large`/`src.large2x` for a hero, `src.medium` for a card/thumb, and `src.tiny` for an avatar instead of guessing — avoiding pixelated upscaled images and bloated pages from oversized variants in small slots.
+
+### Changed
+- The generation guide's IMAGES rule now teaches variant-to-slot size matching (using the new `sizes`/`size_guide` data and each photo's native width) instead of the previous bare "large for hero, medium for card" rule of thumb.
+
 ## [1.4.0] - 2026-07-23
 
 ### Changed
