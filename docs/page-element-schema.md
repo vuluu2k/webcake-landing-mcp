@@ -375,7 +375,7 @@ Mỗi phần tử trong mảng `events`:
 3. Mỗi element có ĐỦ cả `responsive.desktop` và `responsive.mobile`; element con phải có `top/left/width` ở cả hai.
 4. Toạ độ tuyệt đối, không chồng lấn; canvas desktop = 960px, mobile = 420px; section dùng `height`. Giữ `0 ≤ left` và `left + width ≤` canvas. Căn giữa box bằng `left = round((canvas − width)/2)` (đừng ước lượng); với một hàng N phần tử thì căn giữa cả khối hàng.
 5. Nội dung text/ảnh đặt trong `specials` (`text`, `src`, `media`…), KHÔNG đặt trong `styles`.
-6. Màu dùng `rgba(...)`. `fontSize`/`borderWidth`/`top`/`left`/`width`/`height` là **số** (px).
+6. Màu dùng `rgba(...)`. `fontSize`/`borderWidth`/`top`/`left`/`width`/`height` là **số** (px) — khi SINH ra luôn ghi số. Khi ĐỌC một trang đã chỉnh tay trong editor thì các key này có thể là chuỗi (editor lưu `fontSize: "59"`/`"13px"`, `height: "600"`, `opacity: "50%"`, `top: "unset"`): schema chấp nhận, và server tự chuẩn hoá chuỗi số/px về số trước khi validate + lưu, nên trang chỉnh tay vẫn dùng được mọi tool. Chỉ giá trị mang đơn vị mà renderer không dùng được (vd `width: "100%"` — renderer tự nối `px`) mới bị **cảnh báo**.
 7. Mọi `input`/`select`/`checkbox`… trong `form` phải có `specials.field_name` duy nhất.
 8. `runtime` luôn `{}`; chỉ container mới có `children`.
 9. Không bịa giá, số điện thoại, địa chỉ, số liệu (theo `Prompt` hiện có của repo).

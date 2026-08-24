@@ -109,6 +109,30 @@ publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", 
 Both `create_page` and `update_page` **default to `dry_run=true`** (validate and return the request they
 *would* send, JWT masked); set `dry_run=false` to actually write. The result returns `page_id` + editor/preview URLs.
 
+### Editing a page someone may also be editing
+
+`update_page` REPLACES the whole stored source, so a tree read minutes (or, via a cached
+`draft_id`, hours) ago will revert anything the user changed in the Webcake editor meanwhile.
+The backend has no version column, so the MCP does the concurrency check itself:
+
+- `get_page` returns **`source_version`** — a fingerprint of the stored tree — and records it as
+  the baseline for that page.
+- `update_page` re-reads the page before writing. If the live tree no longer matches the baseline
+  (or you pass a stale `base_version`), the save is **rejected** with
+  `reason:"page_changed_externally"` and the list of element ids the overwrite would have deleted.
+  With no baseline at all it still refuses any save that would drop live element ids
+  (`reason:"unverified_overwrite"`).
+- Recover by re-reading (`get_page`) and redoing the edit, or — better — by editing with
+  **`patch_page({ page_id, patches })`**, which merges into the tree it just read and therefore can
+  never revert anyone. `add_section` is likewise safe: the backend appends to the current source.
+- `force: true` on `update_page` / `patch_page` saves anyway, discarding the newer changes. Only
+  pass it once the user has said to.
+
+The re-read is cheap: **`GET /api/v1/ai/page_version`** returns just `page_source.updated_at`, and the
+server only re-downloads the tree when that token moved. It is never used to SKIP the check — a cached
+freshness check is not a check — only to skip the download when the backend itself says nothing changed.
+Backends without that route keep working (one full read per live fetch, as before).
+
 ---
 
 ## Available Tools
@@ -149,8 +173,8 @@ Both `create_page` and `update_page` **default to `dry_run=true`** (validate and
 | `create_page` | Persist a generated source as a new page, then **auto-publish** it (build host + `publish_html`) so the preview renders immediately — `publish:false` skips; a publish failure never fails the create (`result.publish` says how to retry); the no-domain preview link still expires ~10 min after each publish. Validates, caches the source as `draft_id`, then creates. `organization_id` accepts an org id or the string `"personal"` (explicit no-org). When omitted and no env default is set, calls `list_organizations` automatically: 1 org → auto-selected (`organization_auto_selected:true`); 2+ orgs → returns the org list and asks you to re-call with `organization_id` (never guesses); 0 orgs or lookup fails → personal. On validation failure, timeout, or network error the draft is kept — retry via `create_page({ draft_id, dry_run:false })` or fix via `patch_page({ draft_id, patches })`. **Auto-hosts external images:** before storing, any external image URL in the source (`specials.src`, `url(...)` backgrounds, gallery `item.link`, video poster) is downloaded and re-hosted to the Webcake CDN and rewritten in-tree (result `rehost` = `{candidates,rehosted,failed,skipped,collection,collection_org_id}`; cached, deduped, per-URL failures keep the original and never block the save). Like `upload_images`, these uploads take the collection path — but that needs a JWT **AND** a resolved org: `rehost.collection:true` (images re-pickable in the editor, `collection_org_id` naming the org) only when both are present (explicit org, else auto-selected when the account has exactly one). With no org resolvable the images take the public CDN endpoint instead (`collection:false`) — the rehost never blocks a save over images. Either way a clone needs no `upload_images` pre-call for reference/web images. **Defaults to `dry_run=true`.** |
 | `list_pages` | List the account's pages (id, name, organization_id, updated_at) to pick one to edit. |
 | `find_pages` | Search the account's pages by name, domain, and/or page id (AND-combined) to locate one to edit; returns id, name, org, custom/default domain, updated_at. |
-| `get_page` | Fetch an existing page's decoded source tree, COMPACTED to the sparse authoring shape (factory-default boilerplate stripped — far fewer tokens; `compact:false` for the raw tree). Edit and send back as-is. |
-| `update_page` | Overwrite an existing page's source with an edited tree. Validates, caches the source as `draft_id`, then saves. On timeout or failure the draft is kept — retry via `update_page({ draft_id, dry_run:false })` or `patch_page({ draft_id, dry_run:false })` (no patches). **Defaults to `dry_run=true`.** |
+| `get_page` | Fetch an existing page's decoded source tree, COMPACTED to the sparse authoring shape (factory-default boilerplate stripped — far fewer tokens; `compact:false` for the raw tree). Edit and send back as-is. Also returns `source_version`, the baseline `update_page` checks against. |
+| `update_page` | Overwrite an existing page's source with an edited tree. Validates, caches the source as `draft_id`, then saves. **Rejects the save when the page changed outside this session** (editor/another agent) instead of reverting it — pass `base_version` from `get_page`, or `force:true` to overwrite anyway. On timeout or failure the draft is kept — retry via `update_page({ draft_id, dry_run:false })` or `patch_page({ draft_id, dry_run:false })` (no patches). **Defaults to `dry_run=true`.** |
 | `add_section` | Append section(s) to an existing page without re-sending the whole source (incremental-build path). Always caches the batch as `draft_id`; re-run with `{ page_id, draft_id, dry_run:false }` — no need to re-send sections. Validation failure, timeout, or network error also keeps the draft — fix via `patch_page({ draft_id, patches })` or retry `patch_page({ draft_id, dry_run:false })` with no patches. **Defaults to `dry_run=true`.** |
 | `patch_page` | Edit a page by element id without re-sending the whole source. Targets a live page (`page_id`) OR a cached draft (`draft_id`). Draft kinds: `create_page` (creates page once valid), `add_section` (appends once valid), `update_page`/live-patch (retries updatePageSource). **Empty/omitted patches + `draft_id` = commit-as-is (the universal timeout-retry path).** Live-page path pre-caches the patched source before the network call and returns `draft_id` for recovery. **Defaults to `dry_run=true`.** |
 | `publish_page` | Publish a page LIVE: builds the rendered app via the Webcake build host (`POST <buildBase>/render/build`; prod default `https://build.webcake.io`, override with `WEBCAKE_BUILD_BASE` env / `x-webcake-build-base` header), then publishes via the editor's `publish_html` route — the only one that writes the PagePublishedV2 record public serving reads. With `custom_domain` the page is permanently live at that domain; **omit `custom_domain` to reuse the page's currently-attached domain** (mirrors the editor's publish modal — republishing keeps the same URL; falls back to a `find_pages` lookup by id), and **without any domain the only URL is `/preview/<page_id>`, which expires ~10 minutes after the publish** (pass `custom_domain:""` to force this). Without a build host it falls back to a legacy source-only save (nothing goes live). Result includes `live` + `rendered`. **Defaults to `dry_run=true`** (network-free, does NOT call the build host). |

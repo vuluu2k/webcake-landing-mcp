@@ -76,6 +76,7 @@ const ORGS_ENDPOINT = "/api/v1/org/organizations";
 const PAGES_ENDPOINT = "/api/v1/ai/pages";
 const SEARCH_PAGES_ENDPOINT = "/api/v1/ai/search_pages";
 const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
+const PAGE_VERSION_ENDPOINT = "/api/v1/ai/page_version";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
 const APPEND_ENDPOINT = "/api/v1/ai/append_section";
 // The editor's own publish routes (NOT under /api/v1/ai). Both scopes are
@@ -350,10 +351,34 @@ export async function searchPages(
 }
 
 /** Read a page's decoded source tree (must be owned by the account). */
+/**
+ * The page source's VERSION only (`updated_at`), a few hundred bytes instead of the
+ * whole tree. Backed by `GET /api/v1/ai/page_version` (LandingPageWeb.V1.AiController.
+ * get_page_version), which selects the timestamp WITHOUT the `source` column.
+ *
+ * `updated_at` moves on every save through `Pages.update_source/2` — the path the
+ * editor and `update_page_source` both take — so it answers "did anyone touch this
+ * page since I last read it?" without a download.
+ *
+ * A backend that predates the route replies 404: `endpoint_missing` says so, and the
+ * caller reads the full source instead (same shape as the append_section fallback).
+ */
+export async function getPageVersion(
+  config: WebcakeConfig,
+  pageId: string
+): Promise<{ ok: boolean; status: number; version?: string; endpoint_missing?: boolean; error?: string }> {
+  const url = `${config.base}${PAGE_VERSION_ENDPOINT}?page_id=${encodeURIComponent(pageId)}`;
+  const r = await getJson(url, config);
+  if (!r.ok) return { ok: false, status: r.status, endpoint_missing: r.status === 404, error: r.error };
+  const d = r.json?.data ?? r.json ?? {};
+  const version = d.updated_at == null ? undefined : String(d.updated_at);
+  return { ok: version !== undefined, status: r.status, version };
+}
+
 export async function getPageSource(
   config: WebcakeConfig,
   pageId: string
-): Promise<{ ok: boolean; status: number; page_id?: string; name?: string; organization_id?: number | string | null; custom_domain?: string | null; custom_path?: string | null; source?: any; error?: string }> {
+): Promise<{ ok: boolean; status: number; page_id?: string; name?: string; organization_id?: number | string | null; custom_domain?: string | null; custom_path?: string | null; updated_at?: string; source?: any; error?: string }> {
   const url = `${config.base}${PAGE_SOURCE_ENDPOINT}?page_id=${encodeURIComponent(pageId)}`;
   const r = await getJson(url, config);
   if (!r.ok) return { ok: false, status: r.status, error: r.error };
@@ -368,6 +393,8 @@ export async function getPageSource(
     // publish_page reuse it instead of dropping to a domain-less preview.
     custom_domain: d.custom_domain ?? null,
     custom_path: d.custom_path ?? null,
+    // The same token GET /page_version returns — absent on a backend that predates it.
+    updated_at: d.updated_at == null ? undefined : String(d.updated_at),
     source: d.source,
   };
 }

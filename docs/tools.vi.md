@@ -107,6 +107,28 @@ publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", 
 Cả `create_page` và `update_page` đều **mặc định `dry_run=true`** (kiểm tra và trả về request nó *sẽ*
 gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả trả về `page_id` + URL editor/preview.
 
+### Sửa một trang mà người dùng cũng có thể đang sửa
+
+`update_page` GHI ĐÈ toàn bộ source đã lưu, nên một cây đọc từ vài phút trước (hoặc qua `draft_id`
+đã cache, có thể vài giờ) sẽ hoàn tác mọi thay đổi người dùng vừa làm trong editor Webcake. Backend
+không có cột version, nên MCP tự kiểm tra tương tranh:
+
+- `get_page` trả thêm **`source_version`** — vân tay của cây đang lưu — và ghi nhận nó làm mốc của trang.
+- `update_page` đọc lại trang trước khi ghi. Nếu cây trên server không còn khớp mốc (hoặc bạn truyền
+  `base_version` đã cũ), lệnh lưu bị **từ chối** với `reason:"page_changed_externally"` kèm danh sách
+  id element mà thao tác ghi đè sẽ xoá mất. Khi hoàn toàn không có mốc, nó vẫn từ chối mọi lệnh lưu làm
+  MẤT id element đang có trên trang (`reason:"unverified_overwrite"`).
+- Cách xử lý: gọi lại `get_page` rồi áp lại chỉnh sửa, hoặc — tốt hơn — sửa bằng
+  **`patch_page({ page_id, patches })`**, vì nó merge vào cây vừa đọc nên không bao giờ hoàn tác của ai.
+  `add_section` cũng an toàn: backend append vào source hiện tại.
+- `force: true` trên `update_page` / `patch_page` vẫn ghi đè, bỏ qua các thay đổi mới hơn. Chỉ dùng khi
+  người dùng đã đồng ý bỏ các thay đổi đó.
+
+Lần đọc lại này rẻ: **`GET /api/v1/ai/page_version`** chỉ trả `page_source.updated_at`, và server chỉ tải
+lại cây khi token đó đổi. Nó KHÔNG bao giờ dùng để bỏ qua bước kiểm tra — cache một phép kiểm tra độ tươi
+thì không còn là kiểm tra — chỉ để bỏ qua phần TẢI khi chính backend nói không có gì đổi. Backend chưa có
+route đó vẫn chạy bình thường (mỗi lần đọc live là một lần tải đầy đủ, như cũ).
+
 ---
 
 ## Danh sách tool
@@ -147,8 +169,8 @@ gửi, JWT được che); đặt `dry_run=false` để ghi thật. Kết quả t
 | `create_page` | Lưu một source đã sinh thành trang mới, rồi **tự động publish** (build host + `publish_html`) để preview render ngay — `publish:false` để bỏ qua; publish lỗi không làm hỏng create (`result.publish` chỉ cách thử lại); link preview không domain vẫn hết hạn ~10 phút sau mỗi lần publish. Kiểm tra, cache source thành `draft_id`, rồi tạo. `organization_id` nhận id org hoặc chuỗi `"personal"` (tường minh không org). Khi bỏ trống và không có env mặc định, tự gọi `list_organizations`: 1 org → tự chọn (`organization_auto_selected:true`); 2+ org → trả danh sách org, yêu cầu re-call với `organization_id` (không đoán); 0 org hoặc lookup lỗi → personal. Lỗi kiểm tra / timeout / lỗi mạng vẫn giữ draft — thử lại bằng `create_page({ draft_id, dry_run:false })` hoặc sửa bằng `patch_page({ draft_id, patches })`. **Tự host ảnh ngoài:** trước khi lưu, mọi URL ảnh ngoài trong source (`specials.src`, nền `url(...)`, gallery `item.link`, poster video) được tải về và re-host lên Webcake CDN rồi viết lại trong cây (kết quả `rehost` = `{candidates,rehosted,failed,skipped,collection,collection_org_id}`; có cache, khử trùng lặp, URL lỗi giữ nguyên URL gốc và không chặn lưu). Giống `upload_images`, các upload này đi đường bộ sưu tập — nhưng cần CẢ JWT VÀ một org đã resolve: chỉ khi có đủ hai thứ mới được `rehost.collection:true` (ảnh chọn lại được trong editor, `collection_org_id` cho biết org nào), với org truyền tường minh hoặc tự chọn khi tài khoản chỉ có một org. Không resolve được org thì ảnh đi endpoint CDN công khai (`collection:false`) — rehost KHÔNG BAO GIỜ chặn việc lưu trang vì ảnh. Dù đường nào, clone cũng không cần gọi `upload_images` trước cho ảnh tham chiếu/web. **Mặc định `dry_run=true`.** |
 | `list_pages` | Liệt kê các trang của tài khoản (id, name, organization_id, updated_at) để chọn cái cần sửa. |
 | `find_pages` | Tìm trang theo tên, domain, và/hoặc page id (kết hợp AND) để định vị trang cần sửa; trả id, name, org, domain custom/mặc định, updated_at. |
-| `get_page` | Lấy cây source đã decode của một trang, ĐÃ NÉN về dạng thưa (lược boilerplate mặc định — ít token hơn hẳn; `compact:false` để lấy cây thô). Sửa xong gửi lại nguyên dạng. |
-| `update_page` | Ghi đè source của một trang bằng cây đã sửa. Kiểm tra, cache thành `draft_id`, rồi lưu. Timeout / lỗi vẫn giữ draft — thử lại bằng `update_page({ draft_id, dry_run:false })` hoặc `patch_page({ draft_id, dry_run:false })` (không patches). **Mặc định `dry_run=true`.** |
+| `get_page` | Lấy cây source đã decode của một trang, ĐÃ NÉN về dạng thưa (lược boilerplate mặc định — ít token hơn hẳn; `compact:false` để lấy cây thô). Sửa xong gửi lại nguyên dạng. Trả thêm `source_version` — mốc để `update_page` đối chiếu. |
+| `update_page` | Ghi đè source của một trang bằng cây đã sửa. Kiểm tra, cache thành `draft_id`, rồi lưu. **Từ chối lưu khi trang đã đổi ngoài phiên làm việc** (editor / agent khác) thay vì hoàn tác — truyền `base_version` lấy từ `get_page`, hoặc `force:true` để cố ghi đè. Timeout / lỗi vẫn giữ draft — thử lại bằng `update_page({ draft_id, dry_run:false })` hoặc `patch_page({ draft_id, dry_run:false })` (không patches). **Mặc định `dry_run=true`.** |
 | `add_section` | Nối thêm section vào trang có sẵn mà không gửi lại cả source (đường dựng tăng dần). Luôn cache batch thành `draft_id`; chạy lại với `{ page_id, draft_id, dry_run:false }` — khỏi gửi lại sections. Lỗi kiểm tra / timeout cũng giữ draft — sửa bằng `patch_page({ draft_id, patches })`. **Mặc định `dry_run=true`.** |
 | `patch_page` | Sửa trang theo id element mà không gửi lại cả source. Nhắm trang live (`page_id`) HOẶC draft đã cache (`draft_id`). Loại draft: `create_page` (tạo trang khi hợp lệ), `add_section` (nối khi hợp lệ), `update_page`/live-patch (thử lại updatePageSource). **Patches rỗng/bỏ trống + `draft_id` = commit nguyên trạng (đường thử-lại-timeout vạn năng).** **Mặc định `dry_run=true`.** |
 | `publish_page` | Publish một trang LÊN SÓNG: gọi build host của Webcake (`POST <buildBase>/render/build`; prod mặc định `https://build.webcake.io`, tuỳ chỉnh qua `WEBCAKE_BUILD_BASE` env / header `x-webcake-build-base`) để sinh `app`/`app_css`, rồi publish qua route `publish_html` của editor — route duy nhất ghi bản ghi PagePublishedV2 mà mọi đường serve công khai đọc. Có `custom_domain` thì trang live vĩnh viễn tại domain đó; **bỏ trống `custom_domain` để tái dùng domain đang gắn của trang** (giống publish modal của editor — republish giữ nguyên URL; fallback tra `find_pages` theo id), **không có domain nào thì chỉ còn `/preview/<page_id>` — hết hạn ~10 phút sau khi publish** (truyền `custom_domain:""` để ép trường hợp này). Không có build host thì rơi về lưu chỉ-source kiểu cũ (không có gì lên sóng). Kết quả trả `live` + `rendered`. **Mặc định `dry_run=true`** (không gọi build host khi dry_run). |

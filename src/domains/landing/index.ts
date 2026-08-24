@@ -241,12 +241,111 @@ function normalizeMisplacedAnimation(node: any): void {
   }
 }
 
+// ---------------------------------------------------------------------------
+// editor-value normalization: the Webcake EDITOR does not store every numeric
+// style as a number. Confirmed write paths in landing_page_backend/assets/editor:
+//   • fontSize   → "59"   (main/panels/EditTextPanel.vue: updateStyle('fontSize', e.target.value))
+//                  "13px" / "11px" / "70"  (main/pickers/*.vue seed values)
+//   • height     → "600"  (main/traits/SizeAndPosition.vue handleBlur: e.target.value)
+//   • borderWidth→ "1" / "0px"
+//   • opacity    → "50%"  (main/traits/Layer.vue: updateStyle('opacity', val + '%'))
+//   • top/left   → "unset"
+// The published renderer copes (landing_page_build/render/build/exportCss.js
+// parseInt()s the KEY_PREFIX_PIXEL group and string-concatenates '+ "px"' for
+// top/left/width/height), so these pages are perfectly valid — but the MCP
+// schema demanded numbers, so ONE manual tweak in the editor locked the page out
+// of every MCP edit tool. That is the bug this pass removes.
+//
+// Fix: after every expand pass, coerce a unit-less or px-suffixed numeric string
+// back to a number for the keys the renderer treats as bare px numbers, and turn
+// an editor percent opacity into the 0–1 fraction. Values the coercion cannot
+// read (`"unset"`, `"auto"`, `"100%"`) are left alone — the schema accepts them
+// and validate.ts warns where the renderer would choke. Deterministic +
+// idempotent, so the expand(compact(x)) == expand(x) invariant holds.
+// ---------------------------------------------------------------------------
+
+/** Style keys the renderer emits as bare px numbers (or parseInt()s). */
+const NUMERIC_STYLE_KEYS = new Set(["top", "left", "width", "height", "zIndex", "fontSize", "borderWidth"]);
+
+/** Per-breakpoint config keys the renderer appends "px" to / uses as numbers. */
+const NUMERIC_CONFIG_KEYS = new Set([
+  "virtualHeight", "column", "row", "slideWidth", "iconSize", "iconTop", "linePaddingLeft",
+  "topBgImage", "leftBgImage", "widthBgImage", "heightBgImage",
+  "stickyTop", "stickyLeft", "stickyRight", "stickyBottom",
+]);
+
+/** A number written as a string, with an optional "px" suffix: "59", " 12.5 ", "13px". */
+const NUMERIC_PX_STRING = /^\s*-?\d+(?:\.\d+)?\s*(?:px)?\s*$/i;
+
+/** "59" | "13px" -> 59 | 13. Anything else (including numbers) passes through. */
+function numFromEditorString(v: unknown): unknown {
+  if (typeof v !== "string" || !NUMERIC_PX_STRING.test(v)) return v;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : v;
+}
+
+/** "50%" -> 0.5 (the editor's Layer trait writes percent); else numeric-string coercion. */
+function opacityFromEditorString(v: unknown): unknown {
+  if (typeof v !== "string") return v;
+  const pct = v.trim().match(/^(-?\d+(?:\.\d+)?)\s*%$/);
+  if (pct) {
+    const n = parseFloat(pct[1]) / 100;
+    return Number.isFinite(n) ? n : v;
+  }
+  return numFromEditorString(v);
+}
+
+/** Walk a tree node and coerce editor-written numeric strings in-place (mutates). */
+function normalizeEditorValues(node: any): void {
+  if (!node || typeof node !== "object") return;
+  for (const bp of ["desktop", "mobile"] as const) {
+    const rbp = node.responsive?.[bp];
+    if (!rbp || typeof rbp !== "object") continue;
+
+    const styles = rbp.styles;
+    if (styles && typeof styles === "object") {
+      for (const key of NUMERIC_STYLE_KEYS) {
+        if (styles[key] !== undefined) styles[key] = numFromEditorString(styles[key]);
+      }
+      if (styles.opacity !== undefined && styles.opacity !== null) {
+        styles.opacity = opacityFromEditorString(styles.opacity);
+      }
+    }
+
+    const config = rbp.config;
+    if (config && typeof config === "object") {
+      for (const key of NUMERIC_CONFIG_KEYS) {
+        if (config[key] !== undefined) config[key] = numFromEditorString(config[key]);
+      }
+      const anim = config.animation;
+      if (anim && typeof anim === "object") {
+        for (const key of ["delay", "duration"] as const) {
+          if (anim[key] !== undefined && anim[key] !== null) anim[key] = numFromEditorString(anim[key]);
+        }
+      }
+    }
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) normalizeEditorValues(child);
+  }
+}
+
+/** settings.width_section carries the canvas width the coords live in — keep it numeric. */
+function normalizeSettings(source: any): void {
+  const ws = source?.settings?.width_section;
+  if (!ws || typeof ws !== "object") return;
+  for (const bp of ["desktop", "mobile"] as const) {
+    if (ws[bp] !== undefined) ws[bp] = numFromEditorString(ws[bp]);
+  }
+}
+
 /** Apply all post-expand normalizations to every node in a page source. */
 function normalizeSource(source: any): any {
   if (!source || typeof source !== "object") return source;
   for (const arr of ["page", "popup", "dynamic_pages"] as const) {
     if (Array.isArray((source as any)[arr])) {
       for (const node of (source as any)[arr]) {
+        normalizeEditorValues(node);
         normalizeMisplacedAnimation(node);
         normalizeImageBlocks(node);
         normalizeBorderRadius(node);
@@ -254,6 +353,7 @@ function normalizeSource(source: any): any {
       }
     }
   }
+  normalizeSettings(source);
   return source;
 }
 
@@ -278,7 +378,17 @@ export const landingDomain: Domain = {
   },
   compact: (input) => {
     try {
-      return compactSource(coercePage(input), createElement);
+      // Normalize FIRST (on a clone, so a caller's fetched tree is never mutated):
+      // a page hand-tweaked in the editor stores fontSize as "59" and height as
+      // "600", and the model should READ the canonical number it is asked to
+      // WRITE. Normalizing before compaction also lets a value that merely
+      // differs from the seed by its type ("20" vs 20) compact away.
+      const normalized = structuredClone(coercePage(input));
+      for (const arr of ["page", "popup", "dynamic_pages"] as const) {
+        if (Array.isArray((normalized as any)?.[arr])) (normalized as any)[arr].forEach(normalizeEditorValues);
+      }
+      normalizeSettings(normalized);
+      return compactSource(normalized, createElement);
     } catch {
       return input; // bad JSON — return as-is
     }

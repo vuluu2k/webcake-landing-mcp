@@ -95,6 +95,16 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 3. **Edit surgically**: change only what was asked; keep every other element, its `id`, and coordinates; send the compacted tree back as-is (no boilerplate). To add: `new_element`, unique id, place in the right section's `children`.
 4. `validate_page` → `update_page(page_id, source)` (`dry_run:true` then `dry_run:false`).
 
+**Concurrent editing.** The user may be in the Webcake editor on the same page. `update_page` replaces
+the whole stored tree, so a source read earlier — or a `draft_id` cached up to ~2 h ago — would revert
+their work. `get_page` therefore returns `source_version`, and `update_page` re-reads the page before
+saving: a live tree that no longer matches the baseline is refused with
+`reason:"page_changed_externally"` plus the element ids the save would have deleted (with no baseline
+at all it still refuses any save that drops live ids: `reason:"unverified_overwrite"`). Recover by
+re-reading and re-applying, or better by using `patch_page({ page_id, patches })` for edits — it merges
+into the tree it just read, so it can never revert anyone. `add_section` is safe for the same reason.
+Pass `force:true` only after the user says to discard the newer changes.
+
 ## Rules
 
 - INTAKE every time before generating (even a "test" page) — confirm purpose, name, colors, layout + an outline first, and don't build on the same turn as the request; never invent prices/phones/addresses/stats.

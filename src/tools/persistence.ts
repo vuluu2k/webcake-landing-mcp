@@ -25,17 +25,128 @@ import {
   listPages,
   searchPages,
   getPageSource,
+  getPageVersion,
   updatePageSource,
   appendSection,
   publishPage,
   toPreviewUrl,
 } from "../persistence/webcake-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "../persistence/draft-cache.js";
+import {
+  sourceFingerprint,
+  decideOverwrite,
+  rememberPageVersion,
+  forgetPageVersion,
+  lastKnownPageVersion,
+  sourceCacheKey,
+  cachePageSource,
+  cachedPageSource,
+  cachedPageSourceVersion,
+  dropCachedPageSource,
+} from "../persistence/page-version.js";
 import type { WebcakeConfig } from "../persistence/types.js";
 
 export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // Resolve config from THIS request's headers (remote per-user JWT) first, then env.
   const cfgFor = (extra: any) => readConfig(configFromHeaders(extra?.requestInfo?.headers));
+
+  // ---- live source read (version-validated cache) ---------------------------
+  // Every live read used to download the whole tree, and the concurrency guard
+  // added one more. It cannot be served from a plain cache — a cached answer
+  // cannot see an edit made after it was written, which is the bug the guard
+  // exists to catch. So the SERVER decides: GET /api/v1/ai/page_version returns
+  // page_source.updated_at (a few hundred bytes; bumped by every save, editor and
+  // MCP alike), and we reuse the cached tree only when that token is unchanged.
+  // Freshness is identical to a full read because the token comes from the backend.
+  //
+  // We probe only when something IS cached, so a cold read costs exactly one
+  // request as before; a warm one costs a tiny probe and no download. A backend
+  // without the route answers 404 → nothing ever caches → one full read, as before.
+  const readLiveSource = async (config: WebcakeConfig, pageId: string) => {
+    const key = sourceCacheKey(pageId, config.jwt);
+    if (cachedPageSourceVersion(key)) {
+      const probe = await getPageVersion(config, pageId);
+      if (probe.ok && probe.version) {
+        const hit = cachedPageSource(key, probe.version);
+        if (hit) return { ...hit, from_cache: true as const };
+      }
+    }
+    const full = await getPageSource(config, pageId);
+    if (full.ok && full.source != null) cachePageSource(key, full.updated_at, full);
+    return { ...full, from_cache: false as const };
+  };
+
+  /** Our own write changed the stored tree — the cached copy is spent. */
+  const invalidateSource = (config: WebcakeConfig, pageId: string | undefined) => {
+    if (pageId) dropCachedPageSource(sourceCacheKey(pageId, config.jwt));
+  };
+
+  // ---- stale-overwrite guard ------------------------------------------------
+  // update_page (and a committed 'update' draft) REPLACES the stored source with a
+  // tree the model read earlier. If the user edited the page in the Webcake editor
+  // in between, that overwrite silently reverts their work — the exact failure the
+  // draft cache makes easy to hit, since a draft can sit for ~2 h. The backend has
+  // no version column, so we do optimistic concurrency ourselves: re-read the page
+  // and compare its fingerprint with the baseline we recorded when the model last
+  // read/wrote it (or with an explicit base_version the caller passes back).
+  //
+  //   baseline matches live  → the model is current; overwrite (deletes are intentional)
+  //   baseline differs       → someone else edited the page → REFUSE
+  //   no baseline + the overwrite would DROP live element ids → REFUSE
+  //   no baseline + nothing is dropped → allow, but say the check could not be made
+  //
+  // force:true skips the check (an explicit "yes, discard the editor's changes").
+  const guardOverwrite = async (
+    config: WebcakeConfig,
+    pageId: string,
+    incoming: any,
+    opts: { baseVersion?: string; force?: boolean; retryHint: string }
+  ): Promise<{ ok: true; liveVersion?: string; notice?: string } | { ok: false; payload: any }> => {
+    if (opts.force) return { ok: true, notice: "force:true — the staleness check was skipped and any newer editor changes were overwritten." };
+
+    const live = await readLiveSource(config, pageId);
+    // Cannot read the live page (offline/404): don't block the write on our own check.
+    if (!live.ok || live.source == null) return { ok: true };
+
+    // An explicit base_version comes from get_page's source_version — a real read.
+    const baseline = opts.baseVersion
+      ? ({ fp: opts.baseVersion, origin: "read" } as const)
+      : lastKnownPageVersion(pageId);
+    const verdict = decideOverwrite(live.source, incoming, baseline);
+    if (verdict.allow) {
+      return {
+        ok: true,
+        liveVersion: verdict.liveVersion,
+        ...(verdict.unverified
+          ? {
+              notice:
+                "No baseline for this page in this session, so the overwrite could not be verified against the live tree — " +
+                "no live element ids are lost, so it was allowed. Call get_page first next time to make the check exact.",
+            }
+          : {}),
+      };
+    }
+    const { reason, liveVersion, baseVersion, dropped } = verdict;
+
+    return {
+      ok: false,
+      payload: {
+        reason,
+        page_id: pageId,
+        live_version: liveVersion,
+        base_version: baseVersion,
+        would_delete_element_ids: dropped.slice(0, 30),
+        would_delete_count: dropped.length,
+        hint:
+          (baseVersion
+            ? "The page was edited OUTSIDE this session (the Webcake editor, another agent) after this source was read, so saving it would revert those changes. "
+            : "This source was not read from the live page in this session and the overwrite would delete element ids that exist on the page right now. ") +
+          "Do ONE of these: (a) patch_page({ page_id, patches:[…] }) — it always merges into the LIVE tree, so it never reverts anything; " +
+          "(b) get_page({ page_id }) again, re-apply your edit to the fresh tree, then save; " +
+          `(c) if discarding the newer changes is intended, re-run ${opts.retryHint} with force:true.`,
+      },
+    };
+  };
 
   // After a successful CREATE, build the rendered app and publish via the
   // editor's publish_html route so the page renders immediately — without this
@@ -332,6 +443,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const outcome = await createPage(config, pageName, parsed, resolvedOrgId);
       if (outcome.ok) {
         await deleteDraft(existingDraftId); // created — drop the draft
+        rememberPageVersion(outcome.page_id, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+        invalidateSource(config!, outcome.page_id);
         // Auto-publish (default): build + publish_html so the preview renders
         // immediately. Never fails the create — result.publish carries the state.
         const publishOutcome =
@@ -448,13 +561,20 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     async ({ page_id, compact }, extra) => {
       const { config, missing } = cfgFor(extra);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
-      const res = await getPageSource(config, page_id);
-      if (!res.ok || compact === false || res.source == null) return text(res);
+      const res = await readLiveSource(config, page_id);
+      if (!res.ok || res.source == null) return text(res);
+      // Fingerprint what the page holds RIGHT NOW: this read is the baseline a
+      // later update_page is checked against, so an edit made in the Webcake
+      // editor after this point cannot be silently overwritten.
+      const source_version = sourceFingerprint(res.source);
+      rememberPageVersion(page_id, source_version, "read");
+      if (compact === false) return text({ ...res, source_version });
       return text({
         ...res,
         source: domain.compact(res.source),
         compacted: true,
-        note: "Source is COMPACTED (factory-default boilerplate stripped). Edit elements in this same sparse shape — keep ids — and send the edited tree back to update_page (or use patch_page for small edits); the server re-hydrates omitted boilerplate.",
+        source_version,
+        note: "Source is COMPACTED (factory-default boilerplate stripped). Edit elements in this same sparse shape — keep ids — and send the edited tree back to update_page (or use patch_page for small edits); the server re-hydrates omitted boilerplate. Pass source_version back as update_page({ base_version }) so a save is rejected instead of reverting an edit someone made in the editor meanwhile.",
       });
     }
   );
@@ -473,16 +593,27 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .string()
         .optional()
         .describe("A draft_id from a previous update_page call (dry_run=true or a timed-out/failed update). Loads the cached source — no need to re-send the full JSON. Use for dry-run → real call transitions and retrying after a timeout."),
+      base_version: z
+        .string()
+        .optional()
+        .describe("The source_version get_page returned for this page. When it no longer matches the live page the save is REJECTED instead of reverting whatever was edited in the Webcake editor meanwhile. Optional — omit it and the server uses the version it recorded on your last read/write of this page."),
+      force: z
+        .boolean()
+        .optional()
+        .describe("Default false. true = save even when the page changed outside this session, discarding those changes. Only pass it after the user has said to."),
       dry_run: z.boolean().optional().describe("Default TRUE — validate, cache the source as draft_id, and preview without sending. Set false to actually save."),
     },
     { title: "Update Webcake Page (Overwrite)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ page_id, source, draft_id, dry_run }, extra) => {
+    async ({ page_id, source, draft_id, base_version, force, dry_run }, extra) => {
       const isDry = dry_run !== false;
 
       // --- Resolve source: from cache (draft_id) or from the argument ---
       let expanded: any;
       let existingDraftId: string | undefined = draft_id;
       let resolvedPageId: string | undefined = page_id;
+      // The version of the live page this source was built from. Explicit wins;
+      // a draft carries the one captured when it was first cached.
+      let resolvedBaseVersion: string | undefined = base_version;
 
       if (draft_id) {
         const cached = await getDraft(draft_id);
@@ -502,6 +633,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         }
         expanded = cached.source;
         resolvedPageId = page_id ?? cached.page_id;
+        resolvedBaseVersion = base_version ?? cached.base_version;
       } else {
         if (source == null) {
           return text({ updated: false, reason: "no_source", hint: "Pass source (the edited page JSON) or a draft_id from a previous update_page call." });
@@ -522,7 +654,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         if (existingDraftId) {
           await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
+          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion });
         }
         return text({
           updated: false,
@@ -542,7 +674,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         if (existingDraftId) {
           await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
+          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion });
         }
         return text({
           dry_run: true,
@@ -563,13 +695,25 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       if (existingDraftId) {
         await updateDraft(existingDraftId, expanded);
       } else {
-        existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId });
+        existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion });
+      }
+
+      const guard = await guardOverwrite(config, resolvedPageId, parsed, {
+        baseVersion: resolvedBaseVersion,
+        force,
+        retryHint: `update_page({ draft_id: "${existingDraftId}", dry_run:false })`,
+      });
+      if (!guard.ok) {
+        return text({ updated: false, ...guard.payload, draft_id: existingDraftId });
       }
 
       const outcome = await updatePageSource(config, resolvedPageId, parsed);
       if (outcome.ok) {
         await deleteDraft(existingDraftId);
-        return text({ updated: true, ...outcome, ...warningsField(result.warnings) });
+        // The page now holds exactly what we sent — that becomes the new baseline.
+        rememberPageVersion(resolvedPageId, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+        invalidateSource(config!, resolvedPageId);
+        return text({ updated: true, ...outcome, ...warningsField(result.warnings), ...(guard.notice ? { stale_check: guard.notice } : {}) });
       }
       await updateDraft(existingDraftId, expanded);
       return text({
@@ -770,6 +914,11 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         if (outcome.ok) {
           // Success: drop the draft now that sections are persisted.
           if (existingDraftId) await deleteDraft(existingDraftId);
+          // The BACKEND appended server-side, so the stored tree is no longer any
+          // source we hold — drop the baseline so the next whole-source overwrite
+          // has to prove itself against a fresh read.
+          forgetPageVersion(page_id);
+          invalidateSource(config, page_id);
         } else {
           // Server-side failure (duplicate id vs live tree, etc.): keep the draft so
           // the model can retry/fix without re-shipping the payload.
@@ -801,7 +950,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       // Fallback for an older backend WITHOUT /append_section (404): the original
       // heavier path — get the live source → merge → validate the WHOLE tree → put.
-      const current = await getPageSource(config, page_id);
+      const current = await readLiveSource(config, page_id);
       if (!current.ok || current.source == null) {
         return text({
           added: false,
@@ -837,6 +986,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const parsed = domain.coerce(merged);
       const fbOutcome = await updatePageSource(config, page_id, parsed);
       if (fbOutcome.ok && existingDraftId) await deleteDraft(existingDraftId);
+      // The fallback merged into the tree it JUST read, so no staleness guard is
+      // needed here — but the save makes a new baseline worth recording.
+      if (fbOutcome.ok) rememberPageVersion(page_id, sourceFingerprint(fbOutcome.rehosted_source ?? parsed), "write");
+      if (fbOutcome.ok) invalidateSource(config!, page_id);
       return text({
         added: fbOutcome.ok,
         sections_added: newSections.length,
@@ -928,13 +1081,17 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .describe(
           "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type; update MERGES — it cannot DELETE an existing/stray key, so 'must NOT have additional properties' errors need op:'replace' with a clean node); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container. `element` may be a SPARSE node (id/type/styles/specials/events only) — the server hydrates omitted boilerplate from factory defaults. OMIT (or pass empty array) when draft_id is given and you just want to commit/retry the cached draft as-is."
         ),
+      force: z
+        .boolean()
+        .optional()
+        .describe("Default false. Only meaningful when committing an 'update' draft: true saves the cached snapshot even though the page changed outside this session, discarding those changes. A page_id patch never needs it — it merges into the tree it just read."),
       dry_run: z
         .boolean()
         .optional()
         .describe("Default TRUE — load, merge, validate and preview the resulting save WITHOUT writing. Set false to actually save."),
     },
     { title: "Patch Webcake Page (by element id)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ page_id, draft_id, patches, dry_run }, extra) => {
+    async ({ page_id, draft_id, patches, force, dry_run }, extra) => {
       const isDry = dry_run !== false; // default true (safe)
       const ops = asArray(patches).filter((p) => p != null && typeof p === "object");
       // Empty ops are only valid when a draft_id is supplied (commit-as-is / retry path).
@@ -969,7 +1126,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT (env), or send the x-webcake-jwt header (remote), then retry.",
           });
         }
-        const current = await getPageSource(config, page_id!);
+        const current = await readLiveSource(config, page_id!);
         if (!current.ok || current.source == null) {
           return text({
             patched: false,
@@ -979,6 +1136,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             hint: "Check the page_id (find_pages/list_pages) and that the account owns it.",
           });
         }
+        // This read is by definition current, so it becomes the baseline: a later
+        // update_page that still matches it is provably not reverting anything.
+        rememberPageVersion(page_id!, sourceFingerprint(current.source), "read");
         base = current.source;
         if (typeof base === "string") {
           try {
@@ -1139,6 +1299,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           const outcome = await appendSection(config, targetPageId, sectionsToAppend);
           if (outcome.ok) {
             await deleteDraft(draft_id);
+            forgetPageVersion(targetPageId);
+            invalidateSource(config, targetPageId);
           } else {
             await updateDraft(draft_id, base);
           }
@@ -1189,9 +1351,20 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             await updateDraft(draft_id, base);
             return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
           }
+          const guard = await guardOverwrite(config, targetPageId, parsed, {
+            baseVersion: draft.base_version,
+            force,
+            retryHint: `patch_page({ draft_id: "${draft_id}", dry_run:false })`,
+          });
+          if (!guard.ok) {
+            await updateDraft(draft_id, base);
+            return text({ patched: false, updated: false, ...guard.payload, draft_id, patches_applied: applied });
+          }
           const outcome = await updatePageSource(config, targetPageId, parsed);
           if (outcome.ok) {
             await deleteDraft(draft_id);
+            rememberPageVersion(targetPageId, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+            invalidateSource(config!, targetPageId);
           } else {
             await updateDraft(draft_id, base);
           }
@@ -1235,6 +1408,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         const outcome = await createPage(config, draft.name ?? "AI Page", parsed, draft.organization_id);
         if (outcome.ok) {
           await deleteDraft(draft_id);
+          rememberPageVersion(outcome.page_id, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+          invalidateSource(config!, outcome.page_id);
         } else {
           await updateDraft(draft_id, base); // keep for retry
         }
@@ -1272,7 +1447,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       // CACHE-FIRST: write an 'update' draft BEFORE the network call so a timeout or
       // failure is recoverable via patch_page({ draft_id, dry_run:false }) with no patches.
-      const liveDraftId = await putDraft({ source: expanded, kind: "update", page_id: page_id! });
+      const liveDraftId = await putDraft({
+        source: expanded,
+        kind: "update",
+        page_id: page_id!,
+        base_version: lastKnownPageVersion(page_id!)?.fp,
+      });
 
       if (isDry) {
         return text({
@@ -1289,6 +1469,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const outcome = await updatePageSource(config!, page_id!, parsed);
       if (outcome.ok) {
         await deleteDraft(liveDraftId);
+        rememberPageVersion(page_id!, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+        invalidateSource(config!, page_id!);
         return text({
           patched: true,
           patches_applied: applied,
@@ -1336,7 +1518,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // Publish re-saves the page's CURRENT stored source (the publish endpoint
       // requires it in the request), so read it first — even on dry_run, to show
       // the real payload.
-      const res = await getPageSource(config, page_id);
+      const res = await readLiveSource(config, page_id);
       if (!res.ok || res.source == null) {
         return text({ published: false, reason: "page_not_found", status: res.status, error: res.error ?? "No source on this page." });
       }

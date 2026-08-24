@@ -50,6 +50,13 @@ export interface PageDraft {
   /** For kind='sections': the live page id the sections will be appended to.
    *  For kind='update': the live page id to overwrite. */
   page_id?: string;
+  /**
+   * For kind='update': the fingerprint the live page had when this snapshot was
+   * taken (see ./page-version.ts). A draft can sit for ~2 h — long enough for the
+   * user to edit the page in the Webcake editor — so committing it re-reads the
+   * page and refuses when this no longer matches, instead of reverting their work.
+   */
+  base_version?: string;
   created: number; // ms; refreshed on EVERY touch (get/update) — sliding TTL, so a draft never expires mid-workflow
 }
 

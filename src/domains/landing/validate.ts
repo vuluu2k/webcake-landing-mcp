@@ -381,6 +381,31 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
 
+    // top/left/width/height are the ONE style group the renderer does NOT emit
+    // verbatim: exportCss.js strips them from the generic loop (PROPERTY_NOT_SHOW)
+    // and re-emits them as `${getStyle(el, mode, key)}px`. A value that already
+    // carries a unit therefore renders as "100%px"/"autopx" — invalid CSS the
+    // browser drops, so the element collapses or jumps to 0. Plain numbers and
+    // numeric strings are fine (expand() normalizes the latter to numbers first).
+    for (const bp of ["desktop", "mobile"] as const) {
+      const styles = node.responsive?.[bp]?.styles;
+      if (!styles || typeof styles !== "object") continue;
+      // A sticky element takes exportCss.js handleStyleSticky(), which positions
+      // it from config.sticky* and never reads styles.top/left — the editor
+      // deliberately parks "unset" there, so those two are not a problem here.
+      const isSticky = !!node.responsive?.[bp]?.config?.sticky;
+      for (const key of ["top", "left", "width", "height"] as const) {
+        if (isSticky && (key === "top" || key === "left")) continue;
+        const raw = (styles as any)[key];
+        if (typeof raw !== "string" || raw.trim() === "") continue;
+        warnings.push(
+          `${path} (${type ?? "?"}) [${bp}]: styles.${key}="${raw}" is not a plain px number — ` +
+          `the renderer emits this property as \`${key}:${raw}px\`, which the browser drops. ` +
+          `Set it to a NUMBER: patch_page({op:'update',id:'${node.id ?? "?"}',styles:{${bp}:{${key}:<px>}}}).`
+        );
+      }
+    }
+
     // styles.opacity < 1 renders the element permanently faded (exportCss.js emits opacity:<v>)
     for (const bp of ["desktop", "mobile"] as const) {
       const styles = node.responsive?.[bp]?.styles;

@@ -29,6 +29,21 @@ import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
 import { isPrivateHost, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
 import { iconifyCandidates } from "./persistence/icon-client.js";
 import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl } from "./persistence/rehost.js";
+import {
+  sourceFingerprint,
+  collectElementIds,
+  decideOverwrite,
+  rememberPageVersion,
+  forgetPageVersion,
+  lastKnownPageVersion,
+  resetPageVersions,
+  sourceCacheKey,
+  cachePageSource,
+  cachedPageSource,
+  cachedPageSourceVersion,
+  dropCachedPageSource,
+  resetPageSourceCache,
+} from "./persistence/page-version.js";
 
 let failures = 0;
 const check = (name: string, cond: boolean, extra?: unknown) => {
@@ -355,6 +370,71 @@ check("expand preserves provided styles", eTxt.responsive.desktop.styles.fontSiz
 check("expand keeps id/type/specials", eTxt.id === "t_h1" && eTxt.type === "text-block" && eTxt.specials.text === "Sparse hero", eTxt);
 check("expanded sparse page validates", validatePage(exp).valid, validatePage(exp).errors);
 check("expand(full good page) still valid", validatePage(expandSource(good, createElement)).valid);
+
+console.log("== editor tolerance: a page hand-tweaked in the Webcake editor still validates ==");
+{
+  // Every value shape below is one the EDITOR actually writes (verified against
+  // landing_page_backend/assets/editor): fontSize "59" (EditTextPanel inline box),
+  // "32px" (element pickers), height "520" (SizeAndPosition blur), borderWidth
+  // "1"/"0px", opacity "50%" (Layer trait), width_section as strings, and the
+  // "delay"/"error" event triggers the EventTrait dropdown offers.
+  const edited: any = {
+    page: [{
+      id: "sec_edit", type: "section",
+      properties: { name: "Section", movable: false, sync: true },
+      specials: {}, runtime: {}, events: [],
+      responsive: {
+        desktop: { config: {}, styles: { height: "600", background: "rgba(255,255,255,1)" } },
+        mobile: { config: {}, styles: { height: "520", background: "rgba(255,255,255,1)" } },
+      },
+      children: [{
+        id: "txt_edit", type: "text-block",
+        properties: { name: "Text", movable: true, sync: true },
+        specials: { text: "Hand-edited headline", tag: "h1" }, runtime: {},
+        events: [{ id: "EVENT1", type: "delay", action: "none", target: null }],
+        responsive: {
+          desktop: { config: { animation: { name: "none", delay: "0", duration: "3", repeat: null } },
+                     styles: { top: 60, left: 80, width: 500, height: 70, fontSize: "59", borderWidth: "1", opacity: "50%", color: "rgba(20,20,20,1)" } },
+          mobile: { config: {},
+                    styles: { top: "50", left: 20, width: 380, height: 60, fontSize: "32px", borderWidth: "0px", color: "rgba(20,20,20,1)" } },
+        },
+      }],
+    }],
+    popup: [],
+    settings: { title: "Edited", description: "d", keywords: "a", width_section: { desktop: "960", mobile: "420" } },
+    options: { mobileOnly: false, versionID: null },
+    cartConfigs: {},
+  };
+  const ex: any = landingDomain.expand(edited);
+  const v = landingDomain.validate(ex);
+  check("editor tolerance: hand-edited page has NO schema errors", v.valid, v.errors);
+
+  const dTxt = ex.page[0].children[0].responsive.desktop;
+  const mTxt = ex.page[0].children[0].responsive.mobile;
+  check('editor tolerance: fontSize "59" -> 59', dTxt.styles.fontSize === 59, dTxt.styles.fontSize);
+  check('editor tolerance: fontSize "32px" -> 32', mTxt.styles.fontSize === 32, mTxt.styles.fontSize);
+  check('editor tolerance: borderWidth "1"/"0px" -> 1/0', dTxt.styles.borderWidth === 1 && mTxt.styles.borderWidth === 0, [dTxt.styles.borderWidth, mTxt.styles.borderWidth]);
+  check('editor tolerance: opacity "50%" -> 0.5', dTxt.styles.opacity === 0.5, dTxt.styles.opacity);
+  check('editor tolerance: height "600"/"520" -> numbers', ex.page[0].responsive.desktop.styles.height === 600 && ex.page[0].responsive.mobile.styles.height === 520, ex.page[0].responsive);
+  check('editor tolerance: top "50" -> 50', mTxt.styles.top === 50, mTxt.styles.top);
+  check('editor tolerance: animation delay/duration strings -> numbers', dTxt.config.animation.delay === 0 && dTxt.config.animation.duration === 3, dTxt.config.animation);
+  check('editor tolerance: width_section strings -> numbers', ex.settings.width_section.desktop === 960 && ex.settings.width_section.mobile === 420, ex.settings.width_section);
+  check('editor tolerance: "delay" event trigger accepted', !v.errors.some((e) => /type/.test(e) && /delay/.test(e)), v.errors);
+  check("editor tolerance: normalization is idempotent", JSON.stringify(landingDomain.expand(ex)) === JSON.stringify(ex));
+
+  // get_page COMPACTS the stored tree — the model must read the canonical number it is asked to write.
+  const readBack: any = landingDomain.compact(edited);
+  check("editor tolerance: compact (the get_page read path) normalizes too", readBack.page[0].children[0].responsive.desktop.styles.fontSize === 59, readBack.page[0].children[0].responsive.desktop.styles);
+  check("editor tolerance: compact does not mutate the caller’s tree", edited.page[0].children[0].responsive.desktop.styles.fontSize === "59", edited.page[0].children[0].responsive.desktop.styles.fontSize);
+
+  // A unit the renderer cannot use (it appends "px" itself) stays a string and is WARNED, not blocked.
+  const unit = JSON.parse(JSON.stringify(edited));
+  unit.page[0].children[0].responsive.desktop.styles.width = "100%";
+  const uv = landingDomain.validate(landingDomain.expand(unit));
+  check("editor tolerance: non-px dimension unit is a warning, not an error", uv.valid, uv.errors);
+  check("editor tolerance: non-px dimension unit IS warned", uv.warnings.some((w) => /styles\.width="100%"/.test(w)), uv.warnings);
+}
+
 
 console.log("== compact: the inverse of expand (round-trip persists the same tree) ==");
 {
@@ -2207,6 +2287,119 @@ console.log("== layout: exact centering/row/grid/stack coordinates (both breakpo
   const rightWide = computeLayout({ mode: "row", count: 2, itemWidth: 300, itemHeight: 120, gap: 40, canvasDesktop: 1200, align: "right", marginDesktop: 80 });
   const lastRight = rightWide.desktop[1].left + rightWide.desktop[1].width;
   check("layout: align right ends at canvas − margin (1200 − 80 = 1120)", lastRight === 1120, { lastRight, desktop: rightWide.desktop });
+}
+
+console.log("== stale-overwrite guard: a UI edit is never silently reverted ==");
+{
+  const el = (id: string, extra: any = {}) => ({
+    id, type: "text-block",
+    properties: { name: id, movable: true, sync: true },
+    specials: { text: id }, runtime: {}, events: [],
+    responsive: {
+      desktop: { config: {}, styles: { top: 0, left: 0, width: 100, height: 20, ...extra } },
+      mobile: { config: {}, styles: { top: 0, left: 0, width: 100, height: 20, ...extra } },
+    },
+  });
+  const pageWith = (children: any[]) => ({
+    page: [{
+      id: "sec1", type: "section",
+      properties: { name: "Section", movable: false, sync: true },
+      specials: {}, runtime: {}, events: [],
+      responsive: { desktop: { config: {}, styles: { height: 600 } }, mobile: { config: {}, styles: { height: 500 } } },
+      children,
+    }],
+    popup: [], settings: { title: "t" }, options: {}, cartConfigs: {},
+  });
+
+  // --- fingerprint --------------------------------------------------------
+  const a = { page: [], settings: { title: "x", description: "d" } };
+  const b = { settings: { description: "d", title: "x" }, page: [] };
+  check("page-version: fingerprint ignores object key order", sourceFingerprint(a) === sourceFingerprint(b), [sourceFingerprint(a), sourceFingerprint(b)]);
+  check("page-version: fingerprint survives the JSON string round-trip", sourceFingerprint(JSON.stringify(a)) === sourceFingerprint(a));
+  check("page-version: fingerprint changes when content changes", sourceFingerprint(a) !== sourceFingerprint({ ...a, settings: { title: "y" } }));
+  check("page-version: array order still matters", sourceFingerprint({ page: [1, 2] }) !== sourceFingerprint({ page: [2, 1] }));
+
+  // --- element ids --------------------------------------------------------
+  const ids = collectElementIds(pageWith([el("t1"), el("t2")]));
+  check("page-version: collectElementIds walks nested children", ids.has("sec1") && ids.has("t1") && ids.has("t2") && ids.size === 3, [...ids]);
+
+  // --- the decision -------------------------------------------------------
+  const live = pageWith([el("t1"), el("t2")]);
+  const liveFp = sourceFingerprint(live);
+  const sameContent = pageWith([el("t1"), el("t2", { fontSize: 30 })]); // model edited t2
+
+  const fresh = decideOverwrite(live, sameContent, { fp: liveFp, origin: "read" });
+  check("guard: baseline matches live → allowed", fresh.allow === true, fresh);
+
+  // The model deliberately deletes t2 while holding a current baseline.
+  const deleting = decideOverwrite(live, pageWith([el("t1")]), { fp: liveFp, origin: "read" });
+  check("guard: deliberate delete on a current baseline → allowed", deleting.allow === true, deleting);
+
+  // THE BUG: user edited in the editor after the model read the page.
+  const uiEdited = pageWith([el("t1"), el("t2"), el("t3_added_in_editor")]);
+  const stale = decideOverwrite(uiEdited, sameContent, { fp: liveFp, origin: "read" });
+  check("guard: page changed in the editor → REFUSED", stale.allow === false && stale.reason === "page_changed_externally", stale);
+  check("guard: refusal names the elements the overwrite would delete", stale.allow === false && stale.dropped.includes("t3_added_in_editor"), stale);
+
+  // Even a change that drops nothing is refused on a trusted baseline: the
+  // overwrite would still revert the user's tweak to the elements it does touch.
+  const tweaked = pageWith([el("t1"), el("t2", { fontSize: 99 })]);
+  const noDrop = decideOverwrite(tweaked, sameContent, { fp: liveFp, origin: "read" });
+  check("guard: editor tweak with no id loss → still REFUSED on a read baseline", noDrop.allow === false && noDrop.reason === "page_changed_externally", noDrop);
+
+  // No baseline at all (fresh process / no get_page): fall back to id loss.
+  const blind = decideOverwrite(uiEdited, sameContent, undefined);
+  check("guard: no baseline + would delete live ids → REFUSED", blind.allow === false && blind.reason === "unverified_overwrite", blind);
+  const blindSafe = decideOverwrite(live, sameContent, undefined);
+  check("guard: no baseline + nothing dropped → allowed as unverified", blindSafe.allow === true && (blindSafe as any).unverified === true, blindSafe);
+
+  // A baseline we only PREDICTED after a write must never produce a false
+  // "someone edited it" — the backend re-encodes JSON, so a mismatch proves nothing.
+  const predicted = decideOverwrite(live, sameContent, { fp: "deadbeefdeadbeef", origin: "write" });
+  check("guard: stale WRITE baseline + nothing dropped → allowed (no false conflict)", predicted.allow === true, predicted);
+  const predictedDrop = decideOverwrite(uiEdited, sameContent, { fp: "deadbeefdeadbeef", origin: "write" });
+  check("guard: stale WRITE baseline + id loss → REFUSED", predictedDrop.allow === false && predictedDrop.reason === "unverified_overwrite", predictedDrop);
+
+  // --- the baseline store -------------------------------------------------
+  resetPageVersions();
+  check("page-version: unknown page has no baseline", lastKnownPageVersion("p1") === undefined);
+  rememberPageVersion("p1", liveFp, "read");
+  check("page-version: remember/lastKnown round-trip", lastKnownPageVersion("p1")?.fp === liveFp && lastKnownPageVersion("p1")?.origin === "read");
+  rememberPageVersion("p1", "other", "write");
+  check("page-version: a later write downgrades the origin", lastKnownPageVersion("p1")?.origin === "write");
+  forgetPageVersion("p1");
+  check("page-version: add_section-style forget clears it", lastKnownPageVersion("p1") === undefined);
+  // --- version-keyed source cache ----------------------------------------
+  resetPageSourceCache();
+  const k1 = sourceCacheKey("pageA", "jwt-user-1");
+  const k2 = sourceCacheKey("pageA", "jwt-user-2");
+  check("source cache: key is scoped to the credentials, not just the page", k1 !== k2, [k1, k2]);
+  check("source cache: same page + same creds → same key", sourceCacheKey("pageA", "jwt-user-1") === k1);
+
+  cachePageSource(k1, "2026-08-24T10:00:00", { ok: true, source: live });
+  check("source cache: stores the version it was read at", cachedPageSourceVersion(k1) === "2026-08-24T10:00:00");
+  check("source cache: hit when the backend reports the SAME version", cachedPageSource(k1, "2026-08-24T10:00:00")?.source === live);
+  check("source cache: MISS when the page moved (the download is unavoidable)", cachedPageSource(k1, "2026-08-24T10:05:00") === undefined);
+  check("source cache: another caller's key never hits", cachedPageSource(k2, "2026-08-24T10:00:00") === undefined);
+  check("source cache: no version probe → never a hit", cachedPageSource(k1, undefined) === undefined);
+
+  // An older backend has no /page_version and no updated_at: nothing caches, so
+  // every read stays a single full fetch exactly as before.
+  resetPageSourceCache();
+  cachePageSource(k1, undefined, { ok: true, source: live });
+  check("source cache: a backend without updated_at caches nothing", cachedPageSourceVersion(k1) === undefined);
+
+  cachePageSource(k1, "v1", { ok: true, source: live });
+  dropCachedPageSource(k1);
+  check("source cache: our own write drops the entry", cachedPageSourceVersion(k1) === undefined);
+
+  for (let i = 0; i < 10; i++) cachePageSource(sourceCacheKey("big" + i, "j"), "v", { ok: true, source: live });
+  check("source cache: bounded (a source can be megabytes)", cachedPageSourceVersion(sourceCacheKey("big0", "j")) === undefined && cachedPageSourceVersion(sourceCacheKey("big9", "j")) === "v");
+  resetPageSourceCache();
+
+  for (let i = 0; i < 120; i++) rememberPageVersion("bulk" + i, "fp" + i, "read");
+  check("page-version: store is bounded (LRU evicts the oldest)", lastKnownPageVersion("bulk0") === undefined && lastKnownPageVersion("bulk119")?.fp === "fp119");
+  resetPageVersions();
 }
 
 console.log("== server: MCP serverInfo.version follows package.json (no hardcoded constant) ==");
