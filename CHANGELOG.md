@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-08-25
+
+### Fixed
+- Colors written in any CSS notation other than the legacy `rgba(r,g,b,a)` form (hex, `rgb()`, `hsl()`, CSS named colors, and the modern space/slash `rgba()` syntax) — including individual stops inside `linear-gradient()`/`radial-gradient()` values — are now canonicalized to `rgba(r,g,b,a)` on every expand (`create_page`/`update_page`/`add_section`/`patch_page`/`validate_page`) across all color-bearing keys (`color`, `background`, `backgroundTxt`, `borderColor`, `overlay`, and other `*color*` keys), fixing the Webcake editor's color and background traits showing black instead of the intended color.
+- A `styles.color`/`backgroundTxt`/`borderColor` value set on only one breakpoint is now mirrored onto the other breakpoint on save, since the editor's color traits read one breakpoint at a time with no desktop/mobile fallback and previously showed (and could save) black on the breakpoint missing the value.
+
+### Changed
+- `validate_page` now warns when a color-bearing `styles`/`config` value cannot be converted to `rgba()` (e.g. `var(--x)`, `color-mix(...)`), naming the offending element and a `patch_page` fix.
+- The generation guide and `page-schema.json` descriptions for `styles.color`/`background`/`borderColor`/`overlay` now document the rgba()-only requirement, the both-breakpoints requirement, and the automatic conversion/mirroring behavior.
+
 ## [1.5.1] - 2026-08-24
 
 ### Added
