@@ -188,7 +188,10 @@ Backends without that route keep working (one full read per live fetch, as befor
 - **Top-level source:** `{ page: [sections], popup: [popups], settings: {…}, options: { currency, mobileOnly, versionID }, cartConfigs: {} }`.
   Popups are a **separate** top-level array, not nested in `page`.
 - Per-breakpoint animation lives in `config.animation = { name, delay, duration, repeat }`.
-- Colors are `rgba()`; `top/left/width/height/fontSize` are numbers (px); form inputs need a unique `specials.field_name`.
+- Colors are `rgba()` on **both** breakpoints; `top/left/width/height/fontSize` are numbers (px); form inputs need a unique `specials.field_name`.
+  The published page renders any CSS color, but the editor's color traits only parse `rgba()` and show **black** for anything else — and for a color
+  set on only one breakpoint they show black on the other. The server auto-converts hex/`rgb()`/`hsl()`/named colors to `rgba()` and mirrors
+  `color`/`backgroundTxt`/`borderColor` onto the breakpoint that lacks one; what it cannot convert (`var(--x)`, `color-mix(…)`) comes back as a warning.
 
 Reference: [docs/page-element-schema.md](./page-element-schema.md),
 [docs/element-specials-reference.md](./element-specials-reference.md) (every special/event in detail), and

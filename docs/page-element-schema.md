@@ -111,7 +111,7 @@ Quy tắc:
 | | `zIndex` | Number | thứ tự chồng |
 | Nền | `background` | String | màu `rgba(...)` hoặc gradient |
 | | `backgroundImage` | String | `url(...)` (ảnh nền của image-block / section) |
-| Chữ | `color` | String | `rgba(r,g,b,a)` |
+| Chữ | `color` | String | `rgba(r,g,b,a)` — BẮT BUỘC dạng `rgba()` và đặt trên CẢ hai breakpoint: trait của editor chỉ parse được `rgba()` và hiển thị ĐEN với mọi dạng khác (hex/`rgb()`/`hsl()`/tên màu), đồng thời đọc từng breakpoint riêng nên breakpoint thiếu màu cũng ra đen. Server tự chuyển về `rgba()` và tự nhân bản `color`/`backgroundTxt`/`borderColor` sang breakpoint còn thiếu khi lưu. |
 | | `fontSize` | Number | px |
 | | `fontFamily` | String | vd `"'Roboto', sans-serif"` |
 | | `fontWeight` | String/Number | `"normal"`, `"bold"`, `400`… |

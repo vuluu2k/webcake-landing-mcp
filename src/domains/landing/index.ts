@@ -25,6 +25,7 @@ import { autofixLayout } from "./autofix-layout.js";
 import { computeLayout, type LayoutOpts } from "./layout.js";
 import { expandSource } from "../../core/expand.js";
 import { compactSource } from "../../core/compact.js";
+import { splitCssLayers, normalizeColorValue, isColorKey } from "./color.js";
 
 /** The payload returned by the get_generation_guide tool. */
 export const guidePayload = {
@@ -155,23 +156,6 @@ function normalizeBorderRadius(node: any): void {
 // expand(x) still holds.
 // ---------------------------------------------------------------------------
 
-/** Split a CSS background value into top-level comma-separated layers. */
-function splitBackgroundLayers(bg: string): string[] {
-  const layers: string[] = [];
-  let depth = 0;
-  let cur = "";
-  for (const ch of bg) {
-    if (ch === "(") depth++;
-    else if (ch === ")") depth--;
-    if (ch === "," && depth === 0) {
-      layers.push(cur);
-      cur = "";
-    } else cur += ch;
-  }
-  layers.push(cur);
-  return layers.map((l) => l.trim()).filter((l) => l !== "");
-}
-
 /** The editor-canonical url() layer shape its splitBackground() can re-parse. */
 const CANONICAL_URL_LAYER =
   /^(left|center|right) (top|center|bottom)\/ (cover|contain|auto|[\d.]+(?:px|%)(?: [\d.]+(?:px|%))?) (no-repeat|repeat|repeat-x|repeat-y|space|round)(?: (scroll|fixed|local))? content-box url\(.+\)(?: border-box)?$/;
@@ -180,7 +164,7 @@ const CANONICAL_URL_LAYER =
 function normalizeBackgroundValue(bg: unknown): unknown {
   if (typeof bg !== "string" || !bg.includes("url(")) return bg;
   const out: string[] = [];
-  for (const layer of splitBackgroundLayers(bg)) {
+  for (const layer of splitCssLayers(bg)) {
     const url = layer.match(/url\((['"]?)(.*?)\1\)/);
     if (url) {
       out.push(CANONICAL_URL_LAYER.test(layer) ? layer : imgBackground(url[2]));
@@ -202,6 +186,77 @@ function normalizeBackgrounds(node: any): void {
   }
   if (Array.isArray(node.children)) {
     for (const child of node.children) normalizeBackgrounds(child);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// colour normalization: the live renderer emits colours RAW into CSS, so a hex
+// / rgb() / hsl() / named colour renders perfectly on the published page — but
+// the EDITOR's colour traits re-parse the stored string and every one of them
+// falls back to BLACK when the parse fails. `parseBackground` (common.js:128)
+// scans for `url|linear-gradient|radial-gradient|rgba` only — note the literal
+// "rgba", so even `rgb(...)` misses — and for a text-block the colour swatch IS
+// that background trait (Background.vue:163 returns styles.color; :272-273
+// pushes a hard-coded rgba(0,0,0,1) when nothing parsed). Colour.vue:67 does the
+// same with '#000000' for button/form/countdown. So `color:"#ffffff"` renders
+// white but shows BLACK in the trait panel — and one touch of that trait writes
+// the black back and the page really does turn black.
+//
+// Second half of the same bug: the traits read `el.responsive[display].styles`
+// (Trait.vue:377-380) with NO desktop→mobile fallback, so a colour set on one
+// breakpoint only shows black on the other — and renders black there too, since
+// the breakpoint's CSS simply carries no colour declaration.
+//
+// Fix: after every expand pass, (a) canonicalise every colour-bearing style/
+// config value to the legacy `rgba(r,g,b,a)` form every editor parser reads, and
+// (b) mirror a foreground colour set on exactly one breakpoint onto the other.
+// Values already in that form are returned byte-identical, so a save never
+// rewrites the colours the editor itself wrote. Deterministic + idempotent, so
+// the expand(compact(x)) == expand(x) invariant holds.
+// ---------------------------------------------------------------------------
+
+/**
+ * Colour keys copied to the other breakpoint when only one carries them.
+ * Deliberately a short ALLOWLIST, not every `*color*` key: mirroring
+ * `-webkitTextFillColor:transparent` (the gradient-text-fill recipe) without the
+ * gradient `background` that goes with it would render the mobile text
+ * invisible, and a url()-bearing `background` can legitimately differ per
+ * breakpoint. These three are inert when the other breakpoint has no matching
+ * geometry (a borderColor with borderWidth:0 paints nothing).
+ */
+const MIRRORED_COLOR_KEYS = ["color", "backgroundTxt", "borderColor"] as const;
+
+/** Walk a tree node and canonicalise + mirror every colour in-place (mutates). */
+function normalizeColors(node: any): void {
+  if (!node || typeof node !== "object") return;
+  for (const bp of ["desktop", "mobile"] as const) {
+    const rbp = node.responsive?.[bp];
+    if (!rbp || typeof rbp !== "object") continue;
+    for (const bag of [rbp.styles, rbp.config]) {
+      if (!bag || typeof bag !== "object") continue;
+      for (const key of Object.keys(bag)) {
+        if (!isColorKey(key)) continue;
+        const fixed = normalizeColorValue(bag[key]);
+        if (fixed !== bag[key]) bag[key] = fixed;
+      }
+    }
+  }
+
+  const desktop = node.responsive?.desktop?.styles;
+  const mobile = node.responsive?.mobile?.styles;
+  if (desktop && typeof desktop === "object" && mobile && typeof mobile === "object") {
+    for (const key of MIRRORED_COLOR_KEYS) {
+      const dv = desktop[key];
+      const mv = mobile[key];
+      const dHas = typeof dv === "string" && dv.trim() !== "";
+      const mHas = typeof mv === "string" && mv.trim() !== "";
+      if (dHas && !mHas) mobile[key] = dv;
+      else if (mHas && !dHas) desktop[key] = mv;
+    }
+  }
+
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) normalizeColors(child);
   }
 }
 
@@ -349,6 +404,10 @@ function normalizeSource(source: any): any {
         normalizeMisplacedAnimation(node);
         normalizeImageBlocks(node);
         normalizeBorderRadius(node);
+        // Colours BEFORE backgrounds: the colour pass rewrites gradient stops
+        // and bare-colour layers, the background pass then canonicalises any
+        // url() layer in the same value.
+        normalizeColors(node);
         normalizeBackgrounds(node);
       }
     }

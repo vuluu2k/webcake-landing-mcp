@@ -1724,6 +1724,121 @@ console.log("== background normalization: url() layers canonicalised to the edit
   check("background round-trip: expand(compact(expand(x))) deep-equals expand(x)", deepEq(reexpanded, expanded));
 }
 
+console.log("== colour normalization: editor-readable rgba() + breakpoint mirroring ==");
+{
+  // A text-block is the sharpest case: traitGroup.js gives it no 'color' trait,
+  // so its colour swatch IS the background trait, which falls back to a
+  // hard-coded rgba(0,0,0,1) whenever parseBackground() finds nothing.
+  const mkColorPage = (desktop: any, mobile: any = desktop) => ({
+    page: [
+      {
+        id: "c_sec", type: "section",
+        responsive: {
+          desktop: { styles: { height: 400 } },
+          mobile: { styles: { height: 400 } },
+        },
+        children: [
+          {
+            id: "c_txt", type: "text-block",
+            responsive: {
+              desktop: { styles: { top: 10, left: 10, width: 200, height: 40, ...desktop } },
+              mobile: { styles: { top: 10, left: 10, width: 200, height: 40, ...mobile } },
+            },
+            specials: { text: "hello", tag: "p" },
+          },
+        ],
+      },
+    ],
+    settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
+  });
+  const txtOf = (src: any, bp: "desktop" | "mobile" = "desktop") =>
+    src.page[0].children[0].responsive[bp].styles;
+
+  // 1) every notation a model realistically writes → the one form the editor parses
+  const cases: Array<[string, string, string]> = [
+    ["hex #ffffff", "#ffffff", "rgba(255,255,255,1)"],
+    ["short hex #fff", "#fff", "rgba(255,255,255,1)"],
+    ["hex+alpha #ffffff80", "#ffffff80", "rgba(255,255,255,0.502)"],
+    ["rgb() (no 'a' → parseBackground misses it)", "rgb(246,4,87)", "rgba(246,4,87,1)"],
+    ["modern slash syntax", "rgba(255 255 255 / 0.5)", "rgba(255,255,255,0.5)"],
+    ["hsl()", "hsl(340,96%,49%)", "rgba(245,5,85,1)"],
+    ["named colour", "white", "rgba(255,255,255,1)"],
+  ];
+  for (const [label, input, want] of cases) {
+    const got = txtOf(landingDomain.expand(mkColorPage({ color: input }))).color;
+    check(`colour: ${label} → ${want}`, got === want, got);
+  }
+
+  // 2) values the editor ALREADY reads are returned byte-identical (no save churn)
+  for (const untouched of ["rgba(26,32,44,1)", "rgba(0, 0, 0, 1)", "rgba(13,45,58,0.88)", "transparent"]) {
+    const got = txtOf(landingDomain.expand(mkColorPage({ color: untouched }))).color;
+    check(`colour: "${untouched}" left byte-identical`, got === untouched, got);
+  }
+
+  // 3) idempotent — a second expand changes nothing
+  const once: any = landingDomain.expand(mkColorPage({ color: "#1a202c" }));
+  const twice: any = landingDomain.expand(structuredClone(once));
+  check("colour: normalization is idempotent", deepEq(twice, once));
+
+  // 4) gradient stops are rewritten in place; an all-rgba gradient is untouched
+  const hexGrad = landingDomain.expand(mkColorPage({ background: "linear-gradient(180deg, #fff 0%, #000 100%)" }));
+  check(
+    "colour: hex gradient stops → rgba()",
+    txtOf(hexGrad).background === "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(0,0,0,1) 100%)",
+    txtOf(hexGrad).background
+  );
+  const rgbaGrad = "linear-gradient(160deg, rgba(13,45,58,0.88) 0%, rgba(10,124,110,0.75) 100%)";
+  check(
+    "colour: all-rgba gradient untouched",
+    txtOf(landingDomain.expand(mkColorPage({ background: rgbaGrad }))).background === rgbaGrad
+  );
+
+  // 5) a url() background layer is left for normalizeBackgrounds (no colour rewrite)
+  const urlBg = landingDomain.expand(mkColorPage({ background: "url(https://x.test/a.jpg) center/cover no-repeat" }));
+  check(
+    "colour: url() layer untouched by the colour pass",
+    txtOf(urlBg).background.includes("url(https://x.test/a.jpg)"),
+    txtOf(urlBg).background
+  );
+
+  // 6) a colour on ONE breakpoint is mirrored onto the other — the trait panel
+  //    reads one breakpoint at a time and shows black for the missing one.
+  const dOnly: any = landingDomain.expand(mkColorPage({ color: "rgba(26,32,44,1)" }, {}));
+  check("colour: desktop-only color mirrored to mobile", txtOf(dOnly, "mobile").color === "rgba(26,32,44,1)", txtOf(dOnly, "mobile"));
+  const mOnly: any = landingDomain.expand(mkColorPage({}, { color: "#ffffff" }));
+  check("colour: mobile-only color mirrored to desktop (converted)", txtOf(mOnly, "desktop").color === "rgba(255,255,255,1)", txtOf(mOnly, "desktop"));
+  const bothSet: any = landingDomain.expand(mkColorPage({ color: "rgba(1,2,3,1)" }, { color: "rgba(4,5,6,1)" }));
+  check(
+    "colour: an explicit per-breakpoint colour is never overwritten",
+    txtOf(bothSet, "desktop").color === "rgba(1,2,3,1)" && txtOf(bothSet, "mobile").color === "rgba(4,5,6,1)"
+  );
+
+  // 7) the gradient-text-fill key is NOT mirrored — copying it without the
+  //    gradient background that goes with it would blank the mobile text.
+  const fill: any = landingDomain.expand(
+    mkColorPage({ background: "linear-gradient(90deg, rgba(1,2,3,1) 0%, rgba(4,5,6,1) 100%)", "-webkitTextFillColor": "transparent" }, {})
+  );
+  check("colour: -webkitTextFillColor NOT mirrored", txtOf(fill, "mobile")["-webkitTextFillColor"] === undefined, txtOf(fill, "mobile"));
+
+  // 8) round-trip invariant survives the pass
+  const expandedC = landingDomain.expand(mkColorPage({ color: "#1a202c", borderColor: "rgb(1,2,3)" }, {}));
+  check(
+    "colour round-trip: expand(compact(expand(x))) deep-equals expand(x)",
+    deepEq(landingDomain.expand(landingDomain.compact(expandedC)), expandedC)
+  );
+
+  // 9) what the pass cannot convert is reported as a warning, not silently shipped
+  const varColor = landingDomain.expand(mkColorPage({ color: "var(--brand)" }));
+  const varWarn = validatePage(varColor).warnings.filter((w) => /not an rgba\(\) colour/.test(w));
+  check("colour: unconvertible var(--x) warned", varWarn.length > 0, validatePage(varColor).warnings);
+  const okColor = landingDomain.expand(mkColorPage({ color: "#1a202c" }));
+  check(
+    "colour: no warning once the value is canonical rgba()",
+    !validatePage(okColor).warnings.some((w) => /not an rgba\(\) colour/.test(w)),
+    validatePage(okColor).warnings
+  );
+}
+
 console.log("== text-block styles.background warning (gradient-text-fill mode) ==");
 {
   const mkTbBgPage = (bgValue: string, withClip: boolean) => ({

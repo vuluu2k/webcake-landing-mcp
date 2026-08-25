@@ -184,7 +184,10 @@ route đó vẫn chạy bình thường (mỗi lần đọc live là một lần
 - **Source top-level:** `{ page: [sections], popup: [popups], settings: {…}, options: { currency, mobileOnly, versionID }, cartConfigs: {} }`.
   Popup là một mảng top-level **riêng**, không lồng trong `page`.
 - Animation theo breakpoint nằm trong `config.animation = { name, delay, duration, repeat }`.
-- Màu dạng `rgba()`; `top/left/width/height/fontSize` là số (px); input form cần một `specials.field_name` duy nhất.
+- Màu dạng `rgba()` trên **cả hai** breakpoint; `top/left/width/height/fontSize` là số (px); input form cần một `specials.field_name` duy nhất.
+  Trang publish render được mọi dạng màu CSS, nhưng trait màu của editor chỉ parse `rgba()` và hiển thị **đen** với mọi dạng khác — màu chỉ đặt ở một
+  breakpoint cũng ra đen ở breakpoint kia. Server tự chuyển hex/`rgb()`/`hsl()`/tên màu về `rgba()` và nhân bản `color`/`backgroundTxt`/`borderColor`
+  sang breakpoint còn thiếu; giá trị không chuyển được (`var(--x)`, `color-mix(…)`) sẽ trả về dưới dạng warning.
 
 Tham khảo: [docs/page-element-schema.md](./page-element-schema.md),
 [docs/element-specials-reference.md](./element-specials-reference.md) (tham chiếu đầy đủ mọi specials/event),

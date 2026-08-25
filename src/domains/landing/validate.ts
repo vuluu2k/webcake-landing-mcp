@@ -11,6 +11,7 @@ import Ajv2020Module from "ajv/dist/2020.js";
 import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
 import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
 import { estTextHeightPx, measureTextBlock } from "./text-metrics.js";
+import { isColorKey, isUnparseableByEditor } from "./color.js";
 import type { ValidationResult } from "../../core/domain.js";
 
 export type { ValidationResult };
@@ -421,6 +422,28 @@ export function validatePage(input: unknown): ValidationResult {
           `If unintended, fix via patch_page({op:'update',id:'${node.id ?? "?"}',styles:{${bp}:{opacity:1}}}); ` +
           `for a muted color use rgba() alpha on the color/background property instead.`
         );
+      }
+    }
+
+    // A colour the editor's traits cannot parse shows BLACK in the trait panel
+    // (Background.vue:272-273 / Colour.vue:67) even though the published page
+    // renders it correctly — and one touch of that trait writes the black back.
+    // landingDomain.expand already converts hex / rgb() / hsl() / named colours,
+    // so this fires only for values it could not rescue (var(--x), color-mix(…)).
+    for (const bp of ["desktop", "mobile"] as const) {
+      const rbp = node.responsive?.[bp];
+      if (!rbp || typeof rbp !== "object") continue;
+      for (const [bag, label] of [[rbp.styles, "styles"], [rbp.config, "config"]] as const) {
+        if (!bag || typeof bag !== "object") continue;
+        for (const key of Object.keys(bag)) {
+          if (!isColorKey(key) || !isUnparseableByEditor((bag as any)[key])) continue;
+          warnings.push(
+            `${path} (${type ?? "?"}) [${bp}]: ${label}.${key}="${(bag as any)[key]}" is not an rgba() colour — ` +
+            `the editor's colour trait cannot parse it and shows BLACK, then writes that black back the first ` +
+            `time a user touches the trait. Use rgba(r,g,b,a): ` +
+            `patch_page({op:'update',id:'${node.id ?? "?"}',${label}:{${bp}:{${key}:'rgba(…)'}}}).`
+          );
+        }
       }
     }
 

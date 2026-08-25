@@ -74,7 +74,9 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
   `create_page`/`update_page`/`add_section`/`patch_page`/`validate_page` all hydrate before
   validating/persisting. A full node still works.
 - Absolute canvas: children carry numeric `top/left/width/height` (px) per breakpoint; sections own a `height`, no top/left. The canvas WIDTH is a per-breakpoint CHOICE in `settings.width_section` — desktop `960` or `1200`, mobile `420` or `360` (editor-allowed values only; default 960/420). Pick `1200` desktop for wide/multi-column/editorial layouts or when cloning a reference wider than 960 (e.g. Google Stitch ~1280, so columns aren't squished into 960), else 960; `360` mobile to match a ~360–390 design. Place every element's coords in the chosen width's space (changing width does not rescale them); `new_page_skeleton(desktopWidth, mobileWidth)` sets it up front.
-- Content lives in `specials` (`text`, `src`, `field_name`…), NEVER in `styles`. Colors as `rgba(...)`.
+- Content lives in `specials` (`text`, `src`, `field_name`…), NEVER in `styles`. Colors as `rgba(...)` on BOTH breakpoints — the editor's
+  color traits only parse `rgba()` and show black for hex/`rgb()`/`hsl()`/named colors, and read one breakpoint at a time with no desktop→mobile
+  fallback. The server auto-converts and mirrors `color`/`backgroundTxt`/`borderColor`, but write it correctly anyway.
 - Animation in `config.animation = {name,delay,duration,repeat}`. Event: `{id,type,action,target,appTarget,hoverColor}`.
 
 ## Workflow — new page
