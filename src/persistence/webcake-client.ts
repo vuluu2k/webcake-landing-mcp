@@ -10,8 +10,9 @@
  * Endpoints live in the separate landing_page_backend repo
  * (LandingPageWeb.V1.AiController, scope /api/v1/ai). Requires global fetch (Node 18+).
  */
+import { createHash } from "node:crypto";
 import type { WebcakeConfig, Organization, CreateOutcome, PageSummary, RehostReport } from "./types.js";
-import { collectExternalImageUrls, rewriteImageUrls, MAX_REHOST_PER_SAVE } from "./rehost.js";
+import { collectExternalImageUrls, rewriteImageUrls, parseInlineBase64Image, MAX_REHOST_PER_SAVE } from "./rehost.js";
 import { rehostGet, rehostSet } from "./rehost-cache.js";
 
 /** Default fetch timeout in ms. Override via WEBCAKE_HTTP_TIMEOUT_MS env. */
@@ -1023,6 +1024,17 @@ function rehostExtFromContentType(ct: string): string {
  * bộ sưu tập) and degrades to the public CDN endpoint without creds/org.
  */
 async function fetchAndHostOne(config: WebcakeConfig, src: string): Promise<string | null> {
+  // Inline base64 image — the bytes are already in hand, so there is nothing to
+  // fetch. Upload them on the same collection path as a remote URL; the caller
+  // then rewrites the data: URI in-tree, so base64 never reaches storage.
+  const inline = parseInlineBase64Image(src);
+  if (inline) {
+    if (inline.bytes.byteLength > REHOST_MAX_BYTES) return null;
+    const ext = rehostExtFromContentType(inline.contentType);
+    const up = await uploadImagePreferCollection(config, inline.bytes, inlineImageFilename(inline.bytes, ext), inline.contentType);
+    return up.ok && up.url ? up.url : null;
+  }
+
   let res: Response;
   try {
     res = await fetch(src, {
@@ -1055,6 +1067,15 @@ async function fetchAndHostOne(config: WebcakeConfig, src: string): Promise<stri
   const filename = rehostFilename(src, ext);
   const up = await uploadImagePreferCollection(config, Buffer.from(buf), filename, contentType);
   return up.ok && up.url ? up.url : null;
+}
+
+/**
+ * Name an inline-base64 upload by its CONTENT, so the collection shows distinct
+ * rows (and a re-pasted identical image is obvious) instead of a wall of
+ * "inline-image.png". The source URI carries no filename to borrow.
+ */
+function inlineImageFilename(bytes: Buffer, ext: string): string {
+  return `inline-${createHash("sha1").update(bytes).digest("hex").slice(0, 10)}.${ext}`;
 }
 
 /** Derive a human-readable collection filename from the source URL. */

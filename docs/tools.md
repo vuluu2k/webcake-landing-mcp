@@ -59,6 +59,8 @@ validate_page({ source })
 
 `validate_page` **errors are blocking**; warnings (text spilling onto the element below, off-canvas bounds, empty bands, dangling event target, missing `field_name`) don't block the save but are **visible defects the agent must fix too** — every response carrying warnings includes a `warnings_notice` directive telling the model to fix and re-validate until the list is empty (only a demonstrably false positive may remain).
 
+**Inline base64 images never reach the stored source.** A `data:image/…;base64,…` URI anywhere in the source (`specials.src`, a `url(...)` background, gallery `item.link`, video poster, `settings.favicon`/`extra_css`/`bhet`/`bbet`) is picked up by the same save-time auto-host pass as a remote URL: the payload is decoded (no fetch) and uploaded to the Webcake CDN, then rewritten in-tree, so it shows up in the response's `rehost` counts. `validate_page` therefore only **warns** about base64 — blocking would stop the very save that fixes it. The warning's real point is *don't author* base64: the whole image crosses the MCP connection inside the model's payload, and megabytes there can drop it. Non-base64 data: URIs (`data:image/svg+xml;utf8,<svg…>`) are tiny and left untouched. If the upload fails (no credentials/network) the original URI stays, exactly like a failed remote re-host.
+
 ### Step 4b: Exact layout coordinates — `layout`
 
 ```

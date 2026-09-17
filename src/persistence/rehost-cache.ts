@@ -11,6 +11,7 @@
  * no IO) and must not import a network client. This one holds the only stateful
  * piece. It imports redis.ts but NOT webcake-client.ts, so no import cycle.
  */
+import { createHash } from "node:crypto";
 import { getRedis } from "./redis.js";
 
 const REDIS_PREFIX = "wcl:rehost:";
@@ -20,13 +21,22 @@ const TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const memory = new Map<string, string>();
 
 /**
+ * A source "url" can be an INLINE BASE64 image — megabytes of payload, which is
+ * unusable as a Redis key (and wasteful in the memory Map). Anything longer than
+ * a normal URL is content-addressed instead; short URLs keep their readable key.
+ */
+const MAX_LITERAL_KEY = 256;
+const keyPart = (url: string) =>
+  url.length <= MAX_LITERAL_KEY ? url : `sha256:${createHash("sha256").update(url).digest("hex")}`;
+
+/**
  * Entries are namespaced by SCOPE — `org:<id>` when the upload files an Asset
  * into that org's media collection, else `public`. The hosted URL is
  * content-addressed and would be byte-identical across orgs, but the Asset row
  * is per-org: sharing one key would let a second org hit the cache and skip the
  * upload, leaving the image absent from ITS collection.
  */
-const key = (url: string, scope: string) => `${REDIS_PREFIX}${scope}:${url}`;
+export const key = (url: string, scope: string) => `${REDIS_PREFIX}${scope}:${keyPart(url)}`;
 
 /** Look up the hosted URL previously stored for `url` in `scope`, or null on a miss. */
 export async function rehostGet(url: string, scope = "public"): Promise<string | null> {

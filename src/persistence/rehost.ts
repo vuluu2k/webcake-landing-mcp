@@ -12,8 +12,14 @@
  *    specials.src, gallery item.link, video poster img — plain-string fields), OR
  *  - any http(s) URL inside a CSS `url(...)` token (covers the styles.background
  *    shorthand `… url(<x>) …` — a background image regardless of extension).
- * Already-hosted (statics.pancake.vn), data:, and deliberate-placeholder hosts
+ * Already-hosted (statics.pancake.vn) and deliberate-placeholder hosts
  * (placehold.co / placeholder.com / dummyimage) are left alone.
+ *
+ * INLINE BASE64 (`data:image/<type>;base64,<payload>`) counts too, and is the
+ * reason a base64 image never has to reach the stored source: the bytes are
+ * decoded here (no fetch) and uploaded on the same collection path as a remote
+ * URL, then rewritten in-tree. Non-base64 data: URIs (`data:image/svg+xml;utf8,
+ * <svg…>`) are tiny and inline by design, so they are left alone.
  */
 
 /** Hosts we never re-host: our own CDN + deliberate placeholders. */
@@ -52,6 +58,32 @@ function isExtensionlessImageHost(host: string): boolean {
   return EXTENSIONLESS_IMAGE_HOSTS.some((h) => host === h || host.endsWith("." + h));
 }
 
+/**
+ * `data:image/<type>;…base64,<payload>` — the inline form we can decode and
+ * upload. Anchored to the whole value so it never fires on prose that merely
+ * mentions a data URI, and the payload is restricted to the base64 alphabet.
+ */
+const BASE64_IMAGE_URI_RE = /^data:(image\/[a-z0-9.+-]+)\s*;(?:[^,;]*;)*\s*base64\s*,\s*([A-Za-z0-9+/=\s]+)$/i;
+
+/** Is this string an inline base64 image (the only data: form we re-host)? */
+export function isInlineBase64Image(value: string): boolean {
+  return typeof value === "string" && BASE64_IMAGE_URI_RE.test(value.trim());
+}
+
+/**
+ * Decode an inline base64 image to its bytes + content type, or null when the
+ * value is not one (a non-base64 data: URI, a plain URL, malformed payload).
+ * PURE — decoding only, no network; the upload lives in webcake-client.
+ */
+export function parseInlineBase64Image(value: string): { contentType: string; bytes: Buffer } | null {
+  if (typeof value !== "string") return null;
+  const m = value.trim().match(BASE64_IMAGE_URI_RE);
+  if (!m) return null;
+  const bytes = Buffer.from(m[2].replace(/\s+/g, ""), "base64");
+  if (bytes.byteLength === 0) return null; // empty/undecodable payload — nothing to upload
+  return { contentType: m[1].toLowerCase(), bytes };
+}
+
 /** http(s), not already-hosted/placeholder/data, and image-looking — by extension OR a known extensionless image host. */
 export function isRehostableImageUrl(url: string): boolean {
   if (typeof url !== "string") return false;
@@ -81,14 +113,16 @@ function isRehostableBgUrl(url: string): boolean {
 
 /** Extract every re-hostable image URL contained in a single string value. */
 function urlsInString(s: string, out: Set<string>): void {
-  // 1) The whole value is itself an image URL (specials.src, gallery link, poster).
-  if (isRehostableImageUrl(s)) out.add(s.trim());
-  // 2) `url(...)` tokens inside a CSS value (background shorthand) — any image.
+  // 1) The whole value is itself an image URL (specials.src, gallery link, poster)
+  //    or an inline base64 image pasted into the same slot.
+  if (isRehostableImageUrl(s) || isInlineBase64Image(s)) out.add(s.trim());
+  // 2) `url(...)` tokens inside a CSS value (background shorthand) — any image,
+  //    including a base64 one (the payload has no quote/`)` to end the token early).
   CSS_URL_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = CSS_URL_RE.exec(s)) !== null) {
     const inner = m[2]?.trim();
-    if (inner && isRehostableBgUrl(inner)) out.add(inner);
+    if (inner && (isRehostableBgUrl(inner) || isInlineBase64Image(inner))) out.add(inner);
   }
 }
 
@@ -103,7 +137,7 @@ function walkStrings(value: unknown, visit: (s: string) => void): void {
   }
 }
 
-/** Distinct external image URLs anywhere in the page source (specials.src, backgrounds, gallery, posters). */
+/** Distinct external image URLs — and inline base64 images — anywhere in the page source (specials.src, backgrounds, gallery, posters). */
 export function collectExternalImageUrls(source: unknown): string[] {
   const set = new Set<string>();
   walkStrings(source, (s) => urlsInString(s, set));

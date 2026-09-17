@@ -133,6 +133,51 @@ function isVividColor(v: unknown): boolean {
   return Math.max(r, g, b) - Math.min(r, g, b) >= 16; // channel spread ⇒ has hue
 }
 
+// ── inline base64 image data (never STORED — auto-uploaded on save) ─────────
+// A `data:image/…;base64,…` URI must not end up in a saved page source: the bytes
+// would stay embedded forever, and that JSON is re-read and re-written on every
+// later get_page / update_page / patch_page. The save no longer just refuses it —
+// the rehost pass DECODES the payload and uploads it to the CDN like any remote
+// image (rehost.ts `parseInlineBase64Image` → webcake-client `fetchAndHostOne`),
+// then rewrites the URI in-tree. So this is a WARNING, not an error: blocking here
+// would stop the very save that fixes it. What it still tells the model is "do not
+// AUTHOR base64" — the payload travels through the MCP link before the server can
+// do anything about it, and megabytes there can drop the connection.
+// Matches the URI's header only (`data:image/png;base64,`), so it never fires on
+// bare base64 payloads that are not images (e.g. spin-wheel prize lists) nor on
+// non-base64 data: URIs (`data:image/svg+xml;utf8,<svg…>` — tiny, inline by design).
+const BASE64_IMAGE_RE = /data:image\/[a-z0-9.+-]+\s*;(?:[^,;]*;)*\s*base64\s*,/i;
+
+/** Key-path of the first string under `value` carrying inline base64 image data (undefined if none). */
+function findBase64Image(value: unknown, path: string): string | undefined {
+  if (typeof value === "string") return BASE64_IMAGE_RE.test(value) ? path : undefined;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      const hit = findBase64Image(value[i], `${path}[${i}]`);
+      if (hit) return hit;
+    }
+    return undefined;
+  }
+  if (value && typeof value === "object") {
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      const hit = findBase64Image(v, `${path}.${k}`);
+      if (hit) return hit;
+    }
+  }
+  return undefined;
+}
+
+/** The inline-base64-image notice, worded the same everywhere it is reported. */
+function base64ImageNotice(where: string): string {
+  return (
+    `${where} carries an INLINE BASE64 IMAGE (data:image/…;base64,…). The save uploads it to the Webcake CDN and rewrites the URL ` +
+    `in-tree (it counts in the response's rehost report), so NO manual fix is needed and base64 never reaches the stored source. ` +
+    `But do not AUTHOR base64: the whole image travels through this connection in your payload (megabytes can drop it). Put a real ` +
+    `http(s) image URL in ${where} — the save hosts that too — or call upload_images (it accepts data: URIs) and use the returned ` +
+    `statics.pancake.vn URL. If the upload fails (no credentials/network), the data: URI stays and the page keeps the bloat.`
+  );
+}
+
 /** Accept an object or a JSON string. Returns the parsed page or throws. */
 export function coercePage(input: unknown): any {
   if (typeof input === "string") return JSON.parse(input);
@@ -353,6 +398,19 @@ export function validatePage(input: unknown): ValidationResult {
           }
         }
       }
+    }
+
+    // inline base64 image data anywhere on this element (specials.src, a
+    // url(data:…) background, gallery item.link, video poster, config.svgMask…).
+    // Scans the whole node except `children` (walked on its own turn).
+    {
+      let hit: string | undefined;
+      for (const [k, v] of Object.entries(node)) {
+        if (k === "children") continue;
+        hit = findBase64Image(v, k);
+        if (hit) break;
+      }
+      if (hit) warnings.push(`${path} (${type}): ${base64ImageNotice(hit)}`);
     }
 
     // animation contract — checked per breakpoint
@@ -1287,6 +1345,14 @@ export function validatePage(input: unknown): ValidationResult {
         }
       }
     }
+  }
+
+  // ── inline base64 image data in page settings ───────────────────────────────
+  // Same rule as on elements: favicon / og image / a url(data:…;base64,…) inside
+  // settings.extra_css / bhet / bbet are auto-uploaded by the save's rehost pass.
+  {
+    const hit = findBase64Image(page?.settings, "settings");
+    if (hit) warnings.push(base64ImageNotice(hit));
   }
 
   return {

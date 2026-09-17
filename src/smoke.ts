@@ -28,7 +28,8 @@ import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./to
 import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
 import { isPrivateHost, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
 import { iconifyCandidates } from "./persistence/icon-client.js";
-import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl } from "./persistence/rehost.js";
+import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl, isInlineBase64Image, parseInlineBase64Image } from "./persistence/rehost.js";
+import { key as rehostCacheKey } from "./persistence/rehost-cache.js";
 import {
   sourceFingerprint,
   collectElementIds,
@@ -304,6 +305,63 @@ console.log("== validate: custom-code SAFETY (broad/broken custom breaks the UI)
   clean.settings.bhet = "<link href='https://fonts.googleapis.com/css2?family=Inter' rel='stylesheet'>";
   clean.page[0].children[0].specials = { text: "X", customAdvance: true, custom_css: "box-shadow:0 8px 24px rgba(0,0,0,.08);" };
   check("custom-safety: correctly-scoped custom triggers no safety warning", W(validatePage(clean), /UNSCOPED|unbalanced|no HTML tags|layout prop/).length === 0, validatePage(clean).warnings);
+}
+
+console.log("== validate: inline base64 images are DETECTED (warning) — the save uploads them ==");
+{
+  const cloneG = () => JSON.parse(JSON.stringify(good));
+  const W = (r: any, re: RegExp) => r.warnings.filter((w: string) => re.test(w));
+  const B64 = /INLINE BASE64 IMAGE/;
+  const PNG_B64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+
+  // specials.src on an image-block → warning naming the key; NOT blocking, because
+  // blocking would stop the very save whose rehost pass uploads the image.
+  const srcPage = cloneG();
+  srcPage.page[0].children.push({
+    id: "img1", type: "image-block",
+    properties: { name: "Hero", movable: true, sync: true },
+    responsive: {
+      desktop: { config: {}, styles: { top: 40, left: 80, width: 320, height: 200 } },
+      mobile: { config: {}, styles: { top: 40, left: 20, width: 380, height: 200 } },
+    },
+    specials: { src: PNG_B64 }, runtime: {}, events: [],
+  });
+  const srcR = validatePage(srcPage);
+  check("base64: specials.src data: URI warns", W(srcR, B64).length === 1, srcR.warnings);
+  check("base64: warning does NOT block the save (rehost fixes it)", srcR.valid, srcR.errors);
+  check("base64: warning names the key and says no manual fix is needed", /specials\.src/.test(W(srcR, B64)[0] ?? "") && /NO manual fix/.test(W(srcR, B64)[0] ?? ""), W(srcR, B64));
+
+  // url(data:…;base64,…) inside a per-breakpoint background → same warning.
+  const bgPage = cloneG();
+  bgPage.page[0].responsive.desktop.styles.background = `center center/ cover no-repeat scroll content-box url(${PNG_B64}) border-box`;
+  const bgR = validatePage(bgPage);
+  check("base64: url(data:…base64) background warns at the right key", W(bgR, B64).length === 1 && /responsive\.desktop\.styles\.background/.test(W(bgR, B64)[0] ?? ""), bgR.warnings);
+
+  // a popup (separate top-level array) is covered by the same walk.
+  const popPage = cloneG();
+  popPage.page[1].specials.src = PNG_B64;
+  check("base64: popups are covered too", W(validatePage(popPage), B64).length === 1, validatePage(popPage).warnings);
+
+  // page settings (favicon / og image / a base64 background inside extra_css).
+  const setPage = cloneG();
+  setPage.settings.favicon = PNG_B64;
+  check("base64: settings.favicon data: URI warns", W(validatePage(setPage), B64).length === 1, validatePage(setPage).warnings);
+  const cssPage = cloneG();
+  cssPage.settings.extra_css = `#w-btn1{background-image:url("${PNG_B64}")}`;
+  check("base64: base64 image inside settings.extra_css flagged", W(validatePage(cssPage), B64).length === 1, validatePage(cssPage).warnings);
+
+  // NOT flagged: a non-base64 data: URI (tiny inline svg, inline by design).
+  const svgPage = cloneG();
+  svgPage.page[0].responsive.desktop.styles.background = 'url("data:image/svg+xml;utf8,%3Csvg%3E%3C/svg%3E")';
+  check("base64: non-base64 data:image/svg+xml;utf8 URI is NOT flagged", W(validatePage(svgPage), B64).length === 0, validatePage(svgPage).warnings);
+
+  // NOT flagged: bare base64 payloads that are not image URIs (spin-wheel prize list).
+  const prizePage = cloneG();
+  prizePage.page[0].children[0].specials.prizes = [Buffer.from("Mất lượt|Mất lượt|0%", "utf8").toString("base64")];
+  check("base64: a bare base64 string (not a data:image URI) is NOT flagged", W(validatePage(prizePage), B64).length === 0, validatePage(prizePage).warnings);
+
+  // a clean page never trips the rule.
+  check("base64: clean page has no base64 warning", W(validatePage(cloneG()), B64).length === 0, validatePage(cloneG()).warnings);
 }
 
 console.log("== validate: icon rendering (svg-mask needs background; font-class route is clean) ==");
@@ -2133,6 +2191,60 @@ console.log("== rehost: external-image URL collect + rewrite (pure, offline) =="
   check("rehost: Stitch googleusercontent image (no ext) IS rehostable", isRehostableImageUrl("https://lh3.googleusercontent.com/aida/AP1WRLvcUnHkKPA0hJFi2Yx2"));
   check("rehost: Stitch aida-public image (no ext) IS rehostable", isRehostableImageUrl("https://lh3.googleusercontent.com/aida-public/AB6AXuAh6CcIJ1kE5WUS"));
   check("rehost: extensionless host-recognition is HOST-gated, not blanket", !isRehostableImageUrl("https://example.com/some/path-no-ext"));
+
+  // ── inline base64 images: decoded + uploaded like any other image ──────────
+  // (`isRehostableImageUrl` stays false for data: — base64 has its own predicate,
+  //  so the http-only checks above keep their meaning.)
+  const PNG_PIXEL =
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+  check("rehost/base64: inline base64 image recognised", isInlineBase64Image(PNG_PIXEL));
+  check("rehost/base64: with a charset param still recognised", isInlineBase64Image("data:image/jpeg;charset=utf-8;base64,/9j/4AAQSkZJRg=="));
+  check("rehost/base64: non-base64 data: URI NOT recognised", !isInlineBase64Image("data:image/svg+xml;utf8,<svg></svg>"));
+  check("rehost/base64: non-image data: URI NOT recognised", !isInlineBase64Image("data:text/html;base64,PGgxPmhpPC9oMT4="));
+  check("rehost/base64: a plain http URL NOT recognised", !isInlineBase64Image("https://cdn.x/p.png"));
+  check("rehost/base64: prose mentioning a data URI NOT recognised", !isInlineBase64Image("use data:image/png;base64,AAAA here"));
+
+  const decoded = parseInlineBase64Image(PNG_PIXEL);
+  check("rehost/base64: decodes to PNG bytes", decoded?.contentType === "image/png" && (decoded?.bytes.length ?? 0) > 60, decoded?.contentType);
+  check("rehost/base64: decoded bytes carry the PNG magic number", decoded?.bytes.subarray(0, 4).toString("hex") === "89504e47", decoded?.bytes.subarray(0, 4).toString("hex"));
+  check("rehost/base64: empty payload → null (nothing to upload)", parseInlineBase64Image("data:image/png;base64,") === null);
+  check("rehost/base64: a non-base64 data: URI → null", parseInlineBase64Image("data:image/svg+xml;utf8,<svg/>") === null);
+
+  // End-to-end on a source: collected as a candidate, then rewritten to the hosted URL.
+  {
+    const b64Src = {
+      page: [{
+        id: "S", type: "section",
+        responsive: { desktop: { styles: { background: `center center/ cover no-repeat scroll content-box url(${PNG_PIXEL}) border-box` } } },
+        children: [
+          { id: "I", type: "image", specials: { src: PNG_PIXEL } },          // same bytes → dedupes with the bg
+          { id: "SH", type: "shape", specials: { svg: "data:image/svg+xml;utf8,<svg></svg>" } }, // non-base64 → skip
+        ],
+      }],
+      settings: { favicon: "data:image/gif;base64,R0lGODlhAQABAAAAACw=" },
+    };
+    const b64Urls = collectExternalImageUrls(b64Src);
+    check("rehost/base64: collects the inline images (src + background dedup, + settings)", b64Urls.length === 2, b64Urls.map((u) => u.slice(0, 32)));
+    check("rehost/base64: the non-base64 svg data: URI is NOT collected", !b64Urls.some((u) => u.includes("svg+xml")), b64Urls.map((u) => u.slice(0, 32)));
+
+    const hostedMap = new Map(b64Urls.map((u, n) => [u, `https://statics.pancake.vn/x/hosted-${n}.png`]));
+    const out: any = rewriteImageUrls(b64Src, hostedMap);
+    check("rehost/base64: specials.src rewritten to the hosted URL", out.page[0].children[0].specials.src === hostedMap.get(PNG_PIXEL));
+    check("rehost/base64: url(...) background rewritten too", out.page[0].responsive.desktop.styles.background.includes(hostedMap.get(PNG_PIXEL)!) && !out.page[0].responsive.desktop.styles.background.includes("base64"));
+    check("rehost/base64: settings favicon rewritten", !String(out.settings.favicon).startsWith("data:"));
+    check("rehost/base64: the untouched svg data: URI survives", out.page[0].children[1].specials.svg === "data:image/svg+xml;utf8,<svg></svg>");
+    check("rehost/base64: no base64 left anywhere in the rewritten source", !JSON.stringify(out).includes(";base64,"));
+  }
+
+  // The dedup cache key: a megabyte data URI must not become a megabyte Redis key.
+  {
+    const shortUrl = "https://cdn.x/p.png";
+    const huge = "data:image/png;base64," + "A".repeat(5000);
+    check("rehost/base64: a short URL keeps its readable cache key", rehostCacheKey(shortUrl, "public").endsWith(shortUrl));
+    check("rehost/base64: an oversized value is hashed into the cache key", /sha256:[0-9a-f]{64}$/.test(rehostCacheKey(huge, "public")), rehostCacheKey(huge, "public"));
+    check("rehost/base64: hashed keys stay scope-namespaced", rehostCacheKey(huge, "org:7") !== rehostCacheKey(huge, "public"));
+    check("rehost/base64: the same payload hashes to the same key", rehostCacheKey(huge, "public") === rehostCacheKey(huge, "public"));
+  }
 
   // Collect a Stitch-shaped source (image src with no extension) end-to-end.
   {

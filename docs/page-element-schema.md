@@ -378,7 +378,8 @@ Mỗi phần tử trong mảng `events`:
 6. Màu dùng `rgba(...)`. `fontSize`/`borderWidth`/`top`/`left`/`width`/`height` là **số** (px) — khi SINH ra luôn ghi số. Khi ĐỌC một trang đã chỉnh tay trong editor thì các key này có thể là chuỗi (editor lưu `fontSize: "59"`/`"13px"`, `height: "600"`, `opacity: "50%"`, `top: "unset"`): schema chấp nhận, và server tự chuẩn hoá chuỗi số/px về số trước khi validate + lưu, nên trang chỉnh tay vẫn dùng được mọi tool. Chỉ giá trị mang đơn vị mà renderer không dùng được (vd `width: "100%"` — renderer tự nối `px`) mới bị **cảnh báo**.
 7. Mọi `input`/`select`/`checkbox`… trong `form` phải có `specials.field_name` duy nhất.
 8. `runtime` luôn `{}`; chỉ container mới có `children`.
-9. Không bịa giá, số điện thoại, địa chỉ, số liệu (theo `Prompt` hiện có của repo).
+9. **Không tự sinh ảnh base64**: URI `data:image/…;base64,…` (trong `specials.src`, nền `url(...)`, gallery `item.link`, poster video, `settings`) không bao giờ nằm lại trong source đã lưu — bước tự-host khi lưu decode payload rồi upload lên CDN và ghi đè URL (tính vào `rehost`), nên `validate_page` chỉ **cảnh báo**. Base64 đến từ HTML tham chiếu hay người dùng dán vào thì cứ lưu bình thường; điều KHÔNG được làm là tự viết base64 ra source — cả tấm ảnh đi qua kết nối MCP trong payload, vài MB có thể làm rớt kết nối. Hãy dùng URL http(s) thật, hoặc `upload_images` (nhận cả URI `data:`) rồi dùng URL `statics.pancake.vn` trả về. URI `data:` không phải base64 (`data:image/svg+xml;utf8,…`) được giữ nguyên.
+10. Không bịa giá, số điện thoại, địa chỉ, số liệu (theo `Prompt` hiện có của repo).
 
 ---
 

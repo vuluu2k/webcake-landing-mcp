@@ -58,6 +58,8 @@ validate_page({ source })
 
 `validate_page` **errors là chặn**; warnings (chữ tràn đè phần tử bên dưới, vượt canvas, dải trống cuối section, event target lửng lơ, thiếu `field_name`) không chặn lưu nhưng là **lỗi hiển thị phải sửa** — mọi response có warnings đều kèm `warnings_notice` yêu cầu model sửa và validate lại đến khi danh sách rỗng (chỉ được giữ lại warning chứng minh được là false positive).
 
+
+**Ảnh base64 nhúng không bao giờ nằm lại trong source đã lưu.** Mọi URI `data:image/…;base64,…` trong source (`specials.src`, nền `url(...)`, gallery `item.link`, poster video, `settings.favicon`/`extra_css`/`bhet`/`bbet`) được chính bước tự-host khi lưu xử lý như một URL ngoài: payload được decode (không cần fetch) rồi upload lên Webcake CDN và ghi đè lại trong cây, nên nó được tính vào `rehost` của response. Vì vậy `validate_page` chỉ **cảnh báo** chứ không chặn — chặn thì chính lần lưu đang sửa nó cũng không chạy được. Ý nghĩa thật của cảnh báo là *đừng tự sinh* base64: cả tấm ảnh đi qua kết nối MCP trong payload của model, vài MB ở đó có thể làm rớt kết nối. URI `data:` không phải base64 (`data:image/svg+xml;utf8,<svg…>`) rất nhỏ nên được giữ nguyên. Nếu upload thất bại (không có credentials/mạng) thì URI gốc ở lại, giống hệt một lần re-host URL ngoài bị lỗi.
 ### Bước 4b: Toạ độ layout chính xác — `layout`
 
 ```
