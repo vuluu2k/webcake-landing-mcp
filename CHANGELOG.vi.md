@@ -6,6 +6,16 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-08-25
+
+### Fixed
+- Các giá trị màu được viết ở bất kỳ dạng CSS nào khác ngoài dạng `rgba(r,g,b,a)` kiểu cũ (hex, `rgb()`, `hsl()`, tên màu CSS, và cú pháp `rgba()` mới dùng khoảng trắng/dấu gạch chéo) — kể cả từng điểm dừng màu bên trong `linear-gradient()`/`radial-gradient()` — nay được chuẩn hóa về `rgba(r,g,b,a)` trên mọi lượt expand (`create_page`/`update_page`/`add_section`/`patch_page`/`validate_page`) cho tất cả các khóa mang giá trị màu (`color`, `background`, `backgroundTxt`, `borderColor`, `overlay`, và các khóa `*color*` khác), khắc phục việc trait màu và nền của editor Webcake hiển thị màu đen thay vì màu thực sự mong muốn.
+- Giá trị `styles.color`/`backgroundTxt`/`borderColor` chỉ được đặt trên một breakpoint nay được nhân bản sang breakpoint còn lại khi lưu, vì trait màu của editor chỉ đọc từng breakpoint riêng lẻ mà không có cơ chế dự phòng desktop/mobile, trước đây khiến breakpoint thiếu giá trị hiển thị (và có thể bị lưu) thành màu đen.
+
+### Changed
+- `validate_page` nay cảnh báo khi một giá trị `styles`/`config` mang màu không thể chuyển đổi sang `rgba()` (ví dụ `var(--x)`, `color-mix(...)`), nêu rõ phần tử liên quan và cách khắc phục bằng `patch_page`.
+- Generation guide và mô tả trong `page-schema.json` cho `styles.color`/`background`/`borderColor`/`overlay` nay ghi rõ yêu cầu chỉ dùng dạng rgba(), yêu cầu đặt trên cả hai breakpoint, và cơ chế tự động chuyển đổi/nhân bản.
+
 ## [1.5.1] - 2026-08-24
 
 ### Added
