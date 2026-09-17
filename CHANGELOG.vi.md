@@ -6,6 +6,16 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-09-17
+
+### Added
+- `validate_page` nay phát hiện ảnh base64 nhúng (URI `data:image/…;base64,…`) ở bất kỳ đâu trong `specials` của phần tử, nền `styles`, gallery `item.link`, poster video, hoặc `settings` (favicon, og image, `extra_css`/`bhet`/`bbet`), và báo warning nêu rõ khóa vi phạm thay vì bỏ qua.
+- `create_page`, `update_page`, `add_section`, và `patch_page` nay tự động host ảnh base64 nhúng qua cùng bước tự-host với URL ảnh ngoài: payload được decode rồi upload lên CDN của Webcake (hoặc bộ sưu tập media của tổ chức đã xác định), và URI `data:` được ghi đè thành URL đã host trong source lưu trữ, nên base64 dán vào từ tham chiếu hay người dùng không bao giờ nằm lại trong dữ liệu lưu trữ; số lượng này được tính vào báo cáo `rehost` của response.
+
+### Changed
+- Generation guide và instruction của server nay yêu cầu model không bao giờ tự sinh dữ liệu ảnh base64, vì nó đi qua kết nối MCP trong payload và vài MB ở đó có thể làm rớt kết nối, đồng thời làm rõ rằng base64 đến từ tham chiếu hay người dùng dán vào thì không cần sửa tay vì bước lưu đã tự upload.
+- Cache key của bước re-host ảnh nay băm (hash) các giá trị dài hơn một URL thông thường (ví dụ payload base64 nhúng) thay vì dùng nguyên văn, giữ cho cache khử trùng lặp vẫn dùng được khi ảnh lưu là base64 dán vào.
+
 ## [1.5.2] - 2026-08-25
 
 ### Fixed

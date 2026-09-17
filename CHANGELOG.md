@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-09-17
+
+### Added
+- `validate_page` now detects inline base64 images (`data:image/…;base64,…` URIs) anywhere in an element's `specials`, a `styles` background, gallery `item.link`, a video poster, or `settings` (favicon, og image, `extra_css`/`bhet`/`bbet`), and reports a warning naming the offending key instead of ignoring them.
+- `create_page`, `update_page`, `add_section`, and `patch_page` now auto-host inline base64 images through the same re-hosting pass as external image URLs: the payload is decoded and uploaded to the Webcake CDN (or the settled organization's media collection), and the `data:` URI is rewritten to the hosted URL in the stored source, so base64 pasted in from a reference or user input never reaches storage; the count is included in the response's `rehost` report.
+
+### Changed
+- The generation guide and server instructions now tell the model never to author base64 image data itself, since it travels through the MCP connection inside the payload and megabytes there can drop it, while clarifying that base64 arriving from a reference or user paste needs no manual fix because the save uploads it automatically.
+- The image re-hosting cache key now hashes values longer than a normal URL (such as an inline base64 payload) instead of using them literally, keeping the dedupe cache usable when a saved image was pasted in as base64.
+
 ## [1.5.2] - 2026-08-25
 
 ### Fixed
