@@ -6,6 +6,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-10-09
+
+### Added
+- `ingest_html` and `ingest_url` now return `font_groups` (the page's self-hosted `@font-face` fonts, already shaped for `settings.fontGroups`) and `typography`/per-section `text_styles` (computed `font_size`/`mobile_font_size`/`font_weight`/`font_family`/`line_height` for headings, body text, and CTAs), so a clone or adapt build can copy exact fonts and type sizing instead of guessing.
+- `ingest_html` gains a `base_url` parameter, and both `ingest_html` and `ingest_url` now fetch the page's external stylesheets (and their `@import`s, two levels deep, behind an SSRF guard) so `@font-face` rules and computed type declared outside the inline HTML are picked up.
+- `create_page`, `update_page`, `add_section`, and `patch_page` now sync a saved page's `settings.fontGroups` into the organization's Font Groups (the editor's Font Manage) after a real save, reported as a new `fonts` field (`registered`/`merged`/`existing`/`failed`/`hotlinked`); this keeps a cloned font alive across the next editor save instead of being dropped.
+- The image re-hosting pass on `create_page`/`update_page`/`add_section`/`patch_page` now also re-hosts self-hosted font files (`.woff2`/`.woff`/`.ttf`/`.otf`, including extensionless URLs tagged by fragment) referenced from `settings.fontGroups`, uploading them to the media collection alongside images.
+- `create_page`/`update_page` now add the Google Fonts weight-link stylesheet to `settings.bhet` when a page uses weights (500/600/800/200) the build doesn't request by default; `add_section` instead returns a `font_weights_notice` since it can't touch page settings, prompting a follow-up `patch_page`/`update_page` to apply the links.
+
+### Changed
+- `page-schema.json` now documents `settings.fontGroups` (the custom-font array the build renders as `@font-face`).
+
+### Fixed
+- `settings.width_section` is now defaulted to `960`/`420` (desktop/mobile) when a hand-written `settings` object omits it, fixing a crash on publish caused by the build host reading `width_section.mobile` unguarded.
+
 ## [1.5.3] - 2026-09-17
 
 ### Added

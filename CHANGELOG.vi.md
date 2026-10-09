@@ -6,6 +6,21 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-10-09
+
+### Added
+- `ingest_html` và `ingest_url` nay trả về `font_groups` (các font `@font-face` tự host của trang, đã đóng gói theo đúng dạng `settings.fontGroups`) và `typography`/`text_styles` theo từng section (các giá trị `font_size`/`mobile_font_size`/`font_weight`/`font_family`/`line_height` đã tính toán cho heading, nội dung, và CTA), nên việc clone hay adapt có thể sao chép đúng font và kích thước chữ thay vì đoán.
+- `ingest_html` có thêm tham số `base_url`, và cả `ingest_html` cùng `ingest_url` nay fetch thêm các stylesheet ngoài của trang (và các `@import` của chúng, sâu hai cấp, có chặn SSRF) để lấy được các rule `@font-face` và khai báo type nằm ngoài HTML inline.
+- `create_page`, `update_page`, `add_section`, và `patch_page` nay đồng bộ `settings.fontGroups` của trang đã lưu vào Font Groups của tổ chức (Font Manage trong editor) sau một lượt lưu thật, báo cáo qua trường `fonts` mới (`registered`/`merged`/`existing`/`failed`/`hotlinked`); việc này giữ cho font đã clone không bị mất ở lượt lưu kế tiếp từ editor.
+- Bước tự-host ảnh trên `create_page`/`update_page`/`add_section`/`patch_page` nay cũng tự-host luôn các file font tự host (`.woff2`/`.woff`/`.ttf`/`.otf`, kể cả URL không có đuôi được đánh dấu qua fragment) được tham chiếu từ `settings.fontGroups`, upload cùng với ảnh vào bộ sưu tập media.
+- `create_page`/`update_page` nay thêm link stylesheet font-weight của Google Fonts vào `settings.bhet` khi trang dùng các weight (500/600/800/200) mà build không tự tải theo mặc định; `add_section` thì trả về `font_weights_notice` vì không thể chỉnh settings của trang, nhắc gọi tiếp `patch_page`/`update_page` để áp dụng link.
+
+### Changed
+- `page-schema.json` nay có mô tả cho `settings.fontGroups` (mảng font tùy chỉnh mà build render thành `@font-face`).
+
+### Fixed
+- `settings.width_section` nay được gán mặc định `960`/`420` (desktop/mobile) khi một object `settings` viết tay bị thiếu trường này, khắc phục lỗi crash khi publish do build host đọc `width_section.mobile` mà không kiểm tra tồn tại.
+
 ## [1.5.3] - 2026-09-17
 
 ### Added
