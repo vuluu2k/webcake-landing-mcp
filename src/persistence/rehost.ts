@@ -32,6 +32,8 @@ const SKIP_HOSTS = [
 ];
 
 const IMAGE_EXT_RE = /\.(jpe?g|png|gif|webp|svg|bmp|avif|ico|tiff?)(?:[?#]|$)/i;
+/** Self-hosted font files (a clone's settings.fontGroups[].fonts[].url) ride the same re-host pass. */
+export const FONT_EXT_RE = /\.(woff2?|ttf|otf)(?:[?#]|$)/i;
 /** All `url( … )` tokens in a CSS value (handles optional quotes; stops at `)`). */
 const CSS_URL_RE = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
 
@@ -84,7 +86,7 @@ export function parseInlineBase64Image(value: string): { contentType: string; by
   return { contentType: m[1].toLowerCase(), bytes };
 }
 
-/** http(s), not already-hosted/placeholder/data, and image-looking — by extension OR a known extensionless image host. */
+/** http(s), not already-hosted/placeholder/data, and image-looking (or a font file) — by extension OR a known extensionless image host. */
 export function isRehostableImageUrl(url: string): boolean {
   if (typeof url !== "string") return false;
   const u = url.trim();
@@ -98,7 +100,9 @@ export function isRehostableImageUrl(url: string): boolean {
   } catch {
     return false;
   }
-  return IMAGE_EXT_RE.test(pathname) || isExtensionlessImageHost(host);
+  // Fonts may carry their type only in a `#wc.<ext>` fragment (extension-less font URLs; see ingest/fonts.ts).
+  const hash = (() => { try { return new URL(u).hash; } catch { return ""; } })();
+  return IMAGE_EXT_RE.test(pathname) || FONT_EXT_RE.test(pathname) || FONT_EXT_RE.test(hash) || isExtensionlessImageHost(host);
 }
 
 /** Re-hostable if http(s) and not on a skip host — used for `url(...)` inners (a background image even without an extension). */

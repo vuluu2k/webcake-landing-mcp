@@ -75,7 +75,21 @@ export type CreateOutcome = {
   rehost?: RehostReport;
   /** the source after re-host rewriting — use it for downstream build/publish so the rendered app matches the stored tree */
   rehosted_source?: unknown;
+  /** present when settings.fontGroups was synced into the org's Font Groups (editor Font Manage) */
+  fonts?: FontSyncReport;
 };
+
+/**
+ * Outcome of filing a page's settings.fontGroups into the org's Font Groups — the
+ * list the editor LOADS (and writes back into settings.fontGroups) on open, so a
+ * group missing there would vanish on the next editor save.
+ * `registered` = newly created; `merged` = the org already had the name, our
+ * missing weights/styles were ADDED (its own files untouched); `existing` = the
+ * org's group already covers every weight; `failed` = backend refused/timed out.
+ * `hotlinked` (subset of the above) = files still on their original URL because
+ * the re-host upload failed — registered anyway so the editor keeps the font.
+ */
+export type FontSyncReport = { registered: string[]; merged: string[]; existing: string[]; failed: string[]; hotlinked: string[] };
 
 export type PageSummary = {
   id: string;

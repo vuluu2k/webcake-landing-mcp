@@ -14,11 +14,14 @@
  *                   section, extended paragraphs + images-as-objects + li lists.
  */
 import { parse } from "node-html-parser";
+import type { HTMLElement } from "node-html-parser";
 import type { IngestedAst, ParseHtmlOptions, FetchHtmlResult } from "./ingest/types.js";
 import { extractStyleBlocks, extractGoogleFonts, extractGradients, fixMojibake } from "./ingest/stylesheets.js";
 import { extractTailwindConfig } from "./ingest/tailwind.js";
-import { findSections, classifySection, computeSizeHint, detectWidgets, detectHoverEffects, brandHints } from "./ingest/semantic.js";
+import { findSections, classifySection, computeSizeHint, detectWidgets, detectHoverEffects, brandHints, pickHeading } from "./ingest/semantic.js";
 import { parseAbsoluteCanvas, canvasRoleSections, stripCdnSizePrefix } from "./ingest/canvas.js";
+import { extractFontFaces, toFontGroups, extractTypography, parseCssRules, makeTypeResolver, resolveCssVars, rootFontPx, stripComments } from "./ingest/fonts.js";
+import { isAllowedScreenshotUrl } from "./screenshot-playwright.js";
 
 // Re-export the public surface so existing imports of "./persistence/html-ingest.js"
 // (parseHtml, fetchHtml, and the IngestedAst/IngestedCanvas/CanvasElement/CanvasSection
@@ -28,6 +31,7 @@ export * from "./ingest/stylesheets.js";
 export * from "./ingest/tailwind.js";
 export * from "./ingest/semantic.js";
 export * from "./ingest/canvas.js";
+export * from "./ingest/fonts.js";
 
 const FETCH_TIMEOUT_MS = 10_000;
 const MAX_HTML_BYTES = 2_000_000; // 2MB
@@ -51,6 +55,12 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
   const styleBlocks = extractStyleBlocks(html);
   const googleFonts = extractGoogleFonts(html);
   const tw = extractTailwindConfig(html);
+  const cssSources = orderedCss(html, opts.baseUrl, opts.extraCss ?? []);
+  const fontGroups = toFontGroups(extractFontFaces(cssSources));
+  const cssRules = resolveCssVars(cssSources.flatMap((c) => parseCssRules(c.css)));
+  const remPx = rootFontPx(cssRules);
+  const typography = extractTypography(cssRules, remPx);
+  const fontFields = { ...(fontGroups.length ? { font_groups: fontGroups } : {}), ...(typography ? { typography } : {}) };
 
   const root = parse(html, { lowerCaseTagName: true });
 
@@ -84,6 +94,7 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
       palette: hints.palette,
       design_tokens: hints.design_tokens,
       background_images: bg.length ? bg : undefined,
+      ...fontFields,
       warnings: warnings.length ? warnings : undefined,
     };
   }
@@ -103,10 +114,22 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
     };
   }
 
+  // Computed type per text role, so a hand-rebuild copies exact sizes/weights.
+  const resolveType = makeTypeResolver(cssRules, tw ?? undefined, remPx);
+  const textStyles = (el: HTMLElement) => {
+    const heading = resolveType(pickHeading(el));
+    const bodyText = resolveType(el.querySelector("p") ?? undefined);
+    const cta = resolveType(el.querySelector("button") ?? el.querySelector('a[class*="btn"], a[class*="button"]') ?? undefined);
+    const out = { ...(heading ? { heading } : {}), ...(bodyText ? { body: bodyText } : {}), ...(cta ? { cta } : {}) };
+    return Object.keys(out).length ? out : undefined;
+  };
+
   const sectionEls = findSections(body);
   const sections = sectionEls.map((el) => {
     const sec = classifySection(el, detail);
     sec.size_hint = computeSizeHint(el, sec, styleBlocks);
+    const styles = textStyles(el);
+    if (styles) sec.text_styles = styles;
     const hover = detectHoverEffects(el);
     if (hover.length) sec.hover_effects = hover;
     if (detail === "full") {
@@ -134,6 +157,7 @@ export function parseHtml(html: string, detail: "compact" | "full" = "compact", 
     // and the Play CDN never emits the resolved CSS.
     gradients: hints.tailwind_gradients.length ? hints.tailwind_gradients : undefined,
     background_images: hints.background_images.length ? hints.background_images : undefined,
+    ...fontFields,
     warnings: warnings.length ? warnings : undefined,
   };
 
@@ -199,26 +223,178 @@ export async function fetchHtml(
     if (!/html|xml|text/i.test(ctype)) {
       return { ok: false, status: res.status, error: `Content-Type ${ctype} is not HTML` };
     }
-    const reader = res.body?.getReader();
-    if (!reader) return { ok: false, status: res.status, error: "no response body" };
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      total += value.length;
-      if (total > MAX_HTML_BYTES) {
-        await reader.cancel().catch(() => {});
-        return { ok: false, status: res.status, error: `Response exceeded ${MAX_HTML_BYTES} bytes` };
-      }
-      chunks.push(value);
-    }
-    const buf = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+    const buf = await readCapped(res, MAX_HTML_BYTES);
+    if (buf === "too-large") return { ok: false, status: res.status, error: `Response exceeded ${MAX_HTML_BYTES} bytes` };
+    if (!buf) return { ok: false, status: res.status, error: "no response body" };
     return { ok: true, status: res.status, html: buf.toString("utf-8") };
   } catch (e: any) {
     return { ok: false, error: e?.name === "AbortError" ? "Request timed out" : e?.message ?? String(e) };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Stream a response body, giving up past `max` bytes (never buffers an unbounded body). */
+async function readCapped(res: Response, max: number): Promise<Buffer | "too-large" | null> {
+  const reader = res.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.length;
+    if (total > max) {
+      await reader.cancel().catch(() => {});
+      return "too-large";
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+}
+
+const MAX_STYLESHEETS = 12;
+const MAX_CSS_BYTES = 1_000_000;
+const MAX_REDIRECTS = 3;
+
+/** One attribute of a raw tag (quoted or bare); `data-href` never matches `href`. */
+function tagAttr(tag: string, name: string): string | undefined {
+  const m = new RegExp(`[\\s"']${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, "i").exec(tag);
+  return m ? (m[1] ?? m[2] ?? m[3]) : undefined;
+}
+
+/**
+ * The page's stylesheet sources in DOCUMENT order (the cascade order): each
+ * `<link rel=stylesheet>` (or `rel=preload as=style`, the async-CSS pattern) by
+ * href, each `<style>` by index. Print-only links are dropped.
+ */
+export function stylesheetTags(html: string): ({ kind: "link"; href: string } | { kind: "style"; index: number; css: string })[] {
+  const out: ({ kind: "link"; href: string } | { kind: "style"; index: number; css: string })[] = [];
+  let styleIndex = 0;
+  for (const m of html.matchAll(/<link\b[^>]*>|<style\b[^>]*>([\s\S]*?)<\/style>/gi)) {
+    if (m[0][1].toLowerCase() === "s") { out.push({ kind: "style", index: styleIndex++, css: m[1] ?? "" }); continue; }
+    const rel = (tagAttr(m[0], "rel") ?? "").toLowerCase();
+    const isCss = /\bstylesheet\b/.test(rel) || (/\bpreload\b/.test(rel) && (tagAttr(m[0], "as") ?? "").toLowerCase() === "style");
+    const media = (tagAttr(m[0], "media") ?? "").toLowerCase();
+    const href = tagAttr(m[0], "href");
+    if (isCss && href && !(media.includes("print") && !media.includes("screen"))) out.push({ kind: "link", href: href.replace(/&amp;/g, "&") });
+  }
+  return out;
+}
+
+/** `@import url(x)` / `@import "x"` targets of a CSS text (comments stripped; print-only imports skipped). */
+function cssImports(css: string): string[] {
+  const out: string[] = [];
+  for (const m of stripComments(css).matchAll(/@import\s+(?:url\(\s*)?["']?([^"')\s;]+)["']?\s*\)?([^;]*);/gi)) {
+    if (!/\bprint\b/i.test(m[2]) || /\bscreen\b/i.test(m[2])) out.push(m[1]);
+  }
+  return out;
+}
+
+/**
+ * GET a stylesheet the crawled page pointed us at — that URL is chosen by a
+ * third-party page, so: http(s) only, no private/loopback/link-local host (SSRF;
+ * same policy + RENDER_ALLOW_PRIVATE opt-out as the screenshot route), redirects
+ * followed MANUALLY so each hop is re-checked, CSS/text content-type only, and the
+ * body streamed with a byte cap.
+ */
+async function fetchCss(url: string): Promise<string | null> {
+  let target = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    if (!isAllowedScreenshotUrl(target).ok) return null;
+    let res: Response;
+    try {
+      res = await fetch(target, {
+        redirect: "manual",
+        signal: AbortSignal.timeout(8_000),
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; webcake-landing-mcp/ingest_url)", Accept: "text/css,*/*;q=0.1" },
+      });
+    } catch {
+      return null;
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) return null;
+      try { target = new URL(loc, target).href; } catch { return null; }
+      continue;
+    }
+    const ctype = (res.headers.get("content-type") ?? "").toLowerCase();
+    if (!res.ok || (ctype && !/css|text\/plain|octet-stream/.test(ctype))) return null;
+    try {
+      const buf = await readCapped(res, MAX_CSS_BYTES);
+      return buf && buf !== "too-large" ? buf.toString("utf-8") : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** A fetched sheet; `owner` = the absolute <link> href, or "style:<n>" for an inline <style>'s imports. */
+export type FetchedSheet = { owner: string; css: string; base: string };
+
+/**
+ * Fetch the page's external stylesheets — and what they (or inline <style> blocks)
+ * `@import`, two levels deep — so `@font-face` + type rules outside the HTML are
+ * seen. Each owner's list is ordered imports-first, like the cascade. Google Fonts
+ * CSS is skipped (those families load by name). Best-effort: a failed sheet is skipped.
+ */
+export async function fetchStylesheets(html: string, pageUrl: string): Promise<FetchedSheet[]> {
+  const seen = new Set<string>();
+  const claim = (href: string, base: string): string | undefined => {
+    if (/fonts\.googleapis\.com/i.test(href) || seen.size >= MAX_STYLESHEETS) return undefined;
+    try {
+      const abs = new URL(href, base).href;
+      if (!/^https?:/i.test(abs) || seen.has(abs)) return undefined;
+      seen.add(abs);
+      return abs;
+    } catch {
+      return undefined;
+    }
+  };
+  // One sheet → [its imports' sheets (recursively, in order)…, itself].
+  const load = async (abs: string, owner: string, depth: number): Promise<FetchedSheet[]> => {
+    const css = await fetchCss(abs);
+    if (css === null) return [];
+    const imports = depth < 2 ? cssImports(css).map((h) => claim(h, abs)).filter((h): h is string => !!h) : [];
+    const nested = await Promise.all(imports.map((h) => load(h, owner, depth + 1)));
+    return [...nested.flat(), { owner, css, base: abs }];
+  };
+  const jobs: Promise<FetchedSheet[]>[] = [];
+  for (const t of stylesheetTags(html)) {
+    if (t.kind === "link") {
+      const abs = claim(t.href, pageUrl);
+      if (abs) jobs.push(load(abs, abs, 0));
+    } else {
+      for (const h of cssImports(t.css)) {
+        const abs = claim(h, pageUrl);
+        if (abs) jobs.push(load(abs, `style:${t.index}`, 1));
+      }
+    }
+  }
+  return (await Promise.all(jobs)).flat();
+}
+
+/**
+ * All CSS of the page in cascade (document) order: for each <link> its fetched
+ * sheets, for each <style> its fetched @imports then the block itself; anything
+ * fetched but unplaced goes last.
+ */
+function orderedCss(html: string, baseUrl: string | undefined, extra: { owner?: string; css: string; base?: string }[]): { css: string; base?: string }[] {
+  const out: { css: string; base?: string }[] = [];
+  const used = new Set<object>();
+  const take = (owner: string) => {
+    for (const e of extra) if (e.owner === owner && !used.has(e)) { used.add(e); out.push(e); }
+  };
+  for (const t of stylesheetTags(html)) {
+    if (t.kind === "link") {
+      try { take(new URL(t.href, baseUrl).href); } catch { /* relative href without a base (ingest_html) */ }
+    } else {
+      take(`style:${t.index}`);
+      out.push({ css: t.css, base: baseUrl });
+    }
+  }
+  for (const e of extra) if (!used.has(e)) out.push(e);
+  return out;
 }

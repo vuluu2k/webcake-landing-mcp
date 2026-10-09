@@ -44,6 +44,7 @@
         "favicon": { "type": "string" },
         "thumbnail": { "type": "string", "description": "Social/share thumbnail URL." },
         "fontGeneral": { "type": "string", "description": "Default page font-family, e.g. \"'Roboto', sans-serif\"." },
+        "fontGroups": { "type": "array", "description": "Custom (non-Google) fonts the build renders as @font-face: [{ name: <CSS family elements use in styles.fontFamily>, fonts: [{ name: <file name WITH extension — the format is sniffed from it>, url, font_weight: thin|light|normal|medium|semibold|bold|extrabold|black, font_style: normal|italic }] }]. External font URLs are uploaded to the media collection on save.", "items": { "type": "object" } },
         "width_section": {
           "type": "object",
           "description": "The canvas width per breakpoint (px) — the coordinate space every element's top/left/width lives in. Editor-allowed values ONLY: desktop 960 or 1200, mobile 420 or 360 (default 960/420). Choose 1200 for wide/multi-column/editorial layouts or when cloning a reference wider than 960 (e.g. Google Stitch ~1280) so columns aren't squished; 360 mobile to match a ~360–390 design. Changing it does NOT rescale existing coords.",

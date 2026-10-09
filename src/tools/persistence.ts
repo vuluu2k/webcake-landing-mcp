@@ -46,6 +46,19 @@ import {
 } from "../persistence/page-version.js";
 import type { WebcakeConfig } from "../persistence/types.js";
 
+/**
+ * What a save learned beyond pass/fail, for the tools that pick their response
+ * fields by hand: the image/font re-host report, the org Font Group sync, and
+ * add_section's note about Google weights it couldn't link.
+ */
+function saveExtras(o: { rehost?: unknown; fonts?: unknown; font_weights_notice?: string }) {
+  return {
+    ...(o.rehost ? { rehost: o.rehost } : {}),
+    ...(o.fonts ? { fonts: o.fonts } : {}),
+    ...(o.font_weights_notice ? { font_weights_notice: o.font_weights_notice } : {}),
+  };
+}
+
 export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // Resolve config from THIS request's headers (remote per-user JWT) first, then env.
   const cfgFor = (extra: any) => readConfig(configFromHeaders(extra?.requestInfo?.headers));
@@ -938,7 +951,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           preview_url: outcome.preview_url,
           status: outcome.status,
           error: outcome.error,
-          ...(outcome.rehost ? { rehost: outcome.rehost } : {}),
+          ...saveExtras(outcome),
           ...autoFixedField(autoFixed),
           ...warningsField(result.warnings),
           ...(outcome.ok ? {} : {
@@ -1001,6 +1014,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         preview_url: fbOutcome.preview_url,
         status: fbOutcome.status,
         error: fbOutcome.error,
+        ...saveExtras(fbOutcome),
         ...warningsField(mergedResult.warnings),
       });
     }
@@ -1314,6 +1328,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             preview_url: outcome.preview_url,
             status: outcome.status,
             error: outcome.error,
+            ...saveExtras(outcome),
             ...warningsField(result.warnings),
             ...(outcome.ok ? {} : { draft_id, hint: `Append failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
           });
@@ -1378,6 +1393,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             preview_url: outcome.preview_url,
             status: outcome.status,
             error: outcome.error,
+            ...saveExtras(outcome),
             ...warningsField(result.warnings),
             ...(outcome.ok ? {} : { draft_id, hint: `Update failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
           });
@@ -1426,6 +1442,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           preview_url: outcome.preview_url,
           status: outcome.status,
           error: outcome.error,
+          ...saveExtras(outcome),
           ...(publishOutcome ? { publish: publishOutcome } : {}),
           ...warningsField(result.warnings),
           ...(outcome.ok ? {} : { draft_id, hint: `Create failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) or resolve the error first.` }),
@@ -1478,6 +1495,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           editor_url: outcome.editor_url,
           preview_url: outcome.preview_url,
           status: outcome.status,
+          ...saveExtras(outcome),
           ...warningsField(result.warnings),
         });
       }
@@ -1489,6 +1507,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         page_id: outcome.page_id ?? page_id,
         status: outcome.status,
         error: outcome.error,
+        ...saveExtras(outcome),
         ...warningsField(result.warnings),
         draft_id: liveDraftId,
         hint: `Save failed — the patched source is cached. Retry via patch_page({ draft_id: "${liveDraftId}", dry_run: false }) with no patches. The draft expires in ~2 h.`,

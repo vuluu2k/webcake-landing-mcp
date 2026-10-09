@@ -73,6 +73,14 @@ export type IngestedSection = {
    * for scale/lift/zoom. Without this the cloned page is static (no hover).
    */
   hover_effects?: string[];
+  /**
+   * both modes: COMPUTED typography of the section's heading / first paragraph /
+   * first button (CSS cascade incl. @media desktop-vs-mobile, inline style,
+   * Tailwind text-xl / font-bold style classes, inheritance). font_size is the desktop px,
+   * mobile_font_size the mobile px when it differs — set styles.fontSize/
+   * fontWeight/fontFamily/lineHeight/letterSpacing from these EXACTLY.
+   */
+  text_styles?: { heading?: import("./fonts.js").TypeSpec; body?: import("./fonts.js").TypeSpec; cta?: import("./fonts.js").TypeSpec };
 };
 
 export type IngestedAst = {
@@ -104,6 +112,16 @@ export type IngestedAst = {
   /** full mode only */
   gradients?: string[];
   /**
+   * both modes: self-hosted fonts the platform does NOT have (from the page's
+   * `@font-face` rules, incl. fetched external stylesheets), already in the
+   * `settings.fontGroups` shape. Copy them into settings.fontGroups and set the
+   * elements' styles.fontFamily to the group `name` — the font files (still the
+   * original URLs) are downloaded + uploaded to the media collection on save.
+   */
+  font_groups?: import("./fonts.js").FontGroup[];
+  /** both modes: tag-level type scale from base CSS rules (h1…h6, p, body, a, button) — copy font_size (px) / font_weight exactly. */
+  typography?: Record<string, import("./fonts.js").TypeSpec>;
+  /**
    * Absolute-canvas builder exports only (LadiPage-family / Webcake-published
    * HTML, auto-detected): the machine-readable geometry payload — when present,
    * rebuild from THIS, element by element, instead of the role `sections`.
@@ -120,6 +138,10 @@ export type ParseHtmlOptions = {
    * Lets the caller re-fetch a truncated page section-by-section in full detail.
    */
   sections?: string[];
+  /** Page URL — resolves relative `@font-face` urls in inline <style> blocks. */
+  baseUrl?: string;
+  /** Fetched external stylesheets (ingest_url) — read for `@font-face` + typography only. */
+  extraCss?: { owner?: string; css: string; base?: string }[];
 };
 
 export type CanvasElement = {

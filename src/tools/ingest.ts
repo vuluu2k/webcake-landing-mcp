@@ -30,7 +30,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
 import type { IngestedAst, IngestedCanvas } from "../persistence/html-ingest.js";
 import { text } from "../mcp/response.js";
-import { parseHtml, fetchHtml } from "../persistence/html-ingest.js";
+import { parseHtml, fetchHtml, fetchStylesheets, applyCloneFonts } from "../persistence/html-ingest.js";
 
 const sectionsParam = z
   .array(z.string())
@@ -71,6 +71,8 @@ function summarizeCanvas(canvas: IngestedCanvas) {
 function withCloneSource(domain: Domain, parsed: IngestedAst): Record<string, unknown> {
   if (!parsed.canvas || !domain.canvasToSource) return parsed as unknown as Record<string, unknown>;
   const { source, notes } = domain.canvasToSource(parsed.canvas, { title: parsed.title });
+  const fonts = applyCloneFonts(source, parsed.font_groups ?? []);
+  if (fonts.length) notes.push(`custom fonts ${fonts.join(", ")} → settings.fontGroups; their files are uploaded to the media collection on save`);
   const { canvas, ...rest } = parsed;
   return {
     ...rest,
@@ -84,7 +86,7 @@ function withCloneSource(domain: Domain, parsed: IngestedAst): Record<string, un
 export function registerIngestTools(server: McpServer, domain: Domain) {
   server.tool(
     "ingest_html",
-    "Parses an HTML string into a reference AST: title, description, og_image, language, and sections classified by role (header, hero, features, about, form, cta, gallery, testimonials, pricing, faq, footer, unknown) with headings, subheadings, paragraphs, images, ctas, links, form fields, and a size_hint (desktop section height in px — from the source CSS when explicit, else a content-volume estimate; set the rebuilt section's desktop height from it) — plus top colors, fonts, palette, and background_images. The palette is pulled from CSS custom-properties AND, for Tailwind-CDN pages (Google Stitch output), from the page's `tailwind.config` — which also yields `design_tokens` (the resolved spacing grid, corner radii, and type scale) so the rebuild matches the source's exact sizing and colors instead of guessing. Returns ~2-5KB (compact) or up to ~25KB (full). Use detail:'full' for clone-faithful rebuilds — it adds per-section blocks (cards/tiles/steps), li lists, gradients, images as { src, alt } objects, and widgets (the source HTML + CSS of composite mockups, to paste into ONE html-box). ABSOLUTE-CANVAS builder exports (LadiPage-family pages / Webcake-published HTML — bare positioned divs whose layout lives in per-id CSS rules) are AUTO-DETECTED and converted DETERMINISTICALLY into a ready-to-save Webcake `source` (folded into the response as `source` + `clone_notes` + `clone_notice`): a faithful 1:1 clone on the matching 420/960 canvas — save it straight to create_page instead of hand-rebuilding. The heavy per-element geometry is summarized to `canvas_summary` { builder, width, mobile_only, element_count, sections:[{id,height,elements}], popups }. External images in `source` are auto-hosted on save (no upload_images needed); `clone_notes` lists the few lossy approximations to patch_page afterward. Garbled Vietnamese mojibake (UTF-8 mis-read as Latin-1) is auto-repaired with a warning.",
+    "Parses an HTML string into a reference AST: title, description, og_image, language, and sections classified by role (header, hero, features, about, form, cta, gallery, testimonials, pricing, faq, footer, unknown) with headings, subheadings, paragraphs, images, ctas, links, form fields, and a size_hint (desktop section height in px — from the source CSS when explicit, else a content-volume estimate; set the rebuilt section's desktop height from it) — plus top colors, fonts, palette, and background_images. The palette is pulled from CSS custom-properties AND, for Tailwind-CDN pages (Google Stitch output), from the page's `tailwind.config` — which also yields `design_tokens` (the resolved spacing grid, corner radii, and type scale) so the rebuild matches the source's exact sizing and colors instead of guessing. Returns ~2-5KB (compact) or up to ~25KB (full). Use detail:'full' for clone-faithful rebuilds — it adds per-section blocks (cards/tiles/steps), li lists, gradients, images as { src, alt } objects, and widgets (the source HTML + CSS of composite mockups, to paste into ONE html-box). ABSOLUTE-CANVAS builder exports (LadiPage-family pages / Webcake-published HTML — bare positioned divs whose layout lives in per-id CSS rules) are AUTO-DETECTED and converted DETERMINISTICALLY into a ready-to-save Webcake `source` (folded into the response as `source` + `clone_notes` + `clone_notice`): a faithful 1:1 clone on the matching 420/960 canvas — save it straight to create_page instead of hand-rebuilding. The heavy per-element geometry is summarized to `canvas_summary` { builder, width, mobile_only, element_count, sections:[{id,height,elements}], popups }. External images in `source` are auto-hosted on save (no upload_images needed); `clone_notes` lists the few lossy approximations to patch_page afterward. Garbled Vietnamese mojibake (UTF-8 mis-read as Latin-1) is auto-repaired with a warning. FONTS: `font_groups` = the page's self-hosted fonts (from @font-face) in the settings.fontGroups shape — copy into settings.fontGroups and use the group name as styles.fontFamily (files are uploaded to the media collection on save); `typography` + per-section `text_styles` = the computed font_size (desktop px) / mobile_font_size / font_weight / font_family / line_height — copy them exactly.",
     {
       html: z.string().describe("Raw HTML of a page or a section."),
       intent: z
@@ -93,15 +95,22 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
         .describe("How the caller intends to use the result. 'adapt' (default) — use as a layout reference and rewrite the TEXT for the user's brand (images from the reference are still re-hosted via upload_images and reused). 'clone' — keep text and images close to the original. For absolute-canvas exports the deterministic `source` is a clone either way."),
       detail: detailParam,
       sections: sectionsParam,
+      base_url: z
+        .string()
+        .optional()
+        .describe("The page's original URL, when the HTML was saved/copied from a live site. Resolves relative font/image urls AND fetches the page's external stylesheets (+ @imports) so self-hosted fonts (`font_groups`) and the computed type (`typography`/`text_styles`) defined outside the HTML are found — pass it whenever you know where the HTML came from."),
     },
-    { title: "Ingest HTML Reference", readOnlyHint: true, openWorldHint: false },
-    async ({ html, intent, detail, sections }) =>
-      text({ intent: intent ?? "adapt", ...withCloneSource(domain, parseHtml(html, detail ?? "compact", { sections })) })
+    { title: "Ingest HTML Reference", readOnlyHint: true, openWorldHint: true },
+    async ({ html, intent, detail, sections, base_url }) => {
+      const baseUrl = base_url && /^https?:\/\//i.test(base_url) ? base_url : undefined;
+      const extraCss = baseUrl ? await fetchStylesheets(html, baseUrl) : undefined;
+      return text({ intent: intent ?? "adapt", ...withCloneSource(domain, parseHtml(html, detail ?? "compact", { sections, baseUrl, extraCss })) });
+    }
   );
 
   server.tool(
     "ingest_url",
-    "Fetches a public webpage (GET, 10s timeout, 2MB cap) and parses it into the same reference AST as ingest_html (including per-section size_hint desktop heights). Returns a warning when the page appears client-rendered (empty <body>) so the caller can fall back to a screenshot — Claude can analyze a screenshot natively without this tool. Does not execute JavaScript; sites built with React/Vue/Next.js may return little content. Use detail:'full' for clone-faithful rebuilds — adds CSS palette, background_images, per-section blocks, lists, images as { src, alt } objects, and widgets (source HTML + CSS of composite mockups for html-box rebuilds). ABSOLUTE-CANVAS builder exports (LadiPage-family / Webcake-published pages) are auto-detected the same way as ingest_html and converted DETERMINISTICALLY into a ready-to-save `source` (+ `clone_notes` + `clone_notice`, with the per-element geometry summarized to `canvas_summary`) — save it straight to create_page; external images auto-host on save. Image URLs in the result are the user's assets — re-host them via upload_images and reuse them for BOTH intents; use search_images only for slots with no source image.",
+    "Fetches a public webpage (GET, 10s timeout, 2MB cap) and parses it into the same reference AST as ingest_html (including per-section size_hint desktop heights). Returns a warning when the page appears client-rendered (empty <body>) so the caller can fall back to a screenshot — Claude can analyze a screenshot natively without this tool. Does not execute JavaScript; sites built with React/Vue/Next.js may return little content. Use detail:'full' for clone-faithful rebuilds — adds CSS palette, background_images, per-section blocks, lists, images as { src, alt } objects, and widgets (source HTML + CSS of composite mockups for html-box rebuilds). ABSOLUTE-CANVAS builder exports (LadiPage-family / Webcake-published pages) are auto-detected the same way as ingest_html and converted DETERMINISTICALLY into a ready-to-save `source` (+ `clone_notes` + `clone_notice`, with the per-element geometry summarized to `canvas_summary`) — save it straight to create_page; external images auto-host on save. Image URLs in the result are the user's assets — re-host them via upload_images and reuse them for BOTH intents; use search_images only for slots with no source image. Also fetches the page's external stylesheets (+ @imports) so `font_groups` (self-hosted fonts → settings.fontGroups, uploaded on save) and the computed `typography`/`text_styles` (font_size/mobile_font_size/font_weight — copy exactly) see rules outside the HTML.",
     {
       url: z.string().describe("Public HTTP(S) URL of the page to fetch."),
       intent: z
@@ -123,12 +132,13 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
           hint: "If the page is client-rendered, ask the user for a screenshot — Claude can analyze it natively.",
         });
       }
+      const extraCss = await fetchStylesheets(fetched.html!, url);
       return text({
         ok: true,
         url,
         status: fetched.status,
         intent: intent ?? "adapt",
-        ...withCloneSource(domain, parseHtml(fetched.html!, detail ?? "compact", { sections })),
+        ...withCloneSource(domain, parseHtml(fetched.html!, detail ?? "compact", { sections, baseUrl: url, extraCss })),
       });
     }
   );

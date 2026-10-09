@@ -272,7 +272,7 @@ function classifyForm(el: HTMLElement, form: HTMLElement, detail: "compact" | "f
 
 // ─── element pickers ─────────────────────────────────────────────────────────
 
-function pickHeading(el: HTMLElement): HTMLElement | undefined {
+export function pickHeading(el: HTMLElement): HTMLElement | undefined {
   for (const t of HEADING_TAGS) {
     const h = el.querySelector(t);
     if (h) return h;

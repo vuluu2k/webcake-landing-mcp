@@ -385,13 +385,22 @@ function normalizeEditorValues(node: any): void {
   }
 }
 
-/** settings.width_section carries the canvas width the coords live in — keep it numeric. */
+/**
+ * settings.width_section carries the canvas width the coords live in — keep it
+ * numeric, and default it (960/420) when absent: the build host reads
+ * `settings.width_section.mobile` unguarded, so a hand-written settings object
+ * without it saves fine but crashes every publish.
+ */
 function normalizeSettings(source: any): void {
-  const ws = source?.settings?.width_section;
-  if (!ws || typeof ws !== "object") return;
+  const settings = source?.settings;
+  if (!settings || typeof settings !== "object") return;
+  if (!settings.width_section || typeof settings.width_section !== "object") settings.width_section = {};
+  const ws = settings.width_section;
   for (const bp of ["desktop", "mobile"] as const) {
     if (ws[bp] !== undefined) ws[bp] = numFromEditorString(ws[bp]);
   }
+  ws.desktop ??= CANVAS.desktopWidth;
+  ws.mobile ??= CANVAS.mobileWidth;
 }
 
 /** Apply all post-expand normalizations to every node in a page source. */

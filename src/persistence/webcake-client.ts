@@ -11,8 +11,9 @@
  * (LandingPageWeb.V1.AiController, scope /api/v1/ai). Requires global fetch (Node 18+).
  */
 import { createHash } from "node:crypto";
-import type { WebcakeConfig, Organization, CreateOutcome, PageSummary, RehostReport } from "./types.js";
-import { collectExternalImageUrls, rewriteImageUrls, parseInlineBase64Image, MAX_REHOST_PER_SAVE } from "./rehost.js";
+import type { WebcakeConfig, Organization, CreateOutcome, PageSummary, RehostReport, FontSyncReport } from "./types.js";
+import { withGoogleWeightLinks, googleWeightLinks } from "./ingest/fonts.js";
+import { collectExternalImageUrls, rewriteImageUrls, parseInlineBase64Image, MAX_REHOST_PER_SAVE, FONT_EXT_RE } from "./rehost.js";
 import { rehostGet, rehostSet } from "./rehost-cache.js";
 
 /** Default fetch timeout in ms. Override via WEBCAKE_HTTP_TIMEOUT_MS env. */
@@ -249,7 +250,7 @@ export async function createPage(
   // images are filed into the same collection the page itself lands in.
   const { source: hostedSource, report: rehost } = await rehostSourceImages(
     orgId ? { ...config, orgId } : config,
-    source
+    withGoogleWeightLinks(source)
   );
   const req = buildRequest(config, name, hostedSource, orgId);
   let res: Response;
@@ -291,7 +292,10 @@ export async function createPage(
     preview_url: toPreviewUrl(config, previewPath),
     organization_id: (orgId ?? config.orgId) ?? null,
     raw: data,
-    ...(rehost ? { rehost, rehosted_source: hostedSource } : {}),
+    ...(rehost ? { rehost } : {}),
+    // Also when only the Google weight links changed it — publish must build what was stored.
+    ...(hostedSource !== source ? { rehosted_source: hostedSource } : {}),
+    ...(await fontSyncField(config, pageId, hostedSource, orgId ?? config.orgId)),
   };
 }
 
@@ -480,6 +484,21 @@ export async function appendSection(
     sections_added: data?.sections_added,
     raw: data,
     ...(rehost ? { rehost, rehosted_source: hostedSections } : {}),
+    ...fontWeightNotice(sections),
+  };
+}
+
+/**
+ * append_section saves server-side without the page settings, so it can't add the
+ * Google weight links to settings.bhet itself — say so, so the model knows the
+ * next whole-tree save (patch_page / update_page) is what fixes 500/600/800.
+ */
+function fontWeightNotice(sections: unknown): { font_weights_notice?: string } {
+  const links = googleWeightLinks({ page: Array.isArray(sections) ? sections : [sections], settings: {} });
+  if (!links) return {};
+  const fams = [...links.matchAll(/family=([^:]+):wght@([\d;]+)/g)].map((m) => `${decodeURIComponent(m[1].replace(/\+/g, " "))} ${m[2].replace(/;/g, "/")}`);
+  return {
+    font_weights_notice: `These sections use Google weights the build doesn't load (${fams.join(", ")}) — they render as 700 until the next whole-tree save. Run any patch_page (or update_page) on this page once you're done adding sections; that save adds the font links. Ignore for families that are custom fontGroups.`,
   };
 }
 
@@ -490,7 +509,7 @@ export async function updatePageSource(
   source: unknown
 ): Promise<CreateOutcome> {
   const url = `${config.base}${UPDATE_ENDPOINT}`;
-  const { source: hostedSource, report: rehost } = await rehostSourceImages(config, source);
+  const { source: hostedSource, report: rehost } = await rehostSourceImages(config, withGoogleWeightLinks(source));
   let res: Response;
   try {
     res = await fetch(url, {
@@ -528,7 +547,10 @@ export async function updatePageSource(
     preview_url: toPreviewUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
     raw: data,
-    ...(rehost ? { rehost, rehosted_source: hostedSource } : {}),
+    ...(rehost ? { rehost } : {}),
+    // Also when only the Google weight links changed it — publish must build what was stored.
+    ...(hostedSource !== source ? { rehosted_source: hostedSource } : {}),
+    ...(await fontSyncField(config, pageIdOut, hostedSource, data?.organization_id ?? config.orgId)),
   };
 }
 
@@ -1015,7 +1037,7 @@ function rehostExtFromContentType(ct: string): string {
     "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png", "image/webp": "webp",
     "image/gif": "gif", "image/avif": "avif", "image/svg+xml": "svg", "image/bmp": "bmp", "image/tiff": "tiff",
   };
-  return map[sub] ?? (sub.replace("image/", "") || "jpg");
+  return map[sub] ?? (sub.split("/")[1] || "jpg");
 }
 
 /**
@@ -1048,7 +1070,14 @@ async function fetchAndHostOne(config: WebcakeConfig, src: string): Promise<stri
   const cl = res.headers.get("content-length");
   if (cl && parseInt(cl, 10) > REHOST_MAX_BYTES) return null;
   let contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-  if (!contentType.startsWith("image/")) {
+  // Font file (clone fontGroups): servers send font/*, application/font-*, or octet-stream —
+  // name it by its URL extension so the backend files it as a font asset (type 4).
+  const fontExt = (() => { try { const u = new URL(src); return (FONT_EXT_RE.exec(u.pathname) ?? FONT_EXT_RE.exec(u.hash))?.[1].toLowerCase(); } catch { return undefined; } })();
+  if (fontExt) {
+    if (/html|json|xml/.test(contentType)) return null; // an error/login page served at a .woff2 URL
+    contentType = `font/${fontExt}`;
+  }
+  else if (!contentType.startsWith("image/")) {
     // Some CDNs send octet-stream for images — trust the URL extension instead of rejecting.
     const extGuess = (() => { try { const p = new URL(src).pathname; const d = p.lastIndexOf("."); return d >= 0 ? p.slice(d + 1).split(/[?#]/)[0].toLowerCase() : ""; } catch { return ""; } })();
     if (!extGuess) return null;
@@ -1158,6 +1187,126 @@ export async function rehostSourceImages(
   return { source: rewritten, report };
 }
 
+// ---------------------------------------------------------------------------
+// Font Groups (editor Font Manage) — runs after a real create/update save
+// ---------------------------------------------------------------------------
+
+const fontsEndpoint = (pageId: string, action: string) => `/api/pages/${encodeURIComponent(pageId)}/fonts${action ? `/${action}` : ""}`;
+/** Font-group sync is a post-save extra: keep it short so it can never stall a create into a "failed" retry. */
+const FONT_SYNC_TIMEOUT_MS = 10_000;
+/** (builder, org, group name) already confirmed filled in the org — skip the round-trips on later saves. */
+const fontGroupMemo = new Set<string>();
+
+/** Call the editor's page-scoped fonts routes (builder host; `x-org-id` is REQUIRED — the route reads the org from it). */
+async function fontsCall(config: WebcakeConfig, pageId: string, orgId: string, action: string, body?: unknown, query = "") {
+  const url = `${(config.builderBase ?? config.base).replace(/\/+$/, "")}${fontsEndpoint(pageId, action)}${query}`;
+  const { text } = await postToHost(
+    url,
+    { ...authHeaders(config, orgId), Accept: "*/*" },
+    body === undefined ? undefined : JSON.stringify(body),
+    { method: body === undefined ? "GET" : "POST", timeoutMs: FONT_SYNC_TIMEOUT_MS }
+  );
+  try { return JSON.parse(text); } catch { return null; }
+}
+
+/** The org's existing group of that name ({ id, fonts }) via GET …/fonts?names[]=. */
+async function findFontGroup(config: WebcakeConfig, pageId: string, orgId: string, name: string): Promise<any | undefined> {
+  const json = await fontsCall(config, pageId, orgId, "", undefined, `?names[]=${encodeURIComponent(name)}&limit=5`);
+  const groups: any[] = json?.data?.font_groups?.data ?? [];
+  return groups.find((g) => g?.name === name);
+}
+
+async function fillFontGroup(config: WebcakeConfig, pageId: string, orgId: string, id: unknown, name: string, fonts: any[]): Promise<boolean> {
+  const list_fonts = fonts.map((f) => ({
+    name: f.name, url: f.url, font_weight: f.font_weight ?? "normal", font_style: f.font_style ?? "normal",
+    font_group_id: id, metadata: f.metadata ?? {},
+  }));
+  const res = await fontsCall(config, pageId, orgId, "update_font_group_data", { id, name, list_fonts });
+  return res?.success === true;
+}
+
+type GroupOutcome = "registered" | "merged" | "existing" | "failed";
+
+const slotOf = (f: any) => `${f?.font_weight ?? "normal"}|${f?.font_style ?? "normal"}`;
+
+async function syncOneGroup(config: WebcakeConfig, pageId: string, orgId: string, g: any): Promise<[string, GroupOutcome] | undefined> {
+  const name = String(g?.name ?? "").trim();
+  const fonts: any[] = (Array.isArray(g?.fonts) ? g.fonts : []).filter((f: any) => /^https?:\/\//i.test(String(f?.url ?? "")));
+  if (!name || !fonts.length) return undefined;
+  if (g.id != null) return [name, "existing"]; // came from the org already (the editor loaded it)
+  const memoKey = `${config.builderBase ?? config.base}|${orgId}|${name}|${fonts.map(slotOf).sort().join(",")}`;
+  if (fontGroupMemo.has(memoKey)) return [name, "existing"];
+  try {
+    const created = await fontsCall(config, pageId, orgId, "create_or_update_font_group", { attrs: { name } });
+    let outcome: GroupOutcome;
+    if (created?.fallback === "entity_existed") {
+      // The org already has this family. Never replace its files — update_font_group_data
+      // REPLACES the list, so send the group's own fonts back unchanged and only APPEND the
+      // weights/styles it lacks (an empty group from a half-finished sync is simply filled).
+      const existing = await findFontGroup(config, pageId, orgId, name);
+      if (existing?.id == null) return [name, "failed"];
+      const own: any[] = Array.isArray(existing.fonts) ? existing.fonts : [];
+      const have = new Set(own.map(slotOf));
+      const missing = fonts.filter((f) => !have.has(slotOf(f)));
+      if (!missing.length) outcome = "existing";
+      else if (await fillFontGroup(config, pageId, orgId, existing.id, name, [...own, ...missing])) outcome = own.length ? "merged" : "registered";
+      else return [name, "failed"];
+    } else {
+      const id = created?.font_group?.id;
+      if (id == null || !(await fillFontGroup(config, pageId, orgId, id, name, fonts))) return [name, "failed"];
+      outcome = "registered";
+    }
+    fontGroupMemo.add(memoKey);
+    return [name, outcome];
+  } catch {
+    return [name, "failed"];
+  }
+}
+
+/**
+ * File the page's `settings.fontGroups` into the org's Font Groups so the fonts
+ * show up (and are re-usable) in the editor's Font Manage — mirrors the editor's
+ * own flow: create_or_update_font_group {attrs:{name}} → update_font_group_data
+ * {id, name, list_fonts}. The build renders from settings.fontGroups either way;
+ * this is the "available on the platform" half — AND it is what keeps the font alive:
+ * the editor replaces settings.fontGroups with the org's groups when a page opens,
+ * so an unregistered group would be dropped by the next editor save. A name the
+ * org already has only gets the weights it lacks appended (its own files are never
+ * changed). Groups whose re-host failed are registered on their original URL
+ * (`hotlinked`). Groups run in parallel with a short timeout. Never throws.
+ */
+export async function registerFontGroups(
+  config: WebcakeConfig,
+  pageId: string,
+  source: any,
+  orgId: string | number
+): Promise<FontSyncReport | undefined> {
+  const groups: any[] = Array.isArray(source?.settings?.fontGroups) ? source.settings.fontGroups : [];
+  if (!groups.length) return undefined;
+  const report: FontSyncReport = { registered: [], merged: [], existing: [], failed: [], hotlinked: [] };
+  const results = await Promise.all(groups.map((g) => syncOneGroup(config, pageId, `${orgId}`, g).catch(() => undefined)));
+  results.forEach((r, i) => {
+    if (!r) return;
+    report[r[1]].push(r[0]);
+    const hosted = (groups[i]?.fonts ?? []).every((f: any) => /^https:\/\/statics\.pancake\.vn\//.test(String(f?.url ?? "")));
+    if (!hosted && r[1] !== "failed") report.hotlinked.push(r[0]);
+  });
+  return report;
+}
+
+/** `{ fonts }` for a save outcome — resolves the org when the caller didn't pin one; `{}` when there is nothing to sync. Never throws. */
+async function fontSyncField(config: WebcakeConfig, pageId: string, source: any, orgId: unknown): Promise<{ fonts?: FontSyncReport }> {
+  try {
+    if (!config.jwt || !Array.isArray(source?.settings?.fontGroups) || !source.settings.fontGroups.length) return {};
+    const org = orgId != null && `${orgId}` !== "" ? `${orgId}` : await resolveCollectionOrgId(config);
+    if (!org) return {};
+    const fonts = await registerFontGroups(config, pageId, source, org);
+    return fonts ? { fonts } : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * POST to a host-scoped route. Node's fetch cannot reach `*.localhost` hosts
  * (browsers special-case .localhost; Node's DNS does not, and undici forbids a
@@ -1167,11 +1316,14 @@ export async function rehostSourceImages(
 async function postToHost(
   url: string,
   headers: Record<string, string>,
-  body: string
+  body: string | undefined,
+  opts: { method?: "GET" | "POST"; timeoutMs?: number } = {}
 ): Promise<{ status: number; text: string }> {
+  const method = opts.method ?? "POST";
+  const timeoutMs = opts.timeoutMs ?? HTTP_TIMEOUT_MS;
   const u = new URL(url);
   if (!u.hostname.endsWith(".localhost")) {
-    const res = await fetch(url, { method: "POST", headers, body, signal: timeoutSignal(HTTP_TIMEOUT_MS) });
+    const res = await fetch(url, { method, headers, body, signal: timeoutSignal(timeoutMs) });
     return { status: res.status, text: await res.text() };
   }
   const { request } = await import("node:http");
@@ -1181,7 +1333,7 @@ async function postToHost(
         host: "127.0.0.1",
         port: u.port || 80,
         path: u.pathname + u.search,
-        method: "POST",
+        method,
         headers: { ...headers, Host: u.host },
       },
       (res) => {
@@ -1190,8 +1342,8 @@ async function postToHost(
         res.on("end", () => resolve({ status: res.statusCode ?? 0, text: data }));
       }
     );
-    req.setTimeout(HTTP_TIMEOUT_MS, () => {
-      req.destroy(new Error(`request timed out after ${HTTP_TIMEOUT_MS}ms`));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`request timed out after ${timeoutMs}ms`));
     });
     req.on("error", reject);
     req.end(body);

@@ -17,7 +17,8 @@ import { pkgVersion } from "./server.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
-import { parseHtml, extractTailwindConfig } from "./persistence/html-ingest.js";
+import { parseHtml, extractTailwindConfig, extractFontFaces, applyCloneFonts, googleWeightLinks, withGoogleWeightLinks, toFontGroups, stylesheetTags, fetchStylesheets, parseCssRules, resolveCssVars } from "./persistence/html-ingest.js";
+import { registerFontGroups } from "./persistence/webcake-client.js";
 import { warningsField } from "./mcp/response.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
 import { toEditorUrl, toEditorLoginUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
@@ -665,6 +666,193 @@ check("ingest: background_images from stylesheet extracted", (ssAst.background_i
 check("ingest: hero bg image URL captured", ssAst.background_images?.some((u) => u.includes("hero-bg.jpg")) === true, ssAst.background_images);
 check("ingest: Google Font extracted into fonts", ssAst.fonts?.some((f) => f.toLowerCase().includes("poppins")) === true, ssAst.fonts);
 check("ingest: stylesheet colors merged into colors", (ssAst.colors?.length ?? 0) > 0, ssAst.colors);
+
+console.log("== ingest: clone fonts (@font-face → fontGroups, typography, Google weights) ==");
+{
+  const fontHtml = `<html><head><style>
+    @font-face { font-family: 'SVN-Gilroy'; src: url(fonts/gilroy.eot); src: url(fonts/gilroy.woff) format('woff'), url("fonts/gilroy.woff2") format("woff2"); font-weight: 700; }
+    @font-face { font-family: "Inter Var"; src: url(https://cdn.x.com/inter.ttf); font-weight: 100 900; font-style: italic; }
+    @font-face { font-family: 'Roboto'; src: url(https://fonts.gstatic.com/s/roboto/v1/a.woff2) format('woff2'); unicode-range: U+0000-00FF; }
+    @font-face { font-family: 'Material Icons'; src: url(https://x.com/mi.woff2); }
+    h1, .t { font-family: 'SVN-Gilroy', sans-serif; font-size: 3rem; font-weight: 800; line-height: 1.2 }
+    @media (max-width: 600px) { h1 { font-size: 20px } }
+    @media print { h1 { font-size: 99px } }
+    p { font-size: 16px }
+  </style></head><body><section><h1>Big title here</h1><p>Some body copy that is long enough to not be a CSR shell, really.</p></section></body></html>`;
+  const fAst = parseHtml(fontHtml, "compact", { baseUrl: "https://site.com/page/" });
+  const gil = fAst.font_groups?.find((g) => g.name === "SVN-Gilroy");
+  check("fonts: relative @font-face url resolved, woff2 preferred over woff/eot", gil?.fonts[0]?.url === "https://site.com/page/fonts/gilroy.woff2" && gil?.fonts[0]?.font_weight === "bold" && gil?.fonts[0]?.name === "gilroy.woff2", gil);
+  const inter = fAst.font_groups?.find((g) => g.name === "Inter Var");
+  check("fonts: variable range → one entry per build weight key (200 folds into 300), italic kept", inter?.fonts.length === 8 && inter.fonts.every((f) => f.font_style === "italic"), inter);
+  check("fonts: Google subset (unicode-range/gstatic) + icon fonts skipped", !fAst.font_groups?.some((g) => /roboto|material/i.test(g.name)), fAst.font_groups);
+  check("fonts: typography — rem→px desktop, max-width @media → mobile_font_size, print ignored", fAst.typography?.h1?.font_size === 48 && fAst.typography?.h1?.mobile_font_size === 20 && fAst.typography?.h1?.font_weight === "800" && fAst.typography?.p?.font_size === 16, fAst.typography);
+  check("fonts: ingest_html without baseUrl keeps only absolute font urls", extractFontFaces([{ css: "@font-face{font-family:A;src:url(a.woff2)}" }]).length === 0, null);
+  check("rehost: font file urls are re-host candidates", collectExternalImageUrls({ settings: { fontGroups: [{ fonts: [{ url: "https://site.com/f/x.woff2?v=2" }] }] } }).length === 1, null);
+
+  const el = (fam: string, w: any) => ({ id: "t" + Math.random(), type: "text-block", responsive: { desktop: { styles: { fontFamily: fam, fontWeight: w } }, mobile: { styles: {} } }, children: [] });
+  const src: any = { page: [{ id: "s", type: "section", responsive: {}, children: [el("'SVN-Gilroy', sans-serif", 700), el("'Poppins', sans-serif", 600), el("'Poppins', sans-serif", "bold")] }], popup: [], settings: { fontGeneral: "'Roboto', sans-serif" } };
+  const reg = applyCloneFonts(src, fAst.font_groups ?? []);
+  check("fonts: clone source gets only USED custom families in settings.fontGroups", reg.join() === "SVN-Gilroy" && src.settings.fontGroups.length === 1, src.settings.fontGroups);
+  const linked = withGoogleWeightLinks(src);
+  const poppins600 = '<link data-wc-weights rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@600&display=swap">';
+  check("fonts: Google weight 600 link added at save (build only loads 100/300/400/700/900), input untouched", linked.settings.bhet === poppins600 && src.settings.bhet === undefined, linked.settings.bhet);
+  check("fonts: weight links idempotent (same object back when nothing changes)", withGoogleWeightLinks(linked) === linked, null);
+  const grown: any = { ...linked, page: [{ ...linked.page[0], children: [...linked.page[0].children, el("'Poppins', sans-serif", 500)] }], settings: { ...linked.settings, bhet: "<script>x</script>" + linked.settings.bhet } };
+  const regrown = withGoogleWeightLinks(grown);
+  check("fonts: changed weight set REPLACES our old link (no pile-up), user bhet kept", regrown.settings.bhet === '<script>x</script><link data-wc-weights rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&display=swap">', regrown.settings.bhet);
+  check("fonts: non-array fontGroups never throws", googleWeightLinks({ page: [], settings: { fontGroups: {} } }) === "", null);
+  const sys: any = { page: [{ children: [el("Arial, sans-serif", 600)] }], settings: {} };
+  check("fonts: system fonts get no Google link", googleWeightLinks(sys) === "", googleWeightLinks(sys));
+
+  // Per-section computed text styles: class selectors, descendant, @media min-width desktop, inline, inheritance, Tailwind.
+  const cascHtml = `<html><head><style>
+    .hero { font-family: 'Lexend', sans-serif; }
+    .hero .title { font-size: 28px; font-weight: 600 }
+    @media (min-width: 1024px) { .hero .title { font-size: 56px } }
+    .lead { line-height: 1.6 }
+    .btn { font-weight: bold; font-size: 15px }
+  </style></head><body>
+    <section class="hero"><h1 class="title">Ship faster with us today</h1><p class="lead" style="font-size:18px">A tagline long enough to count as body copy for sure.</p><a class="btn" href="#">Start</a><img src="https://x.com/a.png"></section>
+    <section><h2 class="text-3xl md:text-5xl font-extrabold">Tailwind heading here</h2><p class="text-[17px]">Another paragraph with plenty of words in it.</p><button class="font-medium text-sm">Go</button></section>
+  </body></html>`;
+  const cAst = parseHtml(cascHtml, "compact");
+  const hs = cAst.sections[0]?.text_styles;
+  check("text_styles: class+descendant cascade, @media min-width → desktop, base → mobile, family inherited", hs?.heading?.font_size === 56 && hs?.heading?.mobile_font_size === 28 && hs?.heading?.font_weight === "600" && hs?.heading?.font_family === "Lexend", hs);
+  check("text_styles: inline style beats class, line-height kept", hs?.body?.font_size === 18 && hs?.body?.line_height === "1.6", hs?.body);
+  check("text_styles: cta from a.btn", hs?.cta?.font_size === 15 && hs?.cta?.font_weight === "bold", hs?.cta);
+  const ts = cAst.sections[1]?.text_styles;
+  check("text_styles: Tailwind text-3xl md:text-5xl font-extrabold → 48 desktop / 30 mobile / 800", ts?.heading?.font_size === 48 && ts?.heading?.mobile_font_size === 30 && ts?.heading?.font_weight === "800", ts?.heading);
+  const vAst = parseHtml(`<html><head><style>@layer base{:root{--fs-h:2.5rem;--fw:650}} @media (min-width: 40em){ h2 { font-weight: var(--fw) } } h2{font-size:var(--fs-h);font-family:var(--nope, "Mulish"), sans-serif}</style></head><body><section><h2>Variables resolve here</h2><p>Some paragraph text long enough to be a real body copy.</p></section></body></html>`);
+  check("text_styles: var() resolved from :root inside @layer (+ fallback), em-based @media → desktop", vAst.typography?.h2?.font_size === 40 && vAst.typography?.h2?.font_family === "Mulish" && vAst.typography?.h2?.font_weight === "650", vAst.typography);
+  const fl = parseHtml(`<html><head><style>h1{font-size:clamp(2rem, 1rem + 4vw, 4.5rem)} h3{font-size:calc(1.375rem + 1.5vw)} p{font-size:alert(1)}</style></head><body><section><h1>Fluid heading here</h1><p>Paragraph text long enough to count as body copy.</p></section></body></html>`).typography;
+  check("text_styles: fluid clamp()/calc() evaluated per canvas (desktop 1280 / mobile 420), junk rejected", fl?.h1?.font_size === 67 && fl?.h1?.mobile_font_size === 33 && fl?.h3?.font_size === 41 && fl?.h3?.mobile_font_size === 28 && fl?.p === undefined, fl);
+  check("text_styles: Tailwind arbitrary text-[17px] + font-medium text-sm", ts?.body?.font_size === 17 && ts?.cta?.font_size === 14 && ts?.cta?.font_weight === "500", ts);
+}
+
+console.log("== fonts: review hardening (cascade order, media, rem root, UA, Tailwind sm, linear scans) ==");
+{
+  // @font-face: base64 data: src is skipped but its url() fallback kept; commented-out faces ignored.
+  const ff = extractFontFaces([{ css: "/* @font-face{font-family:Dead;src:url(https://x.com/d.woff2)} */ @font-face{font-family:Live;src:url(data:font/woff2;base64,AAAA) format('woff2'), url(https://x.com/l.woff) format('woff')}" }]);
+  check("fonts: commented-out face ignored; data: src skipped, ; inside data URI doesn't drop the fallback", ff.length === 1 && ff[0].family === "Live" && ff[0].url === "https://x.com/l.woff", ff);
+  const dedup = toFontGroups([{ family: "F", weight: 200, style: "normal", url: "https://x.com/el.woff2" }, { family: "F", weight: 300, style: "normal", url: "https://x.com/l.woff2" }]);
+  check("fonts: 200+300 both → 'light' keeps the real 300 file only (no colliding @font-face)", dedup[0].fonts.length === 1 && dedup[0].fonts[0].url.endsWith("/l.woff2"), dedup);
+
+  // Cascade order = document order: <link> (owner) sheets in place, imports before importer, inline after.
+  const ordHtml = `<html><head><link rel="stylesheet" href="/main.css"><style>h1{font-size:50px}</style></head><body><section><h1>Order test heading</h1><p>Body paragraph long enough to count as real copy here.</p></section></body></html>`;
+  const ordAst = parseHtml(ordHtml, "compact", { baseUrl: "https://s.com/", extraCss: [
+    { owner: "https://s.com/main.css", css: "h1{font-size:20px}", base: "https://s.com/boot.css" },
+    { owner: "https://s.com/main.css", css: "h1{font-size:30px}", base: "https://s.com/main.css" },
+  ] });
+  check("cascade: imported → importer → later inline <style> wins (document order)", ordAst.typography?.h1?.font_size === 50, ordAst.typography?.h1);
+  const ordAst2 = parseHtml(ordHtml.replace("<style>h1{font-size:50px}</style>", ""), "compact", { baseUrl: "https://s.com/", extraCss: [
+    { owner: "https://s.com/main.css", css: "h1{font-size:20px}", base: "https://s.com/boot.css" },
+    { owner: "https://s.com/main.css", css: "h1{font-size:30px}", base: "https://s.com/main.css" },
+  ] });
+  check("cascade: importer's own rule beats its @import", ordAst2.typography?.h1?.font_size === 30, ordAst2.typography?.h1);
+  const tags = stylesheetTags(`<link data-href="/no.css" rel="icon"><link rel=stylesheet href=/a.css><link rel="preload" as="style" href="/b.css"><link rel="stylesheet" media="print" href="/p.css"><style>x{}</style>`);
+  check("link parsing: unquoted rel/href, preload-as-style kept; data-href / print-only / non-css dropped; <style> in order", JSON.stringify(tags.map((t: any) => t.href ?? `style${t.index}`)) === '["/a.css","/b.css","style0"]', tags);
+
+  // Media: max-width 991 holds at the 420 mobile canvas; 375 holds at neither; ranges map by viewport.
+  const med = parseHtml(`<html><head><style>h2{font-size:40px} @media (max-width: 991.98px){h2{font-size:28px}} @media (max-width:375px){h2{font-size:10px}} @media (prefers-color-scheme: dark){h2{font-size:99px}}</style></head><body><section><h2>Media heading</h2><p>Paragraph copy long enough to be counted as body text here.</p></section></body></html>`).typography;
+  check("media: max-width 991 → mobile, max-width 375 / prefers-* ignored", med?.h2?.font_size === 40 && med?.h2?.mobile_font_size === 28, med?.h2);
+  // rem against the root size (html{font-size:62.5%} → 1rem = 10px).
+  const remT = parseHtml(`<html><head><style>html{font-size:62.5%} body{font-size:1.6rem} h1{font-size:4.8rem}</style></head><body><section><h1>Rem heading</h1><p>Paragraph copy long enough to be counted as body text here.</p></section></body></html>`);
+  check("rem: resolved against html{font-size:62.5%} (1.6rem = 16px, 4.8rem = 48px)", remT.typography?.body?.font_size === 16 && remT.typography?.h1?.font_size === 48, remT.typography);
+  // UA heading defaults: an unstyled h1 is 2em bold, not the body's 16px.
+  const ua = parseHtml(`<html><head><style>body{font-size:16px;font-family:Inter}</style></head><body><section><h1>Plain heading</h1><p>Paragraph copy long enough to be counted as body text here.</p></section></body></html>`).sections[0]?.text_styles;
+  check("UA defaults: unstyled h1 → 32px bold (family still inherited)", ua?.heading?.font_size === 32 && ua?.heading?.font_weight === "bold" && ua?.heading?.font_family === "Inter", ua?.heading);
+  // Tailwind: sm: applies at desktop; overrides applied by breakpoint rank, not class order.
+  const twT = parseHtml(`<html><body><section><h2 class="text-2xl sm:text-4xl">Small bp</h2><p class="lg:text-5xl md:text-4xl text-base">Order paragraph long enough to count as body copy.</p></section></body></html>`).sections[0]?.text_styles;
+  check("tailwind: sm:text-4xl → desktop 36 (mobile 24); lg beats md regardless of class order", twT?.heading?.font_size === 36 && twT?.heading?.mobile_font_size === 24 && twT?.body?.font_size === 48 && twT?.body?.mobile_font_size === 16, twT);
+
+  check("icon fonts: dashicons / icomoon never become fontGroups", extractFontFaces([{ css: "@font-face{font-family:dashicons;src:url(https://x.com/d.woff2)} @font-face{font-family:icomoon;src:url(https://x.com/i.woff2)}" }]).length === 0, null);
+  const lhT = parseHtml(`<html><head><style>h1{line-height:calc(2.5 / 2.25)}</style></head><body><section><h1>Line height heading</h1><p>Paragraph copy long enough to be counted as body text here.</p></section></body></html>`).typography;
+  check("line-height: unitless calc() evaluated to a number", lhT?.h1?.line_height === "1.11", lhT?.h1);
+  // Linear scans: hostile inputs that were quadratic must finish fast.
+  let t0 = Date.now();
+  parseCssRules("/* a ".repeat(200_000));
+  check("perf: 1MB of unterminated comments parses fast", Date.now() - t0 < 500, Date.now() - t0);
+  t0 = Date.now();
+  resolveCssVars([{ selector: ":root", decls: "--a:1px", media: "all" }, { selector: "h1", decls: "font-size:var(--x," + "a ".repeat(9_000), media: "all" }]);
+  check("perf: unclosed var() fallback resolves fast", Date.now() - t0 < 500, Date.now() - t0);
+
+  // SSRF: stylesheet hrefs chosen by the crawled page never reach private hosts.
+  const priv = await fetchStylesheets(`<link rel="stylesheet" href="http://169.254.169.254/latest/meta-data"><link rel="stylesheet" href="http://127.0.0.1:1/a.css"><style>@import url(http://10.0.0.1/x.css);</style>`, "https://example.com/");
+  check("ssrf: private/link-local stylesheet + @import targets are not fetched", priv.length === 0, priv);
+}
+
+console.log("== settings: width_section defaulted (build host crashes without it) ==");
+{
+  const ex: any = landingDomain.expand({ page: [], popup: [], settings: { title: "t" } });
+  check("settings: missing width_section → 960/420 on expand", ex.settings.width_section?.desktop === 960 && ex.settings.width_section?.mobile === 420, ex.settings.width_section);
+  const ex2: any = landingDomain.expand({ page: [], popup: [], settings: { width_section: { desktop: "1200" } } });
+  check("settings: partial width_section keeps the given side, fills the other", ex2.settings.width_section.desktop === 1200 && ex2.settings.width_section.mobile === 420, ex2.settings.width_section);
+}
+
+console.log("== fonts: org Font Group sync against a mock builder (create / merge / fill-empty / hotlink) ==");
+{
+  const { createServer } = await import("node:http");
+  // In-memory org font groups, mirroring PageFontController's contracts.
+  const db: Record<string, { id: number; name: string; fonts: any[] }> = {
+    Taken: { id: 1, name: "Taken", fonts: [{ name: "t.woff2", url: "https://statics.pancake.vn/own.woff2", font_weight: "normal", font_style: "normal" }] },
+    Empty: { id: 2, name: "Empty", fonts: [] },
+  };
+  const seenOrg: string[] = [];
+  let nextId = 10;
+  const srv = createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      seenOrg.push(String(req.headers["x-org-id"]));
+      const send = (code: number, j: unknown) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(j)); };
+      const u = new URL(req.url!, "http://x");
+      if (u.pathname.endsWith("/fonts/create_or_update_font_group")) {
+        const name = JSON.parse(body).attrs.name;
+        if (db[name]) return send(422, { success: false, fallback: "entity_existed" });
+        db[name] = { id: nextId++, name, fonts: [] };
+        return send(200, { success: true, font_group: { id: db[name].id, name } });
+      }
+      if (u.pathname.endsWith("/fonts/update_font_group_data")) {
+        const j = JSON.parse(body);
+        const g = Object.values(db).find((x) => x.id === j.id)!;
+        g.fonts = j.list_fonts; // REPLACES, like the backend
+        return send(200, { success: true });
+      }
+      if (u.pathname.endsWith("/fonts")) {
+        const names = u.searchParams.getAll("names[]");
+        return send(200, { success: true, data: { font_groups: { data: Object.values(db).filter((g) => names.includes(g.name)) } } });
+      }
+      send(404, {});
+    });
+  });
+  await new Promise<void>((r) => srv.listen(0, "127.0.0.1", () => r()));
+  const port = (srv.address() as any).port;
+  const cfg: any = { base: `http://127.0.0.1:${port}`, builderBase: `http://127.0.0.1:${port}`, jwt: "x" };
+  const f = (w: string, url = `https://statics.pancake.vn/${w}.woff2`) => ({ name: `${w}.woff2`, url, font_weight: w, font_style: "normal" });
+  const r = await registerFontGroups(cfg, "p1", { settings: { fontGroups: [
+    { name: "Fresh", fonts: [f("normal"), f("bold")] },
+    { name: "Taken", fonts: [f("normal", "https://statics.pancake.vn/mine.woff2"), f("bold")] },
+    { name: "Empty", fonts: [f("medium")] },
+    { name: "Ext", fonts: [f("normal", "https://site.com/a.woff2")] },
+    { id: 7, name: "FromOrg", fonts: [f("normal")] },
+  ] } }, 42);
+  srv.close();
+  check("fonts sync: new family → registered with all its files", r?.registered.includes("Fresh") === true && db.Fresh.fonts.length === 2, { r, fresh: db.Fresh });
+  check("fonts sync: org's same-name group → MERGED: its own file kept, only the missing weight appended", r?.merged.join() === "Taken" && db.Taken.fonts.length === 2 && db.Taken.fonts[0].url.endsWith("/own.woff2") && db.Taken.fonts[1].font_weight === "bold", db.Taken);
+  check("fonts sync: empty group (half-finished earlier sync) gets filled", r?.registered.includes("Empty") === true && db.Empty.fonts.length === 1, db.Empty);
+  check("fonts sync: re-host failed → still registered (editor keeps it) and flagged hotlinked", r?.registered.includes("Ext") === true && r?.hotlinked.join() === "Ext", r);
+  check("fonts sync: group that came from the org (has id) → existing, no call", r?.existing.join() === "FromOrg", r);
+  check("fonts sync: every call carries x-org-id (the route reads the org from it)", seenOrg.length > 0 && seenOrg.every((o) => o === "42"), seenOrg);
+  const again = await registerFontGroups(cfg, "p1", { settings: { fontGroups: [{ name: "Fresh", fonts: [f("normal"), f("bold")] }] } }, 42);
+  check("fonts sync: repeat save is memoized (no backend round-trip, server already closed)", again?.existing.join() === "Fresh", again);
+  const down = await registerFontGroups({ ...cfg, builderBase: "http://127.0.0.1:9" }, "p1", { settings: { fontGroups: [{ name: "Z", fonts: [f("normal")] }] } }, 42);
+  check("fonts sync: unreachable builder → failed, never throws", down?.failed.join() === "Z", down);
+  check("fonts sync: no fontGroups → nothing", (await registerFontGroups(cfg, "p1", { settings: {} }, 1)) === undefined, null);
+
+  const noExt = extractFontFaces([{ css: "@font-face{font-family:Kit;src:url(https://cdn.x.com/f?id=7) format('woff2')}" }]);
+  const kit = toFontGroups(noExt)[0]?.fonts[0];
+  check("fonts: extension-less URL (format() hint) → #wc.woff2 fragment + named .woff2, and is a re-host candidate", kit?.url === "https://cdn.x.com/f?id=7#wc.woff2" && kit?.name === "f.woff2" && isRehostableImageUrl(kit.url), kit);
+}
 
 console.log("== ingest: Tailwind-config design system (Google Stitch / Tailwind-CDN) ==");
 // Stitch puts the WHOLE design system in tailwind.config (NOT in CSS) and wraps
