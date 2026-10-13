@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.8] - 2026-10-13
+
+### Fixed
+- Endpoint OAuth authorize nay chấp nhận redirect URI `http://localhost`/`127.0.0.1`/`[::1]` ở bất kỳ port nào miễn là scheme, host, path, và query khớp với redirect URI đã đăng ký, khắc phục lỗi đăng nhập cho các client native như Claude Code đăng ký `http://localhost/callback` nhưng redirect về một port ngẫu nhiên khác mỗi lần.
+
 ## [1.5.7] - 2026-10-13
 
 ### Changed

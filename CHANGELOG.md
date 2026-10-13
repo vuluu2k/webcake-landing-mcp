@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.8] - 2026-10-13
+
+### Fixed
+- The OAuth authorize endpoint now accepts `http://localhost`/`127.0.0.1`/`[::1]` redirect URIs on any port as long as the scheme, host, path, and query match a registered redirect URI, fixing login failures for native clients like Claude Code that register `http://localhost/callback` but redirect back to a different ephemeral port each session.
+
 ## [1.5.7] - 2026-10-13
 
 ### Changed
