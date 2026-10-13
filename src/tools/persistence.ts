@@ -13,6 +13,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Domain } from "../core/domain.js";
 import { text, warningsField, autoFixedField } from "../mcp/response.js";
+import { objectOrJson, objectsOrJson } from "../mcp/params.js";
 import { readConfig, configFromHeaders } from "../persistence/config.js";
 import {
   buildRequestRedacted,
@@ -227,8 +228,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     "create_page",
     "Persists a page source to the configured Webcake backend: creates a NEW page, saves the source, then AUTO-PUBLISHES it (builds the rendered app on the build host + publishes via the editor's publish_html route) so the preview renders immediately — set publish:false to skip, and note the no-domain preview link still expires ~10 minutes after each publish (publish_page with custom_domain gives a permanent URL). A failed auto-publish never fails the create (result.publish says how to retry). Auto-fixes the deterministically-resolvable layout defects first (off-canvas boxes pulled on-canvas; elements below wrapped text pushed down to clear the spill; containers grown to fit) and reports them in auto_fixed — so the saved tree is corrected without a patch round-trip. Then validates. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. Organization resolution on the real run (dry_run=false): (1) explicit organization_id wins; pass the string 'personal' to save without any org. (2) WEBCAKE_ORG_ID env / x-webcake-org-id header wins. (3) Otherwise list_organizations is called: 0 orgs or lookup fails → personal (no org); exactly 1 org → used automatically (result includes organization_auto_selected:true); 2+ orgs → returns ok:false with the org list and asks the caller to re-call with organization_id. Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
-      source: z
-        .any()
+      source: objectOrJson()
         .optional()
         .describe("Page source { page, popup, settings, options, cartConfigs } (object or JSON string). Required unless draft_id is given. Author elements SPARSE — only id, type, responsive.<bp>.styles for BOTH breakpoints, specials, and real events; OMIT properties/runtime/empty events+children/per-breakpoint config — the server hydrates them from factory defaults (a full node also works)."),
       draft_id: z
@@ -598,8 +598,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     "Overwrites an EXISTING page's source with an edited tree (source-only; re-render in the editor for preview/publish). Validates first. DEFAULTS to dry_run=true (validates, caches the source as draft_id, previews the request, token masked); dry_run=false to actually save. Accepts draft_id from a previous call (dry_run, or a timed-out/failed update) — re-runs from the cached source without re-sending the full JSON. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       page_id: z.string().optional().describe("The page id to update (must be owned by the account). Required unless draft_id is given (the page_id is stored in the draft)."),
-      source: z
-        .any()
+      source: objectOrJson()
         .optional()
         .describe("The edited page source { page, popup, settings, options, cartConfigs } (object or JSON string). Required unless draft_id is given. The compacted tree from get_page can be edited and sent back AS-IS — sparse nodes are re-hydrated from factory defaults (a full tree also works)."),
       draft_id: z
@@ -789,8 +788,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     "Appends one or more SECTIONS to an existing page WITHOUT re-sending the whole source — the incremental-build path that avoids large create_page payloads. The backend appends section(s) to the END of `page` server-side and rejects duplicate element ids, so the caller sends only the new section(s) (no whole-source get+put). DEFAULTS to dry_run=true (validates the section(s) + previews the request; caches the payload as draft_id so you never have to re-send sections between dry-run → real call); dry_run=false to actually append. On validation failure also returns a draft_id — call patch_page({ draft_id, patches, dry_run:false }) to fix ONLY the bad elements without rebuilding the batch. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {
       page_id: z.string().describe("The page id to append to (from create_page or list_pages; must be owned by the account)."),
-      sections: z
-        .any()
+      sections: objectsOrJson()
         .optional()
         .describe(
           "One section node, or an array of section nodes, to append to the END of `page` (object/array or JSON string). Each is a normal section element { id, type:'section', responsive, children, … } with a UNIQUE id; they stack vertically after the existing sections. Author SPARSE nodes — omit properties/runtime/empty events+children/per-breakpoint config; the server hydrates them from factory defaults. Required unless draft_id is supplied."
@@ -1089,8 +1087,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     {
       page_id: z.string().optional().describe("Edit a LIVE page by id (from create_page, list_pages, or find_pages; must be owned by the account). Provide page_id OR draft_id. For a sections or update draft_id you may also pass page_id here to override the stored page target."),
       draft_id: z.string().optional().describe("Commit or fix a CACHED source: from create_page (failed/timed-out → new page created once valid), add_section (dry_run or failure → sections appended), or update_page/live-page patch (timed-out/failed → updatePageSource retried). The originating tool's error/dry_run response returns draft_id. Provide page_id OR draft_id. Empty/omitted patches = commit the cached draft as-is (the RETRY PATH after a timeout)."),
-      patches: z
-        .any()
+      patches: objectsOrJson()
         .optional()
         .describe(
           "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type; update MERGES — it cannot DELETE an existing/stray key, so 'must NOT have additional properties' errors need op:'replace' with a clean node); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container. `element` may be a SPARSE node (id/type/styles/specials/events only) — the server hydrates omitted boilerplate from factory defaults. OMIT (or pass empty array) when draft_id is given and you just want to commit/retry the cached draft as-is."

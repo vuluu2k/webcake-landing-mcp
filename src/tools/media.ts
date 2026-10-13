@@ -440,7 +440,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         .optional()
         .describe("Default FALSE — the call actually reads/downloads and uploads, returning hosted URLs. Set true to only preview the endpoint and entries that WOULD be processed, without any network or filesystem activity (local paths: reports whether the file exists and its size)."),
     },
-    { title: "Upload Images to Webcake", readOnlyHint: false, openWorldHint: true },
+    { title: "Upload Images to Webcake", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     async ({ urls, in_folder, organization_id, dry_run }, extra) => {
       const isDry = dry_run === true;
       const headers = extra?.requestInfo?.headers;
