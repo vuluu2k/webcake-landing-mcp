@@ -14,7 +14,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 5) New element ------------------------------------------------------------
   server.tool(
     "new_element",
-    "Returns a default element node for a type in the SPARSE authoring shape (fresh id, both breakpoints' seeded styles, seeded specials). Emit elements exactly like this — fill in specials + top/left coordinates; OMIT properties/runtime/empty events/config (the server hydrates them from factory defaults on validate/persist).",
+    "Returns a default element node for a type in the sparse authoring shape: a fresh id, seeded styles for both breakpoints, and seeded specials. properties, runtime, empty events and per-breakpoint config are omitted because the server fills them from factory defaults on validate and save.",
     {
       type: z.string().describe("Element type to create."),
       name: z.string().optional().describe("Optional properties.name override (layer label)."),
@@ -33,7 +33,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 6) New page skeleton ------------------------------------------------------
   server.tool(
     "new_page_skeleton",
-    "Returns an empty but complete top-level page source { page:[], popup:[], settings:{...defaults}, options:{...}, cartConfigs:{} } matching the real editor shape. Pass desktopWidth/mobileWidth to set the canvas width (settings.width_section) up front — pick desktop 1200 for wide/multi-column/editorial pages or when cloning a reference wider than 960 (e.g. Google Stitch ~1280), else 960; then place every element's coords in that width's space.",
+    "Returns an empty, complete top-level page source { page:[], popup:[], settings, options, cartConfigs } in the Webcake editor's shape. desktopWidth (960 or 1200) and mobileWidth (420 or 360) set settings.width_section, the canvas width that all element coordinates are measured in.",
     {
       mobileOnly: z.boolean().optional().describe("true if the page renders mobile-only."),
       desktopWidth: z.union([z.literal(960), z.literal(1200)]).optional().describe("Desktop canvas width (settings.width_section.desktop). 960 (default, simple/narrow) or 1200 (wide/multi-column/editorial, or cloning a >960 reference)."),
@@ -55,7 +55,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 7) Validate page ----------------------------------------------------------
   server.tool(
     "validate_page",
-    "Validates a page source against the schema + semantic rules (unique ids, dangling event targets, children only on containers, missing field_name, top-level types) plus form-data bindings (duplicate field_name within one form, dangling option-event promoId / connectedSurvey / connectedForm / set_field_value targets). FIRST auto-fixes the layout defects that can be resolved deterministically (off-canvas boxes pulled on-canvas; elements below wrapped text pushed down to clear the spill — the same corrections create_page/add_section apply on save) and reports them in auto_fixed. Then returns errors (blocking — fix before persisting) and warnings (visible design defects — fix these too and re-validate to an empty list; only a demonstrably false positive may remain).",
+    "Validates a page source against the JSON schema and semantic rules: unique ids, dangling event targets, children only on container types, missing field_name, top-level types, and form-data bindings (duplicate field_name within one form; dangling promoId / connectedSurvey / connectedForm / set_field_value targets). Before validating it applies deterministic layout corrections (off-canvas boxes moved on-canvas, elements below wrapped text moved down) and lists them in auto_fixed. Returns errors (structural problems that block saving) and warnings (visible layout defects such as overlapping text, off-canvas bounds, or empty bands).",
     {
       page: objectOrJson()
         .describe("The page source object { page:[...], settings:{} } OR a JSON string of it."),
@@ -76,7 +76,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 7b) Layout coordinates -----------------------------------------------------
   server.tool(
     "layout",
-    "Computes EXACT on-canvas coordinates (top/left/width/height) for a group of elements, for BOTH breakpoints, following the guide's layout math — so you NEVER hand-compute `left`/`top` (the #1 source of off-center defects) or write a script to do it. Drop the returned boxes straight into each element's responsive.<bp>.styles (results are in the same order you passed items). Four modes: 'center' (one box centered on the canvas); 'row' (N boxes in a horizontally-centered row on desktop that STACK into a single mobile column — feature cards / stats / logo strip); 'grid' (N uniform cells in `cols` columns, block centered; stacks on mobile); 'stack' (a vertical list down the shared content column on both breakpoints). Honours the page-margin axis (content column 80..880 desktop / 20..400 mobile by default). Pure math — no env, no network. `notes` flags off-canvas / over-wide inputs.",
+    "Computes on-canvas coordinates (top/left/width/height) for a group of elements on both breakpoints. Modes: 'center' (one box centered on the canvas), 'row' (N boxes in a centered horizontal row on desktop, stacked into one column on mobile), 'grid' (N uniform cells in `cols` columns, stacked on mobile), 'stack' (a vertical list down the content column). Respects the page margins (content column 80–880 on desktop and 20–400 on mobile by default). Returns one box per item in input order, plus `notes` for off-canvas or over-wide inputs. Pure computation: no credentials, no network.",
     {
       mode: z.enum(["center", "row", "grid", "stack"]).describe("Layout pattern. center=one box; row=horizontal row (stacks on mobile); grid=cols×rows (stacks on mobile); stack=vertical list."),
       items: z

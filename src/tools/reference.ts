@@ -44,13 +44,13 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 3) Get element ------------------------------------------------------------
   server.tool(
     "get_element",
-    "Returns detailed usage for one element type — or for many in a single call (BATCH MODE): summary, when to use it, key `specials` fields, a SPARSE skeleton node (the exact shape to emit — the server hydrates omitted boilerplate), and (for common types) a filled example. Pass `types: [...]` to fetch a whole section's worth of element types at once (e.g. ['section','text-block','image-block','button']) — returns { elements: { [type]: details } } and saves a round-trip per type. `type` (single) returns the doc directly for backward compatibility.",
+    "Returns usage details for one element type, or for several via `types: [...]`: a summary, when it applies, key `specials` fields, a sparse skeleton node (the server fills omitted boilerplate), and for common types a filled example. `types` returns { elements: { [type]: details } }; `type` returns a single doc.",
     {
-      type: z.string().optional().describe("Single element type — backward-compat. Prefer `types` when fetching more than one."),
+      type: z.string().optional().describe("Single element type."),
       types: z
         .array(z.string())
         .optional()
-        .describe("Multiple element types to fetch in one call (recommended for a section that needs several types, e.g. ['section','text-block','button','form','input'])."),
+        .describe("Several element types fetched in one call, e.g. ['section','text-block','button','form','input']."),
     },
     { title: "Get Element Details", readOnlyHint: true, openWorldHint: false },
     async ({ type, types }) => {

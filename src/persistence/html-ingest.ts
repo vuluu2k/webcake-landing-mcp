@@ -210,14 +210,29 @@ export async function fetchHtml(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": opts.userAgent ?? "Mozilla/5.0 (compatible; webcake-landing-mcp/ingest_url)",
-        Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
-      },
-      signal: ctrl.signal,
-      redirect: "follow",
-    });
+    // Same SSRF policy as fetchCss: on the remote transport the URL is caller-chosen,
+    // so no private/loopback/link-local hosts, and redirects are followed MANUALLY so
+    // every hop is re-checked (RENDER_ALLOW_PRIVATE=1 opts out, e.g. a local dev page).
+    let target = url;
+    let res: Response | undefined;
+    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+      const allowed = isAllowedScreenshotUrl(target);
+      if (!allowed.ok) return { ok: false, error: `URL not allowed: ${allowed.error ?? "private or non-public host"}` };
+      res = await fetch(target, {
+        headers: {
+          "User-Agent": opts.userAgent ?? "Mozilla/5.0 (compatible; webcake-landing-mcp/ingest_url)",
+          Accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
+        },
+        signal: ctrl.signal,
+        redirect: "manual",
+      });
+      if (res.status < 300 || res.status >= 400) break;
+      const loc = res.headers.get("location");
+      if (!loc) return { ok: false, status: res.status, error: `Redirect ${res.status} without a Location header` };
+      target = new URL(loc, target).href;
+      res = undefined;
+    }
+    if (!res) return { ok: false, error: `Too many redirects (> ${MAX_REDIRECTS})` };
     if (!res.ok) return { ok: false, status: res.status, error: `Server returned ${res.status}` };
     const ctype = res.headers.get("content-type") ?? "";
     if (!/html|xml|text/i.test(ctype)) {

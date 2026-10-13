@@ -226,20 +226,20 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 9) Create page (persist) --------------------------------------------------
   server.tool(
     "create_page",
-    "Persists a page source to the configured Webcake backend: creates a NEW page, saves the source, then AUTO-PUBLISHES it (builds the rendered app on the build host + publishes via the editor's publish_html route) so the preview renders immediately — set publish:false to skip, and note the no-domain preview link still expires ~10 minutes after each publish (publish_page with custom_domain gives a permanent URL). A failed auto-publish never fails the create (result.publish says how to retry). Auto-fixes the deterministically-resolvable layout defects first (off-canvas boxes pulled on-canvas; elements below wrapped text pushed down to clear the spill; containers grown to fit) and reports them in auto_fixed — so the saved tree is corrected without a patch round-trip. Then validates. DEFAULTS to dry_run=true (validates, caches the source as draft_id, returns the HTTP request it WOULD send, token masked); dry_run=false to actually create. Accepts draft_id from a previous call (validation failure, dry_run, or a timed-out create) — re-runs from the cached source without re-sending the full JSON. Organization resolution on the real run (dry_run=false): (1) explicit organization_id wins; pass the string 'personal' to save without any org. (2) WEBCAKE_ORG_ID env / x-webcake-org-id header wins. (3) Otherwise list_organizations is called: 0 orgs or lookup fails → personal (no org); exactly 1 org → used automatically (result includes organization_auto_selected:true); 2+ orgs → returns ok:false with the org list and asks the caller to re-call with organization_id. Real writes need WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Creates a new page in the user's Webcake account from a page source { page, popup, settings, options, cartConfigs }, saves it, and then publishes it (builds the rendered app on the Webcake build host and publishes it through the editor's publish route) so its preview renders; publish:false skips publishing, and a failed publish does not fail the create (result.publish reports the outcome). Before validating it applies deterministic layout corrections (off-canvas boxes, elements below wrapped text, containers grown to fit) and lists them in auto_fixed. External images and self-hosted font files in the source are re-hosted on Webcake's CDN during the save. dry_run defaults to true: it validates, caches the source under a draft_id, and returns the request it would send with the token masked; dry_run:false performs the create. A draft_id (from a validation failure, dry run, or timed-out create) re-runs from the cached source. Organization: explicit organization_id ('personal' = no organization), then WEBCAKE_ORG_ID / x-webcake-org-id, then automatic — no organizations → personal, exactly one → selected (organization_auto_selected:true), two or more → ok:false with the organization list. A page without a custom domain has a preview link that renders for about 10 minutes after each publish. Requires Webcake credentials.",
     {
       source: objectOrJson()
         .optional()
-        .describe("Page source { page, popup, settings, options, cartConfigs } (object or JSON string). Required unless draft_id is given. Author elements SPARSE — only id, type, responsive.<bp>.styles for BOTH breakpoints, specials, and real events; OMIT properties/runtime/empty events+children/per-breakpoint config — the server hydrates them from factory defaults (a full node also works)."),
+        .describe("Page source { page, popup, settings, options, cartConfigs } (object or JSON string). Required unless draft_id is given. Elements may be sparse — id, type, responsive.<bp>.styles for both breakpoints, specials and real events; omitted properties/runtime/empty events and children/per-breakpoint config are filled from factory defaults (full nodes also work)."),
       draft_id: z
         .string()
         .optional()
-        .describe("A draft_id from a previous create_page call (validation failure, dry_run=true, or a timed-out/failed create). Loads the cached source — no need to re-send the full JSON. Use for dry-run → real call transitions, fix-after-error rounds, and retrying after a timeout."),
+        .describe("A draft_id from a previous create_page call (validation failure, dry_run=true, or a timed-out/failed create). Loads the cached source, so the full JSON is not re-sent; covers the dry-run → real call step, fixes after errors, and retries after a timeout."),
       name: z.string().optional().describe("Page name (default 'AI Page')."),
       organization_id: z
         .union([z.string(), z.number()])
         .optional()
-        .describe("Organization to create the page in (id from list_organizations). Pass the string 'personal' to explicitly save without any organization (skips auto-resolution). Omit to fall back to WEBCAKE_ORG_ID env; if that is also unset, the server calls list_organizations: 1 org → auto-selected; 2+ orgs → returns the list and asks you to pick; 0 orgs → personal."),
+        .describe("Organization to create the page in (an organization id). The string 'personal' saves without any organization and skips auto-resolution. When omitted: WEBCAKE_ORG_ID / x-webcake-org-id, else automatic — one organization is selected, two or more return the list (ok:false), none means personal."),
       dry_run: z
         .boolean()
         .optional()
@@ -521,7 +521,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // (domain search is unavailable in the fallback — list_pages omits domains).
   server.tool(
     "find_pages",
-    "Searches the account's pages by name, domain, and/or page id so you can locate the page to edit, then pass its id to get_page → update_page/add_section. Filters are AND-combined (e.g. name='sale' + domain='shop.com'). Each result includes id, name, organization_id, custom_domain, default_domain, updated_at. With no filters it returns the most-recent pages (like list_pages). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Searches the account's pages by name, domain and/or page id. Filters are AND-combined; name and domain are case-insensitive substrings, and domain matches custom_domain or default_domain. Each result includes id, name, organization_id, custom_domain, default_domain and updated_at. With no filters it returns the most recently updated pages. Requires Webcake credentials.",
     {
       name: z.string().optional().describe("Case-insensitive substring of the page name to match."),
       domain: z
@@ -562,7 +562,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 11) Get page (read source) ------------------------------------------------
   server.tool(
     "get_page",
-    "Fetches an existing page's decoded source tree { page, popup, settings, options, cartConfigs } plus name and organization_id. By DEFAULT the source is COMPACTED: boilerplate every element shares (properties/runtime/empty events+children/per-breakpoint config + factory-default style keys) is stripped, leaving the sparse authoring shape — edit it and send it back as-is; update_page/patch_page re-hydrate from factory defaults. Pass compact:false for the raw stored tree. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Fetches an existing page's source tree { page, popup, settings, options, cartConfigs } with its name, organization_id and source_version. By default the tree is compacted: boilerplate shared by every element (properties, runtime, empty events/children, per-breakpoint config and factory-default style keys) is stripped, giving the same sparse shape the save tools accept and re-hydrate. compact:false returns the raw stored tree. Requires Webcake credentials.",
     {
       page_id: z.string().describe("The page id (from list_pages or a URL)."),
       compact: z
@@ -595,7 +595,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 12) Update page (edit existing) -------------------------------------------
   server.tool(
     "update_page",
-    "Overwrites an EXISTING page's source with an edited tree (source-only; re-render in the editor for preview/publish). Validates first. DEFAULTS to dry_run=true (validates, caches the source as draft_id, previews the request, token masked); dry_run=false to actually save. Accepts draft_id from a previous call (dry_run, or a timed-out/failed update) — re-runs from the cached source without re-sending the full JSON. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Replaces an existing page's stored source with an edited tree (source only; the published build is not refreshed). Validates first. Concurrency check: the save is refused with page_changed_externally when the page was edited elsewhere since it was last read (base_version, or the version the server recorded), or with unverified_overwrite when an unverified save would delete live element ids; force:true overrides. dry_run defaults to true: it validates, caches the source under a draft_id and returns the masked request; dry_run:false saves. A draft_id from a dry run or a failed/timed-out update re-runs from the cached source. Requires Webcake credentials.",
     {
       page_id: z.string().optional().describe("The page id to update (must be owned by the account). Required unless draft_id is given (the page_id is stored in the draft)."),
       source: objectOrJson()
@@ -604,15 +604,15 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       draft_id: z
         .string()
         .optional()
-        .describe("A draft_id from a previous update_page call (dry_run=true or a timed-out/failed update). Loads the cached source — no need to re-send the full JSON. Use for dry-run → real call transitions and retrying after a timeout."),
+        .describe("A draft_id from a previous update_page call (dry_run=true or a timed-out/failed update). Loads the cached source, so the full JSON is not re-sent; covers the dry-run → real call step and retries after a timeout."),
       base_version: z
         .string()
         .optional()
-        .describe("The source_version get_page returned for this page. When it no longer matches the live page the save is REJECTED instead of reverting whatever was edited in the Webcake editor meanwhile. Optional — omit it and the server uses the version it recorded on your last read/write of this page."),
+        .describe("The page's source_version as returned by get_page. When it no longer matches the live page, the save is rejected rather than reverting edits made in the Webcake editor meanwhile. Optional — when omitted, the server uses the version it recorded at this session's last read or write of the page."),
       force: z
         .boolean()
         .optional()
-        .describe("Default false. true = save even when the page changed outside this session, discarding those changes. Only pass it after the user has said to."),
+        .describe("Default false. true saves even when the page changed outside this session, discarding those outside changes."),
       dry_run: z.boolean().optional().describe("Default TRUE — validate, cache the source as draft_id, and preview without sending. Set false to actually save."),
     },
     { title: "Update Webcake Page (Overwrite)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -785,19 +785,19 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
   server.tool(
     "add_section",
-    "Appends one or more SECTIONS to an existing page WITHOUT re-sending the whole source — the incremental-build path that avoids large create_page payloads. The backend appends section(s) to the END of `page` server-side and rejects duplicate element ids, so the caller sends only the new section(s) (no whole-source get+put). DEFAULTS to dry_run=true (validates the section(s) + previews the request; caches the payload as draft_id so you never have to re-send sections between dry-run → real call); dry_run=false to actually append. On validation failure also returns a draft_id — call patch_page({ draft_id, patches, dry_run:false }) to fix ONLY the bad elements without rebuilding the batch. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Appends one or more section nodes to the end of an existing page's `page` array, server-side: only the new sections are sent, and the backend rejects element ids that already exist on the page. The sections are validated first. dry_run defaults to true: it validates, caches the payload under a draft_id and previews the request; dry_run:false appends. A validation failure also returns a draft_id, which patch_page accepts for element-level fixes. Section-level saves cannot change page settings, so font weights that need new font links are reported in font_weights_notice. Requires Webcake credentials.",
     {
       page_id: z.string().describe("The page id to append to (from create_page or list_pages; must be owned by the account)."),
       sections: objectsOrJson()
         .optional()
         .describe(
-          "One section node, or an array of section nodes, to append to the END of `page` (object/array or JSON string). Each is a normal section element { id, type:'section', responsive, children, … } with a UNIQUE id; they stack vertically after the existing sections. Author SPARSE nodes — omit properties/runtime/empty events+children/per-breakpoint config; the server hydrates them from factory defaults. Required unless draft_id is supplied."
+          "One section node, or an array of section nodes, appended to the end of `page` (object/array or JSON string). Each is a normal section element { id, type:'section', responsive, children, … } with a unique id; sections stack vertically after the existing ones. Nodes may be sparse — omitted properties/runtime/empty events and children/per-breakpoint config are filled from factory defaults. Required unless draft_id is supplied."
         ),
       draft_id: z
         .string()
         .optional()
         .describe(
-          "A draft id returned by a previous add_section call (dry_run=true or validation failure). Loads the cached section payload — no need to re-send the sections JSON. Use for dry-run → real call transitions and fix-after-error rounds."
+          "A draft id returned by a previous add_section call (dry_run=true or validation failure). Loads the cached section payload, so the sections are not re-sent."
         ),
       dry_run: z
         .boolean()
@@ -1083,14 +1083,14 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
   server.tool(
     "patch_page",
-    "Edits a page by element id WITHOUT re-sending the whole source — the surgical-edit and fix-after-error path. Targets EITHER a live page (page_id) OR a cached draft source (draft_id). Draft sources come from: (a) create_page — failed validation or timed-out network call → patched/committed tree is CREATED as a new page once valid; (b) add_section dry_run or validation/network failure → patched/committed shell is APPENDED to the stored page once valid; (c) update_page or live-page patch_page — timed-out/failed network call → re-committed via updatePageSource. Send only a list of per-element ops; the MCP loads the source, applies them, validates the WHOLE merged tree (blocks on errors), and saves. Ops: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} (shallow-merges; op defaults to 'update'; `type` fixes a wrong element type; update CANNOT delete an existing/stray key — schema 'additional properties' errors need op:'replace'), {op:'replace',id,element}, {op:'remove',id}, {op:'add',parent_id,element}. EMPTY/OMITTED patches with a draft_id = commit the cached draft as-is (skip apply, still validate, then honor dry_run) — this is the RETRY PATH after a timeout. Use this to fix the elements a failed create_page/update_page/add_section reported instead of rebuilding. DEFAULTS to dry_run=true (loads + merges + validates + previews, no write); dry_run=false to save. Needs WEBCAKE_API_BASE + WEBCAKE_JWT (a draft_id sections-patch only needs creds to actually append; a page_id patch reads the live page so needs creds even on dry_run).",
+    "Edits a page by element id without sending the whole source. The target is either a live page (page_id) or a cached draft (draft_id) returned by a failed or dry-run create_page, add_section or update_page call. Ops: {op:'update', id, type?, specials?, styles?:{desktop?,mobile?}, config?:{desktop?,mobile?}, events?, properties?} shallow-merges fields (op defaults to 'update'; it cannot delete existing keys), {op:'replace', id, element} swaps the node, {op:'remove', id} deletes it, and {op:'add', parent_id, element} appends a child to a container; `element` may be sparse. The server loads the source, applies the ops, validates the whole merged tree (errors block the save) and saves: a live page is updated in place, a create draft becomes a new page, a section draft is appended, and an update draft is re-saved. With a draft_id and no patches, the cached draft is committed as-is (the retry after a timeout). dry_run defaults to true (load, merge, validate, preview; no write); dry_run:false saves. Requires Webcake credentials; a page_id patch reads the live page, so it needs them even on a dry run.",
     {
-      page_id: z.string().optional().describe("Edit a LIVE page by id (from create_page, list_pages, or find_pages; must be owned by the account). Provide page_id OR draft_id. For a sections or update draft_id you may also pass page_id here to override the stored page target."),
+      page_id: z.string().optional().describe("A live page id to edit (must be owned by the account). Provide page_id OR draft_id; with a sections or update draft_id, page_id overrides the stored target page."),
       draft_id: z.string().optional().describe("Commit or fix a CACHED source: from create_page (failed/timed-out → new page created once valid), add_section (dry_run or failure → sections appended), or update_page/live-page patch (timed-out/failed → updatePageSource retried). The originating tool's error/dry_run response returns draft_id. Provide page_id OR draft_id. Empty/omitted patches = commit the cached draft as-is (the RETRY PATH after a timeout)."),
       patches: objectsOrJson()
         .optional()
         .describe(
-          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; set `type` to fix a wrong element type; update MERGES — it cannot DELETE an existing/stray key, so 'must NOT have additional properties' errors need op:'replace' with a clean node); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container. `element` may be a SPARSE node (id/type/styles/specials/events only) — the server hydrates omitted boilerplate from factory defaults. OMIT (or pass empty array) when draft_id is given and you just want to commit/retry the cached draft as-is."
+          "One op object or an array of them (object/array or JSON string). Each targets an element by id: {op:'update',id,type?,specials?,styles?:{desktop?,mobile?},config?:{desktop?,mobile?},events?,properties?} merges fields into the element (op may be omitted; `type` changes the element type; a merge cannot delete an existing key, so schema 'must NOT have additional properties' errors are fixed with op:'replace' and a clean node); {op:'replace',id,element} swaps the node; {op:'remove',id} deletes it; {op:'add',parent_id,element} appends a child to a container. `element` may be a sparse node (id/type/styles/specials/events); omitted boilerplate is filled from factory defaults. Empty or omitted with a draft_id: the cached draft is committed as-is."
         ),
       force: z
         .boolean()
@@ -1515,7 +1515,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 15) Publish page (go live) -------------------------------------------------
   server.tool(
     "publish_page",
-    "Publishes an EXISTING page LIVE via the editor's publish_html route: builds the rendered app on the Webcake build host (POST <buildBase>/render/build; prod default https://build.webcake.io, override with WEBCAKE_BUILD_BASE env / x-webcake-build-base header), then creates/updates the PagePublishedV2 record — the record ALL public serving reads. With custom_domain the page goes live at that domain (it must already point at Webcake); OMIT custom_domain to reuse the page's currently-attached domain (mirrors the editor's publish modal — republishing keeps the page live at the same URL), falling back to a find_pages lookup by id. WITHOUT any domain (the page has none, or you pass custom_domain='') there is NO permanent public URL: the returned preview link (<previewBase>/preview/<page_id>) only renders for ~10 minutes after the publish, then shows 'Preview page is expired' — tell the user to attach a domain for a lasting URL. If no build host is configured or the build fails, falls back to the LEGACY source-only publish route with a warning (saves a version; nothing goes live; the page stays blank). DEFAULTS to dry_run=true (network-free: does NOT call the build host on dry_run). Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    "Publishes an existing page: builds the rendered app on the Webcake build host (POST <buildBase>/render/build; https://build.webcake.io in production, overridable with WEBCAKE_BUILD_BASE / x-webcake-build-base) and then creates or updates the published record that public serving reads. With custom_domain (already pointed at Webcake) the page is served at that domain; when omitted, the page's currently attached domain is reused; with no domain, or custom_domain:'', only the preview link (<previewBase>/preview/<page_id>) is returned, and it renders for about 10 minutes after the publish. Without a build host, or if the build fails, it falls back to a source-only publish that saves a version but serves nothing, and returns a warning. dry_run defaults to true and makes no network calls; dry_run:false builds and publishes. Requires Webcake credentials.",
     {
       page_id: z.string().describe("The page id to publish (must be owned by the account)."),
       custom_domain: z

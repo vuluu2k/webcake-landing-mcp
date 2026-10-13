@@ -17,7 +17,7 @@ import { pkgVersion } from "./server.js";
 import { validatePage, pageSchema } from "./domains/landing/validate.js";
 import { expandSource } from "./core/expand.js";
 import { compactSource, deepEq, sparseTemplate } from "./core/compact.js";
-import { parseHtml, extractTailwindConfig, extractFontFaces, applyCloneFonts, googleWeightLinks, withGoogleWeightLinks, toFontGroups, stylesheetTags, fetchStylesheets, parseCssRules, resolveCssVars } from "./persistence/html-ingest.js";
+import { fetchHtml, parseHtml, extractTailwindConfig, extractFontFaces, applyCloneFonts, googleWeightLinks, withGoogleWeightLinks, toFontGroups, stylesheetTags, fetchStylesheets, parseCssRules, resolveCssVars } from "./persistence/html-ingest.js";
 import { registerFontGroups } from "./persistence/webcake-client.js";
 import { warningsField } from "./mcp/response.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
@@ -783,6 +783,8 @@ console.log("== fonts: review hardening (cascade order, media, rem root, UA, Tai
   // SSRF: stylesheet hrefs chosen by the crawled page never reach private hosts.
   const priv = await fetchStylesheets(`<link rel="stylesheet" href="http://169.254.169.254/latest/meta-data"><link rel="stylesheet" href="http://127.0.0.1:1/a.css"><style>@import url(http://10.0.0.1/x.css);</style>`, "https://example.com/");
   check("ssrf: private/link-local stylesheet + @import targets are not fetched", priv.length === 0, priv);
+  const privPage = await Promise.all(["http://169.254.169.254/latest/meta-data", "http://127.0.0.1:1/", "http://10.0.0.1/"].map((u) => fetchHtml(u)));
+  check("ingest_url SSRF: private/loopback/link-local page fetch blocked before any request", privPage.every((r) => !r.ok && /not allowed/.test(r.error ?? "")), privPage);
 }
 
 console.log("== settings: width_section defaulted (build host crashes without it) ==");
