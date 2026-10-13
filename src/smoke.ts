@@ -25,6 +25,7 @@ import { toEditorUrl, toEditorLoginUrl, toPreviewUrl, buildPublishRequestRedacte
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT, variantPixels, annotateVariantSizes } from "./persistence/pexels-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
+import { redirectMatches } from "./auth/oauth-server.js";
 import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
 import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
 import { isPrivateHost, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
@@ -153,6 +154,9 @@ const good = {
 };
 const r1 = validatePage(good);
 check("good page valid", r1.valid, r1.errors);
+check("oauth redirect: exact claude.ai match", redirectMatches("https://claude.ai/api/mcp/auth_callback", "https://claude.ai/api/mcp/auth_callback"));
+check("oauth redirect: loopback any port (Claude Code)", redirectMatches("http://localhost/callback", "http://localhost:3118/callback") && redirectMatches("http://127.0.0.1/callback", "http://127.0.0.1:51234/callback"));
+check("oauth redirect: rejects other path/host/https port drift", !redirectMatches("http://localhost/callback", "http://localhost:3118/evil") && !redirectMatches("http://localhost/callback", "http://127.0.0.1:3118/callback") && !redirectMatches("https://claude.ai/api/mcp/auth_callback", "https://claude.ai:8443/api/mcp/auth_callback") && !redirectMatches("http://evil.com/callback", "http://evil.com:1/callback"));
 check("good page has no dangling-target warnings", r1.warnings.length === 0, r1.warnings);
 check("good page stats", r1.stats.sections === 2 && r1.stats.ids === 3, r1.stats);
 

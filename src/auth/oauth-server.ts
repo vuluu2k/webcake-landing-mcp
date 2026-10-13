@@ -361,6 +361,29 @@ export type StartAuthorizeParams = {
   scope?: string | null;
 };
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Exact match, except an http loopback redirect ignores the port (RFC 8252 §7.3):
+ * native clients like Claude Code register `http://localhost/callback` and then
+ * redirect to an ephemeral port per session (`http://localhost:3118/callback`).
+ */
+export function redirectMatches(registered: string, requested: string): boolean {
+  if (registered === requested) return true;
+  let a: URL, b: URL;
+  try {
+    a = new URL(registered);
+    b = new URL(requested);
+  } catch {
+    return false;
+  }
+  return (
+    a.protocol === "http:" && b.protocol === "http:" &&
+    LOOPBACK_HOSTS.has(a.hostname) && a.hostname === b.hostname &&
+    a.pathname === b.pathname && a.search === b.search
+  );
+}
+
 export type StartAuthorizeResult =
   | { ok: true; internalState: string }
   | { ok: false; error: string; error_description: string; redirectable: boolean };
@@ -377,7 +400,7 @@ export async function startAuthorize(p: StartAuthorizeParams): Promise<StartAuth
   if (!client) {
     return { ok: false, error: "invalid_client", error_description: "Unknown client_id. Register first via /register.", redirectable: false };
   }
-  if (!p.redirect_uri || !client.redirect_uris.includes(p.redirect_uri)) {
+  if (!p.redirect_uri || !client.redirect_uris.some((r) => redirectMatches(r, p.redirect_uri!))) {
     return { ok: false, error: "invalid_request", error_description: "redirect_uri does not match a registered URI.", redirectable: false };
   }
   // From here errors CAN go back to the client's redirect_uri.
