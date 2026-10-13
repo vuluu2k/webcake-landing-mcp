@@ -533,6 +533,11 @@ export async function startHttpServer(port: number): Promise<void> {
         return;
       }
 
+      // Unknown session (e.g. sessions are in-memory and the server restarted):
+      // the spec requires 404 so the client re-initializes. A 400 here left
+      // claude.ai "connected" with no tools after every redeploy.
+      if (sessionId) return rpcError(res, 404, "Session not found (expired or server restarted) — send a new initialize request.");
+
       // New session: only a POST `initialize` may open one.
       if (req.method === "POST") {
         const body = await readBody(req);
