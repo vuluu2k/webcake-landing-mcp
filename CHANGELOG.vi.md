@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.7] - 2026-10-13
+
+### Changed
+- Mô tả của tool `ingest_url` và `render_preview` nay có thêm link tới tài liệu API (`docs/tools.md` cho cả hai, cùng với link tham chiếu API của Microlink cho `render_preview`), giúp dễ tìm tài liệu liên quan hơn ngay từ trong MCP client.
+
 ## [1.5.6] - 2026-10-13
 
 ### Fixed
