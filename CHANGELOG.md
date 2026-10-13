@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.10] - 2026-10-13
+
+### Changed
+- Rewrote every tool and parameter description (`new_element`, `new_page_skeleton`, `validate_page`, `layout`, `ingest_html`, `ingest_url`, `search_images`, `get_icon_svg`, `render_preview`, `upload_images`, `create_page`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page`, `publish_page`, `get_element`) to state factually what each tool does, takes, and returns, removing instructions about which tool to call next so the descriptions meet Connectors Directory policy.
+- Moved the removed call-sequencing guidance (coordinates, elements, validation, reference pages, images, icons, saving, visual check, publishing) into a new "TOOL NOTES" section of the generation guide returned by `get_generation_guide`.
+
+### Fixed
+- `ingest_url` now applies the same SSRF policy to the page fetch that stylesheet fetching already used: private, loopback, and link-local hosts are rejected, and redirects are followed manually with each hop re-checked (`RENDER_ALLOW_PRIVATE=1` opts out).
+
 ## [1.5.9] - 2026-10-13
 
 ### Fixed

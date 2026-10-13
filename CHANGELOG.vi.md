@@ -6,6 +6,15 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.10] - 2026-10-13
+
+### Changed
+- Viết lại toàn bộ mô tả tool và tham số (`new_element`, `new_page_skeleton`, `validate_page`, `layout`, `ingest_html`, `ingest_url`, `search_images`, `get_icon_svg`, `render_preview`, `upload_images`, `create_page`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page`, `publish_page`, `get_element`) để chỉ nêu đúng thực tế mỗi tool làm gì, nhận vào gì, trả về gì, bỏ các hướng dẫn về việc nên gọi tool nào tiếp theo để tuân thủ chính sách của Connectors Directory.
+- Chuyển phần hướng dẫn trình tự gọi tool đã bị loại bỏ (tọa độ, element, validate, trang tham chiếu, ảnh, icon, lưu trang, kiểm tra hình ảnh, publish) vào một mục "TOOL NOTES" mới trong generation guide trả về từ `get_generation_guide`.
+
+### Fixed
+- `ingest_url` nay áp dụng cùng chính sách chống SSRF cho việc fetch trang như khi fetch stylesheet: chặn host private, loopback, và link-local, và các redirect được theo dõi thủ công với từng hop được kiểm tra lại (`RENDER_ALLOW_PRIVATE=1` để bỏ qua).
+
 ## [1.5.9] - 2026-10-13
 
 ### Fixed
