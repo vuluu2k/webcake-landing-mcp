@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.11] - 2026-10-13
+
+### Fixed
+- HTTP server nay trả lời request `HEAD` giống như `GET` trên mọi route công khai chỉ-đọc (`/privacy`, `/privacy-policy`, `/terms`, `/tos`, `/favicon.ico`, `/favicon.png`, `/favicon.svg`, `/icon.png`, `/icon.svg`, `/apple-touch-icon.png`, `/og.png`, `/og.svg`, `/`, `/health`, và các endpoint metadata OAuth), khắc phục việc các công cụ kiểm tra link (bao gồm form nộp hồ sơ connector-directory) dò bằng `HEAD` và trước đây nhận về 404.
+
 ## [1.5.10] - 2026-10-13
 
 ### Changed

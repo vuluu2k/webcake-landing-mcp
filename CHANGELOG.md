@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.11] - 2026-10-13
+
+### Fixed
+- The HTTP server now answers `HEAD` requests the same way it answers `GET` on every public read-only route (`/privacy`, `/privacy-policy`, `/terms`, `/tos`, `/favicon.ico`, `/favicon.png`, `/favicon.svg`, `/icon.png`, `/icon.svg`, `/apple-touch-icon.png`, `/og.png`, `/og.svg`, `/`, `/health`, and the OAuth metadata endpoints), fixing link checkers (including the connector-directory submission form) that probe with `HEAD` and previously got a 404.
+
 ## [1.5.10] - 2026-10-13
 
 ### Changed
