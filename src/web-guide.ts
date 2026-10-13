@@ -664,7 +664,9 @@ export function guideHtml(origin: string, lang: Lang = "vi"): string {
 <link rel="alternate" hreflang="vi" href="${origin}/">
 <link rel="alternate" hreflang="en" href="${origin}/?lang=en">
 <link rel="alternate" hreflang="x-default" href="${origin}/">
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon.png">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Webcake Landing MCP">
 <meta property="og:title" content="${m.title}">

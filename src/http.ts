@@ -81,6 +81,20 @@ function ogImagePng(): Buffer | null {
   }
 }
 
+// Raster brand icon (192px, from assets/icon-512.png) at src/icon.png → dist/icon.png.
+// Favicon fetchers (Google s2, which the claude.ai connector list uses) skip
+// SVG-only favicons and fall back to a globe, so /favicon.ico serves this PNG.
+let ICON_PNG: Buffer | null = null;
+function iconPng(): Buffer | null {
+  if (ICON_PNG) return ICON_PNG;
+  try {
+    ICON_PNG = readFileSync(new URL("./icon.png", import.meta.url));
+    return ICON_PNG;
+  } catch {
+    return null;
+  }
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
@@ -410,6 +424,13 @@ export async function startHttpServer(port: number): Promise<void> {
 
     // Brand icon — clients (e.g. the claude.ai connector) fetch a favicon from the
     // server origin; without one they show a generic globe. Served raw as SVG.
+    if (req.method === "GET" && (path === "/favicon.ico" || path === "/favicon.png" || path === "/icon.png" || path === "/apple-touch-icon.png")) {
+      const png = iconPng();
+      if (png) {
+        res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=86400" });
+        return res.end(png);
+      }
+    }
     if (req.method === "GET" && (path === "/favicon.ico" || path === "/favicon.svg" || path === "/icon.svg")) {
       res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
       return res.end(ICON_SVG);
