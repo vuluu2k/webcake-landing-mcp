@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.9] - 2026-10-13
+
+### Fixed
+- HTTP server nay trả về 404 (thay vì 400) khi nhận request với `mcp-session-id` không xác định, giúp client tự re-initialize thay vì bị kẹt ở trạng thái "đã kết nối" nhưng không có tool nào sau mỗi lần server restart (session được lưu trong memory nên mỗi lần redeploy sẽ làm mất toàn bộ session).
+
 ## [1.5.8] - 2026-10-13
 
 ### Fixed
