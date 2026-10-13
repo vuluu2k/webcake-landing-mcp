@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.6] - 2026-10-13
+
+### Fixed
+- The HTTP server now serves a 192px PNG at `/favicon.ico`, `/favicon.png`, and `/apple-touch-icon.png` (with matching `<link rel="icon">`/`<link rel="apple-touch-icon">` tags on the connector landing page), fixing favicon fetchers that ignore SVG-only icons (e.g. the Google s2 fetcher the claude.ai connector list uses) and fall back to a generic globe.
+
 ## [1.5.5] - 2026-10-13
 
 ### Fixed

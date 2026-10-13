@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.6] - 2026-10-13
+
+### Fixed
+- HTTP server nay phục vụ PNG 192px tại `/favicon.ico`, `/favicon.png`, và `/apple-touch-icon.png` (kèm thẻ `<link rel="icon">`/`<link rel="apple-touch-icon">` tương ứng trên trang landing của connector), khắc phục việc các công cụ lấy favicon bỏ qua icon chỉ-có-SVG (ví dụ Google s2 fetcher mà danh sách connector của claude.ai dùng) và hiển thị quả địa cầu mặc định.
+
 ## [1.5.5] - 2026-10-13
 
 ### Fixed
