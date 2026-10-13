@@ -95,6 +95,13 @@ function iconPng(): Buffer | null {
   }
 }
 
+// Public pages/assets answer HEAD like GET (Node drops the body on HEAD): link
+// checkers — incl. the connector-directory form — probe with HEAD, and a 404
+// there made /privacy and /terms look missing.
+function isRead(req: IncomingMessage): boolean {
+  return req.method === "GET" || req.method === "HEAD";
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
@@ -206,12 +213,12 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
   const issuer = publicBase(req);
 
   // ---- Metadata (RFC 8414 / RFC 9728) ----
-  if (req.method === "GET" && path === WELL_KNOWN_PR) {
+  if (isRead(req) && path === WELL_KNOWN_PR) {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
     res.end(JSON.stringify(protectedResourceMetadata(`${issuer}${MCP_PATH}`, issuer)));
     return true;
   }
-  if (req.method === "GET" && path === WELL_KNOWN_AS) {
+  if (isRead(req) && path === WELL_KNOWN_AS) {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
     res.end(JSON.stringify(authServerMetadata(issuer)));
     return true;
@@ -424,14 +431,14 @@ export async function startHttpServer(port: number): Promise<void> {
 
     // Brand icon — clients (e.g. the claude.ai connector) fetch a favicon from the
     // server origin; without one they show a generic globe. Served raw as SVG.
-    if (req.method === "GET" && (path === "/favicon.ico" || path === "/favicon.png" || path === "/icon.png" || path === "/apple-touch-icon.png")) {
+    if (isRead(req) && (path === "/favicon.ico" || path === "/favicon.png" || path === "/icon.png" || path === "/apple-touch-icon.png")) {
       const png = iconPng();
       if (png) {
         res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=86400" });
         return res.end(png);
       }
     }
-    if (req.method === "GET" && (path === "/favicon.ico" || path === "/favicon.svg" || path === "/icon.svg")) {
+    if (isRead(req) && (path === "/favicon.ico" || path === "/favicon.svg" || path === "/icon.svg")) {
       res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
       return res.end(ICON_SVG);
     }
@@ -439,7 +446,7 @@ export async function startHttpServer(port: number): Promise<void> {
     // Social-card image referenced by the landing page's og:image / twitter:image.
     // PNG is the canonical og:image (unfurls everywhere); the SVG stays for clients
     // that prefer it (Slack/Telegram/Discord) and as a fallback if og.png is absent.
-    if (req.method === "GET" && path === "/og.png") {
+    if (isRead(req) && path === "/og.png") {
       const png = ogImagePng();
       if (png) {
         res.writeHead(200, { "content-type": "image/png", "cache-control": "public, max-age=86400" });
@@ -449,23 +456,23 @@ export async function startHttpServer(port: number): Promise<void> {
       res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
       return res.end(ogImageSvg());
     }
-    if (req.method === "GET" && path === "/og.svg") {
+    if (isRead(req) && path === "/og.svg") {
       res.writeHead(200, { "content-type": ICON_MIME, "cache-control": "public, max-age=86400" });
       return res.end(ogImageSvg());
     }
 
     // Public legal pages — required URLs for the Claude/ChatGPT directory submission.
-    if (req.method === "GET" && (path === "/privacy" || path === "/privacy-policy")) {
+    if (isRead(req) && (path === "/privacy" || path === "/privacy-policy")) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" });
       return res.end(privacyHtml());
     }
-    if (req.method === "GET" && (path === "/terms" || path === "/tos")) {
+    if (isRead(req) && (path === "/terms" || path === "/tos")) {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" });
       return res.end(termsHtml());
     }
 
     // Lightweight health check for hosting platforms.
-    if (req.method === "GET" && (path === "/" || path === "/health")) {
+    if (isRead(req) && (path === "/" || path === "/health")) {
       // A browser/connector probing the root with `Accept: text/html` gets a tiny
       // page that links the favicon (helps icon discovery); programmatic probes
       // (the container healthcheck uses `Accept: */*`) still get the JSON health.
