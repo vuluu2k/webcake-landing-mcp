@@ -6,6 +6,12 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.5] - 2026-10-13
+
+### Fixed
+- Các tham số `page`/`source`/`sections`/`patches` của `validate_page`, `create_page`, `update_page`, `add_section`, và `patch_page` nay khai báo JSON Schema có kiểu rõ ràng (object, array, hoặc chuỗi JSON) thay vì kiểu `any` không xác định, khắc phục việc các công cụ review directory/MCP client từ chối tham số tool không có kiểu khai báo.
+- `upload_images` nay được đánh dấu `destructiveHint:false`, phản ánh đúng việc tool này chỉ thêm media và không bao giờ xóa hay ghi đè dữ liệu hiện có.
+
 ## [1.5.4] - 2026-10-09
 
 ### Added

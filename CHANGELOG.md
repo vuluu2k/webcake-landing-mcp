@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.5] - 2026-10-13
+
+### Fixed
+- The `page`/`source`/`sections`/`patches` parameters on `validate_page`, `create_page`, `update_page`, `add_section`, and `patch_page` now declare a typed JSON Schema (object, array, or JSON string) instead of an untyped `any`, fixing directory/MCP-client reviewers that reject tool parameters with no declared type.
+- `upload_images` is now annotated `destructiveHint:false`, correctly reflecting that it only adds media and never deletes or overwrites existing data.
+
 ## [1.5.4] - 2026-10-09
 
 ### Added
