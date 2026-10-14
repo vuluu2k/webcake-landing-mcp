@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-10-14
+
+### Added
+- Route screenshot self-hosted phía sau `render_preview` nay giới hạn số lượt chụp Playwright chạy đồng thời theo `RENDER_SCREENSHOT_CONCURRENCY` (mặc định 2), các request vượt quá sẽ xếp hàng thay vì tạo không giới hạn browser context, đồng thời đóng instance Chromium khi rảnh quá `RENDER_SCREENSHOT_IDLE_MS` (mặc định 5 phút, 0 để giữ chạy mãi mãi), giúp giới hạn mức dùng RAM trên các VPS tự host cấu hình nhỏ.
+
 ## [1.5.11] - 2026-10-13
 
 ### Fixed

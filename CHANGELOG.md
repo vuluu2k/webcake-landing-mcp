@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-10-14
+
+### Added
+- The self-hosted screenshot route behind `render_preview` now caps concurrent Playwright captures at `RENDER_SCREENSHOT_CONCURRENCY` (default 2), queuing extra requests instead of launching unbounded browser contexts, and closes the idle Chromium instance after `RENDER_SCREENSHOT_IDLE_MS` of inactivity (default 5 minutes, 0 to keep it running forever), bounding memory use on small self-hosted VPS deployments.
+
 ## [1.5.11] - 2026-10-13
 
 ### Fixed
