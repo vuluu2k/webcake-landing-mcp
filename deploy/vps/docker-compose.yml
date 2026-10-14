@@ -1,0 +1,80 @@
+# Plain-VPS deployment (no Coolify/Traefik): the MCP server on a PRIVATE-IP host,
+# fronted by an external nginx/OpenResty that terminates TLS. See ./README.md.
+#
+#   cd deploy/vps && cp .env.example .env   # fill BIND_IP + PG_PASSWORD
+#   docker compose up -d --build
+#
+# Reuses deploy/coolify/Dockerfile (same image), minus the Traefik labels.
+
+# Fixed project name: containers/volumes stay the same whichever dir it runs from
+# (manual checkout or the self-hosted runner's workspace — .github/workflows/deploy-vps.yml).
+name: webcake-mcp
+
+services:
+  webcake-mcp:
+    build:
+      context: ../..                      # repo root (relative to this file's dir)
+      dockerfile: deploy/coolify/Dockerfile
+    init: true
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    # Published ONLY on the private interface so the proxy can reach it but the
+    # public internet can't. BIND_IP=0.0.0.0 to listen everywhere (then firewall it).
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${HOST_PORT:-8787}:8787"
+    environment:
+      PORT: 8787
+      WEBCAKE_ENV: ${WEBCAKE_ENV:-prod}
+      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://mcp:${PG_PASSWORD:?set PG_PASSWORD in .env}@postgres:5432/webcake_mcp
+      # render_preview: this container's own Playwright route first, Microlink as fallback.
+      RENDER_SCREENSHOT_BASE: http://127.0.0.1:8787
+      RENDER_SCREENSHOT_PRIMARY: proxy
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      MICROLINK_API_KEY: ${MICROLINK_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Cache (drafts + image-rehost dedup). Disposable, no published port.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Durable OAuth store (tables auto-created on first connect). No published port.
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mcp
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?set PG_PASSWORD in .env}
+      POSTGRES_DB: webcake_mcp
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcp -d webcake_mcp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:
+  pg-data:
