@@ -55,7 +55,7 @@ The runner only makes **outbound** connections to GitHub, so the VPS needs no pu
 
 The workflow uses the `production` environment. Create it under *Settings → Environments*; you can enable *Required reviewers* to approve each deploy by hand.
 
-**Run it**: a push to `main` that touches `src/**`, `deploy/vps/**`, etc. deploys automatically. You can also use *Actions → Deploy VPS → Run workflow*.
+**Run it**: a `src/**` change on `main` deploys automatically **after Auto Release succeeds** (so the VPS runs the bumped version, and a failed release never ships). A push touching only `deploy/vps/**`, `scripts/**`, or deps deploys straight away. You can also use *Actions → Deploy VPS → Run workflow*.
 
 > ⚠️ The repo is public, so the workflow deliberately has **no** `pull_request` trigger: a fork PR would run arbitrary code on the VPS.
 > Don't add one. Also enable *Settings → Actions → General → Fork pull request workflows → Require approval for all outside collaborators*.

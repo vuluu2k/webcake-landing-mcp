@@ -2,16 +2,25 @@
 # installed ON that VPS (see deploy/vps/README.md). The runner builds the image
 # locally and restarts the compose stack — no registry, no SSH, no inbound port.
 #
-# SECURITY: the repo is public. Only push/workflow_dispatch trigger this — never
-# add `pull_request` (a fork PR would run arbitrary code on the VPS).
+# ORDER: a `src/**` change is deployed only AFTER Auto Release succeeds (workflow_run),
+# so the VPS runs the bumped commit and a failed release never ships. Changes that
+# don't trigger a release (deploy config, scripts, deps) deploy straight on push.
+# ponytail: a push touching BOTH src/** and a path below deploys twice (serialized by
+# `concurrency`; the second, post-release one wins) — harmless, so not de-duplicated.
+#
+# SECURITY: the repo is public. Only push/workflow_run/workflow_dispatch trigger this —
+# never add `pull_request` (a fork PR would run arbitrary code on the VPS).
 
 name: Deploy VPS
 
 on:
+  workflow_run:
+    workflows: ["Auto Release"]
+    types: [completed]
+    branches: [main]
   push:
     branches: [main]
     paths:
-      - "src/**"
       - "scripts/**"
       - "package.json"
       - "package-lock.json"
@@ -30,6 +39,8 @@ permissions:
 
 jobs:
   deploy:
+    # After a release: only when it succeeded.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: [self-hosted, webcake-vps]
     environment: production
     timeout-minutes: 30
@@ -38,6 +49,8 @@ jobs:
         working-directory: deploy/vps
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main # workflow_run: deploy main's tip (incl. the release bump), not the pre-bump sha
 
       - name: Write .env
         env:

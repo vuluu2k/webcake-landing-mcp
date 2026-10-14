@@ -55,7 +55,7 @@ Runner chỉ kết nối **ra ngoài** tới GitHub — VPS không cần IP publ
 
 Workflow dùng environment `production` — tạo nó ở *Settings → Environments* (có thể bật *Required reviewers* để duyệt tay trước mỗi deploy).
 
-**Chạy** — push lên `main` có đổi `src/**`, `deploy/vps/**`… sẽ tự deploy; hoặc *Actions → Deploy VPS → Run workflow*.
+**Chạy** — thay đổi `src/**` trên `main` tự deploy **sau khi Auto Release chạy thành công** (VPS chạy đúng version đã bump, release lỗi thì không deploy); push chỉ đổi `deploy/vps/**`, `scripts/**`, deps thì deploy ngay; hoặc *Actions → Deploy VPS → Run workflow*.
 
 > ⚠️ Repo public: workflow cố ý **không** có trigger `pull_request` — PR từ fork sẽ chạy code tuỳ ý trên VPS.
 > Đừng thêm. Nên bật thêm *Settings → Actions → General → Fork pull request workflows → Require approval for all outside collaborators*.
