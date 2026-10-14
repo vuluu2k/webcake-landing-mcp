@@ -17,6 +17,9 @@ services:
       dockerfile: deploy/coolify/Dockerfile
     init: true
     restart: unless-stopped
+    # RAM ceiling for Node + headless Chromium: a runaway capture kills (and
+    # restarts) only this container, never Postgres or the host. Sized for an 8 GB box.
+    mem_limit: ${MCP_MEM_LIMIT:-3g}
     depends_on:
       redis:
         condition: service_healthy
@@ -34,6 +37,8 @@ services:
       # render_preview: this container's own Playwright route first, Microlink as fallback.
       RENDER_SCREENSHOT_BASE: http://127.0.0.1:8787
       RENDER_SCREENSHOT_PRIMARY: proxy
+      RENDER_SCREENSHOT_CONCURRENCY: ${RENDER_SCREENSHOT_CONCURRENCY:-2}   # parallel captures (~100-300 MB each)
+      RENDER_SCREENSHOT_IDLE_MS: ${RENDER_SCREENSHOT_IDLE_MS:-300000}      # close Chromium after 5 min idle (0 = never)
       PEXELS_API_KEY: ${PEXELS_API_KEY:-}
       MICROLINK_API_KEY: ${MICROLINK_API_KEY:-}
     healthcheck:

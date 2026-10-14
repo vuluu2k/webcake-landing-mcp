@@ -28,7 +28,7 @@ import { buildConnectUrl, parseCallback } from "./auth/login.js";
 import { redirectMatches } from "./auth/oauth-server.js";
 import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
 import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
-import { isPrivateHost, isAllowedScreenshotUrl } from "./persistence/screenshot-playwright.js";
+import { isPrivateHost, isAllowedScreenshotUrl, acquireSlot, releaseSlot, slotStats } from "./persistence/screenshot-playwright.js";
 import { iconifyCandidates } from "./persistence/icon-client.js";
 import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl, isInlineBase64Image, parseInlineBase64Image } from "./persistence/rehost.js";
 import { key as rehostCacheKey } from "./persistence/rehost-cache.js";
@@ -2574,6 +2574,20 @@ console.log("== upload_images: localContentType (ext + magic, pure offline) ==")
 
 // == /api/render/screenshot: SSRF url guard (pure offline) ==
 {
+  console.log("\n== render screenshot: concurrency cap (pure offline) ==");
+  {
+    const max = slotStats().max;
+    for (let i = 0; i < max; i++) await acquireSlot();
+    let queuedGotSlot = false;
+    const queued = acquireSlot().then(() => (queuedGotSlot = true));
+    await Promise.resolve();
+    check("slots: capped at max, extra caller waits", slotStats().active === max && slotStats().waiting === 1 && !queuedGotSlot);
+    releaseSlot(); // hands the slot to the waiter
+    await queued;
+    check("slots: release hands slot to waiter", queuedGotSlot && slotStats().active === max && slotStats().waiting === 0);
+    for (let i = 0; i < max; i++) releaseSlot();
+    check("slots: all released", slotStats().active === 0);
+  }
   console.log("\n== render screenshot route: SSRF url guard (pure offline) ==");
   // private / loopback / link-local hosts are blocked
   check("isPrivateHost: localhost", isPrivateHost("localhost"));

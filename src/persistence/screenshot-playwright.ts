@@ -109,6 +109,70 @@ async function withContext<T>(
       error: "playwright is not installed on this host (run: npm i playwright && npx playwright install chromium)",
     };
   }
+  await acquireSlot();
+  try {
+    return await withContextUnlimited(width, scale, fn);
+  } finally {
+    releaseSlot();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RAM guard for small VPSes: cap concurrent captures (each context is
+// ~100–300 MB) and close the browser after an idle spell so it doesn't sit on
+// memory / slowly leak. RENDER_SCREENSHOT_CONCURRENCY (default 2),
+// RENDER_SCREENSHOT_IDLE_MS (default 5 min, 0 = keep the browser forever).
+// ---------------------------------------------------------------------------
+
+const MAX_CONCURRENT = Math.max(1, parseInt(process.env.RENDER_SCREENSHOT_CONCURRENCY ?? "", 10) || 2);
+const idleEnv = parseInt(process.env.RENDER_SCREENSHOT_IDLE_MS ?? "", 10);
+const IDLE_CLOSE_MS = Number.isFinite(idleEnv) && idleEnv >= 0 ? idleEnv : 300_000;
+let active = 0;
+const waiters: (() => void)[] = [];
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Wait for a capture slot. ponytail: unbounded FIFO queue — the HTTP caller's own timeout bounds the wait. */
+export async function acquireSlot(): Promise<void> {
+  if (idleTimer) {
+    clearTimeout(idleTimer);
+    idleTimer = null;
+  }
+  if (active < MAX_CONCURRENT) {
+    active++;
+    return;
+  }
+  await new Promise<void>((r) => waiters.push(r)); // releaseSlot hands its slot over (active unchanged)
+}
+
+/** Free a slot: hand it to the next waiter, else arm the idle close once nothing is running. */
+export function releaseSlot(): void {
+  const next = waiters.shift();
+  if (next) return next();
+  active--;
+  if (active === 0 && IDLE_CLOSE_MS > 0) {
+    idleTimer = setTimeout(closeIdleBrowser, IDLE_CLOSE_MS);
+    idleTimer.unref?.();
+  }
+}
+
+/** Snapshot of the limiter (smoke coverage). */
+export function slotStats() {
+  return { active, waiting: waiters.length, max: MAX_CONCURRENT };
+}
+
+async function closeIdleBrowser(): Promise<void> {
+  idleTimer = null;
+  const p = browserPromise;
+  browserPromise = null; // the next capture relaunches
+  const browser = p ? await p.catch(() => null) : null;
+  if (browser) await browser.close().catch(() => {});
+}
+
+async function withContextUnlimited<T>(
+  width: number,
+  scale: number,
+  fn: (ctx: any) => Promise<T>
+): Promise<{ ok: true; value: T } | { ok: false; error: string; reason?: "not_installed" }> {
   for (let attempt = 0; attempt < 2; attempt++) {
     let browser = await getBrowser();
     if (!browser) return { ok: false, error: "failed to launch headless chromium (check CHROME_BIN / playwright install)" };
