@@ -101,6 +101,9 @@ add_section({ page_id, sections: [formSection, footerSection], dry_run: false })
 # BỎ TRỐNG custom_domain để tái dùng domain đang gắn của trang (giống publish modal của editor);
 # KHÔNG có domain thì chỉ còn /preview/<page_id> — link này hết hạn ~10 phút sau khi publish.
 # Truyền custom_domain:"" để ép publish không domain. Không có build host: rơi về lưu chỉ-source.
+# custom_domain phải là tên miền tài khoản ĐÃ THÊM, viết đúng như đã lưu: www.shop.vn và shop.vn
+# là hai bản ghi khác nhau — lệch www thì tự đổi về dạng đã lưu (domain_note), tên miền tài khoản
+# không có thì từ chối (reason: domain_not_in_account).
 publish_page({ page_id, dry_run: false })  # tái dùng domain đang gắn của trang
 publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", dry_run: false })
 ```

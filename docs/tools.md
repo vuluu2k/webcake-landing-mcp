@@ -103,6 +103,9 @@ add_section({ page_id, sections: [formSection, footerSection], dry_run: false })
 # ~10 minutes after the publish. Without a build host it falls back to a source-only save
 # (nothing goes live). OMIT custom_domain to reuse the page's currently-attached domain
 # (like the editor's publish modal); pass custom_domain:"" to force a domain-less publish.
+# custom_domain must be a domain the account already added, as stored: www.shop.vn and shop.vn
+# are different records — a www/non-www mismatch is corrected to the stored form (domain_note),
+# a domain the account doesn't have is refused (reason: domain_not_in_account).
 publish_page({ page_id, dry_run: false })  # reuses the page's attached domain
 publish_page({ page_id, custom_domain: "shop.example.com", custom_path: "sale", dry_run: false })
 ```

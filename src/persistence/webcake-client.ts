@@ -79,6 +79,7 @@ const PAGES_ENDPOINT = "/api/v1/ai/pages";
 const SEARCH_PAGES_ENDPOINT = "/api/v1/ai/search_pages";
 const PAGE_SOURCE_ENDPOINT = "/api/v1/ai/page_source";
 const PAGE_VERSION_ENDPOINT = "/api/v1/ai/page_version";
+const DOMAINS_ENDPOINT = "/api/v1/domains/all";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
 const APPEND_ENDPOINT = "/api/v1/ai/append_section";
 // The editor's own publish routes (NOT under /api/v1/ai). Both scopes are
@@ -303,10 +304,10 @@ export async function createPage(
 // Read / list / edit existing pages
 // ---------------------------------------------------------------------------
 
-async function getJson(url: string, config: WebcakeConfig) {
+async function getJson(url: string, config: WebcakeConfig, orgId?: string) {
   let res: Response;
   try {
-    res = await fetch(url, { method: "GET", headers: authHeaders(config), signal: timeoutSignal(HTTP_TIMEOUT_MS) });
+    res = await fetch(url, { method: "GET", headers: authHeaders(config, orgId), signal: timeoutSignal(HTTP_TIMEOUT_MS) });
   } catch (e: any) {
     const e2 = timeoutOrNetworkError(url, e);
     return { ok: false, status: 0, json: null, text: "", error: e2.error };
@@ -353,6 +354,28 @@ export async function searchPages(
   if (!r.ok) return { ok: false, status: r.status, error: r.error };
   const pages: PageSummary[] = r.json?.data?.pages ?? r.json?.pages ?? [];
   return { ok: true, status: r.status, pages };
+}
+
+/**
+ * The VERIFIED domains the account can publish to, via the dashboard's own domain list
+ * (`GET /api/v1/domains/all` → LandingPageWeb.V1.DomainController.get_all_domains). The list is
+ * per ORGANIZATION (`x-org-id`; a page in an org can only use that org's domains), else the
+ * account's personal domains. `term` is a case-insensitive substring filter server-side — pass the
+ * bare host (no www) so both the www and non-www records come back. publish_page uses this to
+ * publish to the domain EXACTLY as stored (see persistence/domain-match.ts).
+ */
+export async function listVerifiedDomains(
+  config: WebcakeConfig,
+  opts: { term?: string; orgId?: string | number | null } = {}
+): Promise<{ ok: boolean; status: number; domains?: string[]; endpoint_missing?: boolean; error?: string }> {
+  const qs = new URLSearchParams({ is_verified: "true", limit: "50" });
+  if (opts.term) qs.set("term", opts.term);
+  const org = opts.orgId == null || `${opts.orgId}` === "" ? undefined : `${opts.orgId}`;
+  const r = await getJson(`${config.base}${DOMAINS_ENDPOINT}?${qs}`, config, org);
+  if (!r.ok) return { ok: false, status: r.status, endpoint_missing: r.status === 404, error: r.error };
+  const rows: any[] = r.json?.domains?.data ?? r.json?.data?.data ?? r.json?.data ?? [];
+  if (!Array.isArray(rows)) return { ok: false, status: r.status, error: "Unexpected domains response shape" };
+  return { ok: true, status: r.status, domains: rows.map((d) => String(d?.domain ?? "")).filter(Boolean) };
 }
 
 /** Read a page's decoded source tree (must be owned by the account). */
