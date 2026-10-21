@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-10-21
+
+### Fixed
+- `publish_page` now looks up the account's verified domains (`GET /api/v1/domains/all`) and publishes to the domain exactly as the account stores it: an exact match is kept, a www/non-www mismatch is corrected to the stored form (reported in a new `domain_note` field), and an explicit `custom_domain` the account never added is refused with `reason:"domain_not_in_account"` and a list of candidate domains instead of publishing to a non-existent domain record.
+
 ## [1.6.0] - 2026-10-14
 
 ### Added

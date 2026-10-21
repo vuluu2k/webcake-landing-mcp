@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-10-21
+
+### Fixed
+- `publish_page` nay tra cứu danh sách domain đã xác minh của account (`GET /api/v1/domains/all`) và publish đúng vào domain theo đúng dạng account đã lưu: khớp chính xác thì giữ nguyên, lệch www/non-www thì tự sửa về dạng đã lưu (báo qua trường `domain_note` mới), còn một `custom_domain` tường minh mà account chưa từng thêm sẽ bị từ chối với `reason:"domain_not_in_account"` kèm danh sách domain gợi ý, thay vì publish vào một domain record không tồn tại.
+
 ## [1.6.0] - 2026-10-14
 
 ### Added
