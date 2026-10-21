@@ -22,6 +22,7 @@ import { registerFontGroups } from "./persistence/webcake-client.js";
 import { warningsField } from "./mcp/response.js";
 import { readConfig, resolveEnv, ENV_NAMES, configFromHeaders } from "./persistence/config.js";
 import { toEditorUrl, toEditorLoginUrl, toPreviewUrl, buildPublishRequestRedacted } from "./persistence/webcake-client.js";
+import { matchAccountDomain, normalizeDomain } from "./persistence/domain-match.js";
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT, variantPixels, annotateVariantSizes } from "./persistence/pexels-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
@@ -2835,6 +2836,23 @@ console.log("== stale-overwrite guard: a UI edit is never silently reverted ==")
   for (let i = 0; i < 120; i++) rememberPageVersion("bulk" + i, "fp" + i, "read");
   check("page-version: store is bounded (LRU evicts the oldest)", lastKnownPageVersion("bulk0") === undefined && lastKnownPageVersion("bulk119")?.fp === "fp119");
   resetPageVersions();
+}
+
+console.log("== publish_page: custom_domain matches the account's stored domain (www vs non-www) ==");
+{
+  // The xsummit case: customer added www.xsummit.vn, the AI passed xsummit.vn verbatim.
+  const m1 = matchAccountDomain("xsummit.vn", ["www.xsummit.vn"]);
+  check("domain: non-www request → the stored www form", m1.ok && m1.domain === "www.xsummit.vn" && m1.adjusted, m1);
+  const m2 = matchAccountDomain("www.shop.vn", ["shop.vn"]);
+  check("domain: www request → the stored non-www form (never force www)", m2.ok && m2.domain === "shop.vn" && m2.adjusted, m2);
+  const m3 = matchAccountDomain("shop.vn", ["shop.vn", "www.shop.vn"]);
+  check("domain: both forms stored → exact match wins", m3.ok && m3.domain === "shop.vn" && !m3.adjusted, m3);
+  const m4 = matchAccountDomain("https://WWW.Shop.vn/sale?x=1", ["www.shop.vn"]);
+  check("domain: scheme/case/path stripped before matching", m4.ok && m4.domain === "www.shop.vn", m4);
+  const m5 = matchAccountDomain("other.vn", ["www.shop.vn"]);
+  check("domain: not in the account → no match, lists candidates", !m5.ok && m5.candidates.includes("www.shop.vn"), m5);
+  check("domain: empty account list → no match", !matchAccountDomain("shop.vn", []).ok);
+  check("domain: normalizeDomain drops port + trailing dot", normalizeDomain(" Shop.VN.:8080/a ") === "shop.vn", normalizeDomain(" Shop.VN.:8080/a "));
 }
 
 console.log("== server: MCP serverInfo.version follows package.json (no hardcoded constant) ==");

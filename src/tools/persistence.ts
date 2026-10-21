@@ -25,6 +25,7 @@ import {
   listOrganizations,
   listPages,
   searchPages,
+  listVerifiedDomains,
   getPageSource,
   getPageVersion,
   updatePageSource,
@@ -32,6 +33,7 @@ import {
   publishPage,
   toPreviewUrl,
 } from "../persistence/webcake-client.js";
+import { matchAccountDomain, normalizeDomain } from "../persistence/domain-match.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "../persistence/draft-cache.js";
 import {
   sourceFingerprint,
@@ -1521,7 +1523,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       custom_domain: z
         .string()
         .optional()
-        .describe("Optional custom domain to serve the page at (e.g. 'shop.example.com' — must already point at Webcake). OMIT to reuse the page's CURRENTLY-ATTACHED domain (so republishing keeps it live at the same URL, like the editor's publish modal); if the page has none it publishes domain-less (preview-host URL). Pass an empty string '' to force a domain-less publish even when the page has a domain."),
+        .describe("Optional custom domain to serve the page at (e.g. 'shop.example.com' — must already point at Webcake). Use it EXACTLY as the account lists it: 'www.example.com' and 'example.com' are DIFFERENT domain records — a www/non-www mismatch is corrected to the stored form, and a domain the account never added is refused (nothing published). OMIT to reuse the page's CURRENTLY-ATTACHED domain (so republishing keeps it live at the same URL, like the editor's publish modal); if the page has none it publishes domain-less (preview-host URL). Pass an empty string '' to force a domain-less publish even when the page has a domain."),
       custom_path: z.string().optional().describe("Optional path under the custom domain (e.g. 'sale')."),
       dry_run: z.boolean().optional().describe("Default TRUE — preview the request without sending. Does NOT call the build host. Set false to actually publish (build + publish)."),
     },
@@ -1561,6 +1563,38 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // Normalize an empty-string domain to "no domain" so downstream !! checks agree.
       if (!effectiveDomain) effectiveDomain = undefined;
 
+      // Publish to the domain EXACTLY as the account stores it (the editor's modal can only pick
+      // from that list). A verbatim custom_domain once published `xsummit.vn` for a customer who had
+      // added `www.xsummit.vn`: the page lived on a domain record that doesn't exist and Dynamic
+      // campaigns on it failed. Explicit domain not in the account → refuse. An INHERITED domain that
+      // isn't listed (shared from another member, older record) or a lookup failure → publish as
+      // before, with a note — never block a republish on the lookup itself.
+      let domainNote: string | undefined;
+      if (effectiveDomain) {
+        const bare = normalizeDomain(effectiveDomain).replace(/^www\./, "");
+        const listed = await listVerifiedDomains(config, { term: bare, orgId: res.organization_id });
+        if (listed.ok) {
+          const m = matchAccountDomain(effectiveDomain, listed.domains ?? []);
+          if (m.ok) {
+            if (m.domain !== effectiveDomain) domainNote = `'${effectiveDomain}' is stored in the account as '${m.domain}' — publishing to '${m.domain}' (www and non-www are different domains; campaigns and tracking key on the stored one).`;
+            effectiveDomain = m.domain;
+          } else if (!domainInherited) {
+            return text({
+              published: false,
+              reason: "domain_not_in_account",
+              page_id,
+              requested_domain: effectiveDomain,
+              account_domains_matching: m.candidates,
+              hint: "The domain must be added and verified in the account (Domains) first, and passed EXACTLY as listed — www.example.com and example.com are different. Pick one of account_domains_matching, ask the user which domain to use, or pass custom_domain:'' to publish without a domain.",
+            });
+          } else {
+            domainNote = `The page's attached domain '${effectiveDomain}' is not among the account's verified domains — republished to it unchanged.`;
+          }
+        } else {
+          domainNote = `Could not check '${effectiveDomain}' against the account's domain list (${listed.error ?? `HTTP ${listed.status}`}) — publishing to it as given.`;
+        }
+      }
+
       const opts = { customDomain: effectiveDomain, customPath: effectivePath };
       const buildBase = config.buildBase;
       // Only the preview window serves a domain-less publish, and only briefly.
@@ -1583,6 +1617,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             ? { would_run: true, build_host: buildBase, note: "Build host will be called on dry_run=false to produce rendered app/app_css, then the page is published live via the editor's publish_html route." }
             : { would_run: false, note: "No build host configured — publish will fall back to the LEGACY source-only route (nothing goes live). Set WEBCAKE_BUILD_BASE env or x-webcake-build-base header (prod preset: https://build.webcake.io) to publish for real." },
           ...(previewExpiryNote ? { note: previewExpiryNote } : {}),
+          ...(domainNote ? { domain_note: domainNote } : {}),
           request: buildPublishRequestRedacted(config, page_id, res.source, opts, !!buildBase),
           hint: "Re-run with dry_run=false to actually publish.",
         });
@@ -1628,6 +1663,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         status: outcome.status,
         error: outcome.error,
         ...(outcome.ok && previewExpiryNote ? { note: previewExpiryNote } : {}),
+        ...(domainNote ? { domain_note: domainNote } : {}),
         ...(buildWarning ? { warning: buildWarning } : {}),
       });
     }
