@@ -66,7 +66,7 @@ export const FORM: ElementDescriptor[] = [
     summary: "Single-line input. specials.field_name is the submitted data column (REQUIRED & unique).",
     useWhen: "Name/email/phone fields. Set field_type to text/email/phone/number. Must be a DIRECT child of the form to submit.",
     keySpecials: {
-      field_name: "REQUIRED unique data key. Special names coerce the input type: 'phone_number'/'recheck_phone_number' → tel, 'email' → email. Phone pattern validation only applies when field_name=='phone_number' AND validate=true.",
+      field_name: "REQUIRED unique data key. Use the EXACT system names for standard columns — full_name, first_name, last_name, phone_number, recheck_phone_number, email, address, quantity, coupon, postal_code (never 'phone'/'name'/'sdt'/'ho_ten'): the editor locks those IDs and refuses them when typed, so a field saved as 'phone' can never be renamed to 'phone_number' there. Special names coerce the input type: 'phone_number'/'recheck_phone_number' → tel, 'email' → email. Phone pattern validation only applies when field_name=='phone_number' AND validate=true.",
       field_placeholder: "placeholder text.",
       field_type: "text | email | phone | number | postal_code | date. 'postal_code' enables postcode-detect helper and uses condition/pattern (country_default|limit_5|limit_6|custom). 'date' renders a date input.",
       required: "boolean.",
@@ -107,7 +107,7 @@ export const FORM: ElementDescriptor[] = [
         desktop: { styles: { top: 60, left: 20, width: 360, height: 40 } },
         mobile: { styles: { top: 60, left: 20, width: 360, height: 40 } },
       },
-      specials: { field_name: "phone", field_placeholder: "Số điện thoại", field_type: "phone", required: true },
+      specials: { field_name: "phone_number", field_placeholder: "Số điện thoại", field_type: "phone", required: true },
     },
   },
   {
@@ -397,3 +397,40 @@ export const FORM: ElementDescriptor[] = [
     },
   },
 ];
+
+/**
+ * The editor's SYSTEM form columns — the `default: true` fields of its "add
+ * field" panel (landing_page_backend assets/editor/main/panels/FormPanel.vue).
+ * The editor creates them with `properties.field_default = true`, which LOCKS
+ * the ID box (FieldTrait.vue `disabled`), and it refuses these names when typed
+ * (FieldTrait.vue `defaultFieldName` appends a random suffix). So a field must
+ * be BORN with the canonical name: a field saved as "phone" can never become
+ * "phone_number" in the editor, and only the canonical names get the editor's
+ * extra behaviour (phone validation, address autocomplete, quantity, coupon…).
+ */
+export const SYSTEM_FIELD_NAMES = new Set([
+  "full_name", "first_name", "last_name", "phone_number", "recheck_phone_number",
+  "email", "quantity", "coupon", "address", "postal_code", "country_select",
+  "verify_code", "access_key", "province_id/district_id/commune_id",
+]);
+
+/** Common hand-made spellings of a system column (slugged: lowercase, no accents, `_`). */
+const SYSTEM_FIELD_ALIASES: Record<string, string> = {
+  phone: "phone_number", phonenumber: "phone_number", phone_no: "phone_number", tel: "phone_number",
+  telephone: "phone_number", mobile: "phone_number", sdt: "phone_number", so_dt: "phone_number",
+  so_dien_thoai: "phone_number", sodienthoai: "phone_number", dien_thoai: "phone_number", dienthoai: "phone_number",
+  name: "full_name", fullname: "full_name", your_name: "full_name", customer_name: "full_name",
+  ho_ten: "full_name", hoten: "full_name", ho_va_ten: "full_name", ten: "full_name",
+  firstname: "first_name", lastname: "last_name",
+  mail: "email", e_mail: "email", email_address: "email",
+  dia_chi: "address", diachi: "address",
+  so_luong: "quantity", soluong: "quantity", qty: "quantity",
+  ma_giam_gia: "coupon", voucher: "coupon",
+};
+
+/** The system column a non-canonical field_name was clearly meant to be, else undefined. */
+export function systemFieldAlias(fieldName: string): string | undefined {
+  const slug = fieldName.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  return SYSTEM_FIELD_ALIASES[slug];
+}

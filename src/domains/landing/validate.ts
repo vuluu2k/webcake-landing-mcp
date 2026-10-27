@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import Ajv2020Module from "ajv/dist/2020.js";
 import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
+import { systemFieldAlias } from "./elements/form.js";
 import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
 import { estTextHeightPx, measureTextBlock } from "./text-metrics.js";
 import { isColorKey, isUnparseableByEditor } from "./color.js";
@@ -338,6 +339,11 @@ export function validatePage(input: unknown): ValidationResult {
       const fn = specials?.field_name;
       if (!fn || typeof fn !== "string" || fn.trim() === "") {
         warnings.push(`${path} (${type}): form input should have a unique specials.field_name.`);
+      } else {
+        const canonical = systemFieldAlias(fn);
+        if (canonical && canonical !== fn) {
+          warnings.push(`${path} (${type}): field_name "${fn}" should be the system column "${canonical}" — the Webcake editor reserves system names (typing "${canonical}" there gets a random suffix), so the user can NEVER rename this field to "${canonical}" later, and only "${canonical}" gets the editor's built-in behaviour. Rename it now (also update any {{${fn}}} placeholder). On an EXISTING page this changes the submitted data column — ask the user first.`);
+        }
       }
 
       // `field_placeholder` is the ONLY placeholder key the renderer reads. A stray

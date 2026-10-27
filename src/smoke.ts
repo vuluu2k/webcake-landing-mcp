@@ -222,6 +222,37 @@ console.log("== expand: relocates misplaced responsive.<bp>.animation into confi
   check("explicit config.animation wins over the stray key", kept.config.animation.name === "zoomIn" && kept.animation === undefined, kept.config);
 }
 
+console.log("== form fields: field_default follows the system field_name; alias names warn ==");
+{
+  // The editor locks a field's ID when properties.field_default is true and
+  // refuses system names when typed — so the lock must match the name, and a
+  // hand-made "phone" must be flagged before it is saved un-renameable.
+  const mk = (fields: any[]) => ({
+    page: [{ id: "s1", type: "section", responsive: { desktop: { styles: { height: 400 } }, mobile: { styles: { height: 400 } } },
+      children: [{ id: "f1", type: "form",
+        responsive: { desktop: { styles: { top: 10, left: 10, width: 400, height: 300 } }, mobile: { styles: { top: 10, left: 10, width: 400, height: 300 } } },
+        children: fields.map((f, i) => ({ id: `i${i}`, type: f.type ?? "input", properties: f.properties,
+          responsive: { desktop: { styles: { top: i * 50, left: 0, width: 300, height: 40 } }, mobile: { styles: { top: i * 50, left: 0, width: 300, height: 40 } } },
+          specials: { field_name: f.name, field_placeholder: "x" } })) }] }],
+    popup: [], settings: {},
+  });
+  const ex: any = landingDomain.expand(mk([
+    { name: "phone_number" },
+    { name: "message", properties: { field_default: true } },
+    { name: "phone" },
+  ]));
+  const kids = ex.page[0].children[0].children;
+  check("system field gets field_default:true", kids[0].properties.field_default === true, kids[0].properties);
+  check("custom field never locked", kids[1].properties.field_default === undefined, kids[1].properties);
+  check("field_default normalization idempotent", JSON.stringify(landingDomain.expand(ex)) === JSON.stringify(ex));
+  const w = validatePage(ex).warnings;
+  check("alias 'phone' warns → phone_number", w.some((m) => m.includes('"phone"') && m.includes('"phone_number"')), w);
+  check("canonical/custom names don't warn", !w.some((m) => m.includes('"message" should') || m.includes('"phone_number" should')), w);
+  const vi: any = landingDomain.expand(mk([{ name: "Số điện thoại" }, { name: "Họ tên" }]));
+  const wv = validatePage(vi).warnings;
+  check("Vietnamese aliases warn", wv.some((m) => m.includes('"phone_number"')) && wv.some((m) => m.includes('"full_name"')), wv);
+}
+
 console.log("== validate: accepts JSON string input ==");
 const r3 = validatePage(JSON.stringify(good));
 check("string input parsed & valid", r3.valid, r3.errors);

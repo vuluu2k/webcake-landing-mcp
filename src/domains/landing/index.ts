@@ -17,6 +17,7 @@ import {
 import { GENERATION_GUIDE } from "./guide.js";
 import { INSTRUCTIONS } from "./instructions.js";
 import { LIBRARY, ELEMENT_TYPES, CONTAINER_TYPES, FIELD_TYPES, createElement } from "./elements/index.js";
+import { SYSTEM_FIELD_NAMES } from "./elements/form.js";
 import { createPageSource } from "./page.js";
 import { canvasToPageSource } from "./canvas-to-source.js";
 import type { IngestedCanvas } from "../../persistence/html-ingest.js";
@@ -403,6 +404,30 @@ function normalizeSettings(source: any): void {
   ws.mobile ??= CANVAS.mobileWidth;
 }
 
+// ---------------------------------------------------------------------------
+// form-field lock normalization: the editor locks a field's ID box when
+// `properties.field_default` is true (FieldTrait.vue `disabled`) and only ever
+// sets it on its SYSTEM columns (phone_number, full_name, email…). A model that
+// copies `field_default:true` onto a custom field ("message", "note") leaves
+// the user an ID they can NEVER change; a system column without it is editable
+// in a way the editor itself never allows. So the flag follows the name:
+// on for system names, off for everything else. Deterministic + idempotent,
+// so the expand(compact(x)) == expand(x) invariant holds.
+// ---------------------------------------------------------------------------
+
+/** Walk a tree node and sync properties.field_default with the field_name in-place (mutates). */
+function normalizeFormFields(node: any): void {
+  if (!node || typeof node !== "object") return;
+  const fn = node.specials?.field_name;
+  if (FIELD_TYPES.has(node.type) && typeof fn === "string" && node.properties && typeof node.properties === "object") {
+    if (SYSTEM_FIELD_NAMES.has(fn)) node.properties.field_default = true;
+    else delete node.properties.field_default;
+  }
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) normalizeFormFields(child);
+  }
+}
+
 /** Apply all post-expand normalizations to every node in a page source. */
 function normalizeSource(source: any): any {
   if (!source || typeof source !== "object") return source;
@@ -418,6 +443,7 @@ function normalizeSource(source: any): any {
         // url() layer in the same value.
         normalizeColors(node);
         normalizeBackgrounds(node);
+        normalizeFormFields(node);
       }
     }
   }
