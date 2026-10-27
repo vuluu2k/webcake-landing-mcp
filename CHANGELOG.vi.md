@@ -6,6 +6,13 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-10-27
+
+### Fixed
+- `expand` nay đồng bộ `properties.field_default` của field element theo `specials.field_name`: bật cho các cột hệ thống của editor (`phone_number`, `full_name`, `email`…) và tắt cho mọi field khác, nên một field tùy ý sẽ không còn bị khóa ID vĩnh viễn ngay từ đầu, còn cột hệ thống thì luôn được khóa đúng như editor.
+- `validate_page` nay cảnh báo khi `specials.field_name` là một biến thể tự đặt của cột hệ thống (ví dụ `phone`/`sdt`/`dien_thoai` thay cho `phone_number`, `name`/`ho_ten` thay cho `full_name`), vì editor dành riêng các tên chuẩn đó và field có thể sẽ không bao giờ đổi được sang tên cột hệ thống về sau.
+- Ví dụ field `single_input` và tài liệu nay dùng field_name chuẩn `phone_number` thay vì `phone`.
+
 ## [1.6.1] - 2026-10-21
 
 ### Fixed

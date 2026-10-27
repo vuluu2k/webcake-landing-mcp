@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.2] - 2026-10-27
+
+### Fixed
+- `expand` now syncs a field element's `properties.field_default` with its `specials.field_name`, turning it on for the editor's system columns (`phone_number`, `full_name`, `email`…) and off for every other field, so a custom field is never born with its ID box permanently locked and a system column always gets it.
+- `validate_page` now warns when `specials.field_name` is a hand-made alias of a system column (e.g. `phone`/`sdt`/`dien_thoai` for `phone_number`, `name`/`ho_ten` for `full_name`), since the editor reserves those canonical names and the field could otherwise never be renamed to the system column later.
+- The `single_input` field example and docs now use the canonical `phone_number` field_name instead of `phone`.
+
 ## [1.6.1] - 2026-10-21
 
 ### Fixed
