@@ -6,6 +6,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-05
+
+### Added
+- `install` gained a `--dev` flag that reopens the old step-by-step wizard (choose environment, log in or paste a JWT, pick an organization, pick IDEs) for whoever still wants it.
+- `install` now backs up an IDE config file before changing it (`<file>.webcake-landing-mcp-backup`), and a config file with no actual change is left untouched.
+- `uninstall` now also cleans a `servers` block (VS Code's own key) in addition to `mcpServers`, and removes the legacy `~/.vscode/mcp.json` written by older versions.
+- The web guide page gained a 3D scene (three.js, loaded only once that section nears the viewport, with a plain step list as a fallback) showing the four stops of a page build: you, the AI, Webcake MCP, and Webcake.
+
+### Changed
+- `install` with no flags now asks nothing: it targets the `prod` environment, opens the browser to a one-click "Connect" page, and configures every AI app it detects on the machine, instead of walking through an environment/auth/org/IDE wizard.
+- `install` now writes VS Code's config under the `servers` key with `type: "stdio"` instead of `mcpServers`, since VS Code never showed the server under the old key.
+- `install` now adds Claude Code's MCP entry with `--scope user` instead of the current folder only.
+- `install` no longer stops configuring the remaining IDEs when one of them fails; the failure is reported and the rest still get configured.
+- The web guide page's visual style was reworked to a "liquid glass" look, and text contrast was raised to meet 4.5:1 in both light/dark and desktop/phone.
+
+### Fixed
+- The web guide page's install-command code block no longer overflows on narrow phone screens.
+- The web guide page's FAQ no longer claims the login code is never stored; it now correctly explains that a local install keeps the code on your machine while a hosted link carries it in the link.
+
 ## [1.6.2] - 2026-10-27
 
 ### Fixed

@@ -6,6 +6,25 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-11-05
+
+### Added
+- `install` nay có thêm cờ `--dev` để mở lại wizard từng bước kiểu cũ (chọn environment, đăng nhập hoặc dán JWT, chọn organization, chọn IDE) cho ai vẫn muốn dùng.
+- `install` nay backup file config của IDE trước khi sửa (`<file>.webcake-landing-mcp-backup`), còn file config nào không thực sự thay đổi thì được giữ nguyên, không viết lại.
+- `uninstall` nay cũng dọn khối `servers` (khóa riêng của VS Code) bên cạnh `mcpServers`, và xóa luôn file `~/.vscode/mcp.json` cũ do các bản trước ghi ra.
+- Trang web guide nay có thêm một 3D scene (three.js, chỉ tải khi mục đó gần tới khung nhìn, có danh sách bước dạng text làm phương án dự phòng) minh họa bốn điểm dừng khi dựng một trang: bạn, AI, Webcake MCP, và Webcake.
+
+### Changed
+- `install` khi không truyền cờ nay không hỏi gì cả: nhắm vào environment `prod`, mở trình duyệt tới trang "Connect" một chạm, và tự cấu hình mọi ứng dụng AI phát hiện được trên máy, thay vì đi qua wizard hỏi environment/auth/org/IDE.
+- `install` nay viết config VS Code vào khóa `servers` kèm `type: "stdio"` thay vì `mcpServers`, vì khóa cũ khiến VS Code không bao giờ hiện server.
+- `install` nay thêm entry MCP cho Claude Code với `--scope user` thay vì chỉ áp dụng cho folder hiện tại.
+- `install` nay không còn dừng cấu hình các IDE còn lại khi một IDE bị lỗi; lỗi đó được báo ra còn các IDE khác vẫn được cấu hình tiếp.
+- Giao diện trang web guide được làm lại theo phong cách "liquid glass", và độ tương phản chữ được nâng lên đạt chuẩn 4.5:1 ở cả chế độ sáng/tối, desktop/điện thoại.
+
+### Fixed
+- Khối lệnh cài đặt trên trang web guide không còn bị tràn trên màn hình điện thoại hẹp.
+- Phần FAQ trên trang web guide không còn khẳng định mã đăng nhập không bao giờ bị lưu; nay giải thích đúng là cài trên máy thì mã chỉ nằm trên máy, còn dùng link thì mã nằm trong link đó.
+
 ## [1.6.2] - 2026-10-27
 
 ### Fixed
