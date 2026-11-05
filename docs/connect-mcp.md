@@ -58,11 +58,11 @@ The token is the "key" that lets the AI use *your* Webcake account. Two options:
 ### Fastest: let it configure your IDE
 
 ```bash
-# Interactive: pick environment, log in, pick IDE(s)
+# Opens the browser: click Connect, installed IDEs get configured (prod). Add --dev for the step-by-step wizard
 npx -y webcake-landing-mcp install
 
 # One shot: configure every IDE
-npx -y webcake-landing-mcp install --ide all --env prod --jwt <TOKEN>
+npx -y webcake-landing-mcp install --ide all --jwt <TOKEN>
 
 # Remove from every IDE
 npx -y webcake-landing-mcp uninstall

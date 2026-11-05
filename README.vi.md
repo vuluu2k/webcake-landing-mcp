@@ -101,19 +101,31 @@ Chọn **một** trong hai. Cả hai đều đưa toàn bộ bộ công cụ d�
 Không cần cài đặt, luôn bản mới nhất, cần Node.js 18+. **Một dòng** vừa lấy token vừa ghi cấu hình IDE:
 
 ```bash
-# Tương tác — chọn môi trường, đăng nhập qua trình duyệt (hoặc dán JWT), chọn IDE
+# Mở trình duyệt — bấm Kết nối, các IDE trên máy được cấu hình tự động (prod)
 npx -y webcake-landing-mcp install
 
-# Không tương tác — cấu hình mọi IDE hỗ trợ cùng lúc (env + token qua cờ)
-npx -y webcake-landing-mcp install --ide all --env prod --jwt <your-jwt>
+# Chỉ dành cho dev — từng bước: môi trường, đăng nhập hoặc JWT, org, IDE
+npx -y webcake-landing-mcp install --dev
+
+# Script và CI — mọi IDE được hỗ trợ, kể cả IDE chưa cài
+npx -y webcake-landing-mcp install --ide all --jwt <your-jwt>
 
 # Gỡ server khỏi mọi cấu hình IDE
 npx -y webcake-landing-mcp uninstall
 ```
 
+**`install` không hỏi gì cả.** Lệnh kết nối tới production, mở trình duyệt để bạn bấm *Kết nối*, rồi thêm server vào mọi ứng dụng AI
+tìm thấy trên máy. Các server khác của bạn được giữ nguyên, và file cấu hình nào bị đổi đều có bản sao lưu ngay cạnh, tên
+`<file>.webcake-landing-backup`. Không tìm thấy ứng dụng AI nào? Lệnh báo rõ và thoát với lỗi: hãy cài một ứng dụng rồi chạy lại, hoặc chỉ định bằng `--ide`.
+
+Cần staging hoặc local? `--dev` mở các bước hỏi lần lượt, hoặc bỏ qua bằng `--env staging` / `--env local`.
+
+> **Đã cài bằng bản cũ?** Hãy chạy lại `install`. Bản cũ ghi cấu hình VS Code sai khóa nên server không hiện trong VS Code, và chỉ đăng ký
+> Claude Code cho đúng thư mục lúc chạy lệnh.
+
 Nó ghi entry `webcake-landing` vào đúng file cấu hình của từng IDE: `claude-desktop`, `claude-code`,
 `cursor`, `windsurf`, `augment` (VS Code), `codex`, `antigravity`, `gemini` (Gemini CLI), `cline`,
-`kiro`, `opencode`, hoặc `all`. Cờ: `--ide`, `--env`, `--jwt`, `--org-id`, `--api-base`/`--app-base`,
+`kiro`, `opencode`, hoặc `all`. Cờ: `--dev`, `--ide`, `--env`, `--jwt`, `--org-id`, `--api-base`/`--app-base`,
 `--npx`/`--local`, `-y` — xem `install --help`.
 
 Chỉ muốn chạy server (tự cấu hình sau)? `npx -y webcake-landing-mcp`

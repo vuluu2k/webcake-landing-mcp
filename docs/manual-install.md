@@ -12,7 +12,7 @@ All of these configure the same `webcake-landing` MCP server; pick whichever fit
 
 | # | Method | Best for | Auth | Where |
 |---|--------|----------|------|-------|
-| 1 | **npx `install`** — auto-write the IDE config | Most people | `--env` + browser `login` or a JWT | [README](../README.md) |
+| 1 | **npx `install`** — auto-write the IDE config | Most people | browser `login` (prod by default) or a JWT | [README](../README.md) |
 | 2 | **Local stdio** — add to an IDE via `npx` or a built file | Daily use on your machine | env `WEBCAKE_JWT`, or `login`, or none (reference tools) | [Per-IDE config](#configuration-by-ide--ai-tool) |
 | 3 | **`login`** — grab the token through the browser (no copy-paste) | Avoiding a manual token paste | browser session → saved `auth.json` | [Configuration](./configuration.md#connect-once--grab-your-token-automatically-login) |
 | 4 | **Remote HTTP (`serve`)** — run as an HTTP server | The remote transport / a hosted connector | per-request `x-webcake-jwt` header, or env | [Connect guide](./connect-mcp.md) + [headers](./configuration.md#per-request-headers-hosted--remote-server) |

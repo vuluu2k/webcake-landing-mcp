@@ -57,7 +57,7 @@ function printHelp(): void {
       "",
       "Commands:",
       "  (none)             start the stdio MCP server (use this in IDE configs)",
-      "  install            configure the server in your IDE(s) — interactive (env + login/JWT)",
+      "  install            connect to prod via the browser and configure your IDE(s) (--dev: wizard with env choice)",
       "  uninstall          remove the server from your IDE configs",
       "  login              grab your Webcake token via the browser (saved to ~/.webcake-landing-mcp/auth.json)",
       "  serve [--port N]   run the remote Streamable-HTTP server (default port 8787; or PORT env)",

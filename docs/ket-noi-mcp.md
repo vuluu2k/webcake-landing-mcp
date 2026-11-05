@@ -58,11 +58,11 @@ Token là "chìa khoá" để AI dùng đúng tài khoản Webcake của bạn. 
 ### Nhanh nhất: để nó tự cấu hình IDE
 
 ```bash
-# Tương tác: chọn môi trường, đăng nhập, chọn IDE
+# Mở trình duyệt: bấm Kết nối, các IDE trên máy tự được cấu hình (prod). Thêm --dev để hỏi từng bước
 npx -y webcake-landing-mcp install
 
 # Một phát ăn ngay: cấu hình mọi IDE
-npx -y webcake-landing-mcp install --ide all --env prod --jwt <TOKEN>
+npx -y webcake-landing-mcp install --ide all --jwt <TOKEN>
 
 # Gỡ khỏi mọi IDE
 npx -y webcake-landing-mcp uninstall

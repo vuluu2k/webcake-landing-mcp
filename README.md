@@ -101,19 +101,32 @@ Pick **one**. Both hand your AI tool (Claude, Cursor, …) the full Webcake land
 Zero install, always the latest version, needs Node.js 18+. **One line** grabs your token *and* writes the IDE config:
 
 ```bash
-# Interactive — pick environment, log in via browser (or paste a JWT), pick IDE(s)
+# Opens the browser — click Connect, your installed IDEs are configured (prod)
 npx -y webcake-landing-mcp install
 
-# Non-interactive — configure every supported IDE at once (env + token via flags)
-npx -y webcake-landing-mcp install --ide all --env prod --jwt <your-jwt>
+# Developers only — step by step: environment, login or JWT, org, IDE(s)
+npx -y webcake-landing-mcp install --dev
+
+# Scripts and CI — every supported IDE, even ones not installed yet
+npx -y webcake-landing-mcp install --ide all --jwt <your-jwt>
 
 # Remove the server from every IDE config
 npx -y webcake-landing-mcp uninstall
 ```
 
+**`install` asks nothing.** It connects to production, opens your browser so you can click *Connect*, then adds the server
+to every AI app it finds on this computer. Your other servers are kept, and any config file it changes is backed up next to
+the original as `<file>.webcake-landing-backup`. No AI app found? It says so and exits with an error: install one and run it again,
+or name it with `--ide`.
+
+Need staging or local? `--dev` opens the step-by-step wizard, or skip it with `--env staging` / `--env local`.
+
+> **Installed with an older version?** Run `install` again. Older versions wrote VS Code's config under the wrong key, so the
+> server never appeared there, and registered Claude Code for the current folder only.
+
 It writes a `webcake-landing` entry into the right config file for each target: `claude-desktop`,
 `claude-code`, `cursor`, `windsurf`, `augment` (VS Code), `codex`, `antigravity`, `gemini` (Gemini CLI),
-`cline`, `kiro`, `opencode`, or `all`. Flags: `--ide`, `--env`, `--jwt`, `--org-id`,
+`cline`, `kiro`, `opencode`, or `all`. Flags: `--dev`, `--ide`, `--env`, `--jwt`, `--org-id`,
 `--api-base`/`--app-base`, `--npx`/`--local`, `-y` — see `install --help`.
 
 Just want to run the server (configure by hand later)? `npx -y webcake-landing-mcp`
