@@ -127,7 +127,7 @@ export function sceneHtml(lang: "vi" | "en"): string {
           )
           .join("\n        ")}
       </ol>
-      <button type="button" class="sc-ctl" hidden></button>
+      <button type="button" class="sc-ctl" hidden>${c.pause}</button>
     </div>
   </section>`;
 }
@@ -178,10 +178,13 @@ export const GLASS_CSS = `
   .sc{position:relative;width:min(1180px,calc(100vw - 32px));margin-left:calc(50% - min(590px,calc(50vw - 16px)))}
   .sc-stage{display:none;position:relative;overflow:hidden;height:clamp(440px,46vw,600px)}
   .js .sc.on .sc-stage{display:block}
-  .sc-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .sc-stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;opacity:0;transition:opacity .45s ease}
+  /* Canvas + labels wait for the first drawn frame, so the labels never flash stacked at 0,0. */
+  .sc-tag{opacity:0}
+  .sc.ready .sc-stage canvas,.sc.ready .sc-tag{opacity:1}
   .sc-tag{position:absolute;left:0;top:0;padding:5px 13px 6px;border-radius:14px;text-align:center;white-space:nowrap;line-height:1.25;
     color:var(--ink);background:var(--glass-strong);box-shadow:inset 0 1px 0 var(--rim),0 8px 18px -12px rgba(0,0,0,.5);
-    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);pointer-events:none;will-change:transform;transition:color .25s ease}
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);pointer-events:none;will-change:transform;transition:color .25s ease,opacity .45s ease}
   .sc-tag b{display:block;font-size:.84rem}
   .sc-tag small{display:block;font-size:.72rem;font-weight:500;color:var(--mut)}
   .sc-tag.on b{color:var(--g7)}
@@ -206,8 +209,10 @@ export const GLASS_CSS = `
     color:var(--g7);font:inherit;font-size:.84rem;font-weight:700}
   .sc-ctl:hover{background:rgba(127,160,140,.14)}
   .sc-ctl[hidden]{display:none}
+  /* Reserve the play/pause row before three.js arrives so the panel doesn't grow. */
+  @media(prefers-reduced-motion:no-preference){.js .sc.on .sc-ctl[hidden]{display:block;visibility:hidden}}
   @media(max-width:639px){.sc-stage{height:520px}.sc-tag small{font-size:.68rem}.nav{margin-left:0;margin-right:0}}
-  @media(prefers-reduced-motion:reduce){.sc-dw,.sc-step,.sc-n,.sc-tag{transition:none}}
+  @media(prefers-reduced-motion:reduce){.sc-dw,.sc-step,.sc-n,.sc-tag,.sc-stage canvas{transition:none}}
   @media(prefers-reduced-transparency:reduce){
     .glass,.iconbtn,.langsw,.btn.ghost,.btn.ghost:hover,.nav,.tip,.sc-tag{background-color:var(--card);background-image:none;
       -webkit-backdrop-filter:none;backdrop-filter:none}
@@ -553,6 +558,7 @@ export const SCENE_JS = String.raw`
       }
       syncCtl();
       renderer.render(scene,camera);
+      root.classList.add('ready');
     }
     function syncCtl(){
       if(reduced)return;
