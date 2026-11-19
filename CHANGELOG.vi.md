@@ -6,6 +6,32 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-11-19
+
+### Added
+- `get_element`/`list_elements` nay trả thêm `keys` (mỗi dòng là một key `specials`/`config`/`styles` mà renderer thật có đọc, kèm ý nghĩa, kiểu giá trị, enum, default, và key nào lưu trữ nhưng không có tác dụng render) và `relations` (type phải nằm trong parent nào, chứa children gì trên trang thật), khai thác từ mã renderer, các panel của editor và một bộ trang thật.
+- `validate_page` nay báo key lạ trên element (kèm gợi ý "có phải bạn muốn"), key lưu trữ nhưng không render (`NO_EFFECT`), giá trị nằm ngoài enum mà picker của editor cung cấp, và con đặt dưới parent type mà nó chưa từng nằm trong đó trên trang thật.
+- `validate_page` nay chặn `settings.extra_css` chứa `</style>`, `<script>` hoặc comment HTML, vì nội dung này được chèn thẳng vào tag `<style>` và sẽ thoát ra khỏi đó để chạy như markup của trang.
+- `get_page` có thêm `outline:true` (cây rút gọn mỗi element một dòng: id, type, text, khung desktop/mobile, cờ ẩn/events) và `element_id` (chỉ trả về subtree của element đó kèm `parent_id`, `root` và đường dẫn id), nhờ vậy agent đọc được cấu trúc trang mà không cần lấy toàn bộ source.
+- `patch_page` có thêm 4 op mới: `move` (đổi parent và/hoặc thứ tự của element, giữ nguyên vị trí hiển thị trừ khi có `left`/`top`), `duplicate` (sao chép sâu một element với id mới, remap event nội bộ, có thể lệch vị trí theo từng bản copy), `style` (chỉ merge `styles`), và selector `match` (`type`/`text`/`section_id`/`within`) mà `update`/`style`/`remove` có thể dùng thay cho một `id` duy nhất, áp dụng cho mọi kết quả khớp tới một `limit`.
+- `patch_page` nay báo `dangling_events` khi `remove` xoá một element mà event của element khác (`open_popup`, `scroll_to`…) vẫn đang nhắm tới.
+- `clone_page` nay dựng lại slider (Swiper, Slick, Splide, Owl Carousel, Bootstrap carousel, Glide, Flickity, Keen, Embla) thành `carousel` kiểu native với children `slide` kiểu native, thay vì chụp tĩnh.
+- `clone_page` nay chuyển embed YouTube/Vimeo hoặc tag `<video>` thành element `video` kiểu native thay vì iframe `html-box`.
+- `clone_page` nay nhận diện modal/dialog bị ẩn khi tải là element `popup` (kèm liên kết/nút mở nó được gắn event `open_popup`) và link neo trong trang thành event `scroll_to`, thay vì để chúng là markup vô tác dụng.
+- `clone_page` nay gỡ khung cuộn nội bộ của trang gốc và cuộn qua trang chậm trước khi đo, để ảnh lazy-load và nội dung hiện khi cuộn được chụp đầy đủ thay vì trống; một `<main>` cao bọc nhiều khối full-width được tách thành các section riêng.
+- `clone_page` nay ghép desktop và mobile toàn cục theo khung section (ưu tiên DOM path, sau đó theo nội dung hiển thị) thay vì chỉ theo vị trí, và không còn ẩn nội dung trên mobile đối với section có độ tin cậy khớp thấp.
+- Bước auto-fix layout của `clone_page` nay tin vào chiều cao đã đo của text (`config.virtualHeight`) thay vì đo lại bằng font metrics, và chỉ phình container hoặc đẩy phần tử liền kề theo đúng phần tràn thực tế, không theo mọi chỗ chồng mép đã khai báo.
+
+### Changed
+- `update_page` và `patch_page` (sửa trang đang chạy) nay không còn từ chối lưu vì lỗi validate mà trang đã có từ trước khi sửa; chỉ lỗi do chính lần sửa này tạo ra mới chặn lưu, và số lỗi có sẵn được báo riêng.
+- `clone_page` nay chỉ lấy stylesheet icon font vào `settings.bhet` khi nó được phục vụ từ CDN icon/font công khai đã biết, thay vì mọi link stylesheet có trong head của trang.
+- CSS `:hover`/`transition` và URL link icon font mà `clone_page` lấy được nay được lọc trước khi ghi vào `settings.extra_css`/`settings.bhet`, để markup có thể thoát khỏi tag `<style>` hoặc URL bất thường bị loại bỏ.
+- `clone_page` nay chỉ coi nguồn video/iframe cùng origin, `http(s)` là có thể nhúng, và chặn kết nối WebSocket ra ngoài trong lúc đo (tăng cường chống SSRF bên cạnh các kiểm tra host riêng tư/link-local đã có).
+- Văn bản trong `clone_page` nay giữ nguyên mọi màu CSS (kể cả `hsl`/`oklch`/…) dưới dạng `rgba()` mà color picker của editor hiểu được, thay vì chỉ những màu đã chuẩn hoá từ trước.
+
+### Internal
+- Thêm `scripts/mine-renderer.mjs`, `scripts/mine-editor.mjs` và bộ dữ liệu key của element (2.614 key trên 48 type) khai thác từ renderer thật, panel editor và 130 trang thật, làm nền cho bảng tham chiếu key mới của `get_element` và các kiểm tra key của `validate_page`.
+
 ## [1.11.0] - 2026-11-19
 
 ### Added

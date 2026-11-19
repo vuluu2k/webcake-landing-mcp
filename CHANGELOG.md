@@ -6,6 +6,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-11-19
+
+### Added
+- `get_element`/`list_elements` now return `keys` (one line per `specials`/`config`/`styles` key the published renderer actually reads, with meaning, value type, enum, and default, plus which stored keys have no rendering effect) and `relations` (which parent a type must sit in, which children it holds on real pages), mined from the renderer source, the editor's own panels, and a corpus of real pages.
+- `validate_page` now flags an unknown key on an element (with a "did you mean" suggestion), a key that is stored but never rendered (`NO_EFFECT`), a value outside the enum the editor's own picker offers, and a child placed under a parent type it never sits in on real pages.
+- `validate_page` now blocks `settings.extra_css` that contains `</style>`, `<script>`, or an HTML comment, since that content is injected raw into a `<style>` tag and would break out of it and run as page markup.
+- `get_page` gained `outline:true` (a compact one-line-per-element tree: id, type, text, desktop/mobile box, hidden/events flags) and `element_id` (return just that element's subtree with its `parent_id`, `root`, and id path), so an agent can read a page's structure without fetching the whole source.
+- `patch_page` gained four new ops: `move` (reparent and/or reorder an element, keeping it visually in place unless `left`/`top` are given), `duplicate` (deep-copy an element with fresh ids, remapping its internal event targets, optionally offset per copy), `style` (merge `styles` only), and a `match` selector (`type`/`text`/`section_id`/`within`) that `update`/`style`/`remove` can target instead of a single `id`, applying to every match up to a `limit`.
+- `patch_page` now reports `dangling_events` when a `remove` deletes an element that other elements' events (`open_popup`, `scroll_to`, …) still target.
+- `clone_page` now reproduces a slider (Swiper, Slick, Splide, Owl Carousel, Bootstrap carousel, Glide, Flickity, Keen, Embla) as a native `carousel` with native `slide` children instead of a static snapshot.
+- `clone_page` now turns a YouTube/Vimeo embed or a `<video>` tag into a native `video` element instead of an `html-box` iframe.
+- `clone_page` now detects a modal/dialog hidden on load as a `popup` element (with the triggering link/button wired to an `open_popup` event) and an in-page anchor link as a `scroll_to` event, instead of leaving them as inert markup.
+- `clone_page` now removes the source page's own internal scroll frames and scrolls through the page slowly before measuring, so lazy-loaded images and scroll-reveal content are captured instead of appearing blank; a tall `<main>` wrapping multiple full-width blocks is split into separate sections.
+- `clone_page` now matches desktop and mobile captures globally by section frame (DOM path first, then visible content) instead of position alone, and no longer hides content on mobile for a section whose match confidence is low.
+- `clone_page`'s layout autofix now trusts a text element's measured height (`config.virtualHeight`) instead of re-estimating it from font metrics, and only grows a container or pushes a sibling by the overflow an element actually produced, not by every declared overlap.
+
+### Changed
+- `update_page` and `patch_page` (live-page edits) no longer refuse a save over a validation error the page already had before the edit; only an error the edit itself introduces blocks the save, and pre-existing error counts are reported separately.
+- `clone_page` now only pulls an icon-font stylesheet into `settings.bhet` when it is served from a known public icon/font CDN, instead of any stylesheet link found in the page head.
+- `clone_page`'s captured `:hover`/`transition` CSS and icon-font link URLs are now sanitized before being written into `settings.extra_css`/`settings.bhet`, so page markup that could break out of a `<style>` tag or carry an unexpected URL is dropped.
+- `clone_page` now only treats a same-origin, `http(s)` video/iframe source as embeddable, and blocks outbound WebSocket connections during measurement (SSRF hardening alongside the existing private/link-local host checks).
+- `clone_page` text now preserves every CSS color (including `hsl`/`oklch`/etc.) as the `rgba()` form the editor's own color picker parses, instead of only the colors it already normalized.
+
+### Internal
+- Added `scripts/mine-renderer.mjs`, `scripts/mine-editor.mjs`, and an element-key corpus (2,614 keys across 48 types) mined from the real renderer, the editor panels, and 130 real pages, backing the new `get_element` key reference and `validate_page` key checks.
+
 ## [1.11.0] - 2026-11-19
 
 ### Added
