@@ -2,7 +2,9 @@
 // Clone fidelity for the landing platform (dev machine: Chrome + ../landing_page_build). For each
 // fixture (test/fidelity/fixtures/*.html) or URL argument: capture it in Chrome (browser-capture.ts),
 // convert (canvasToPageSource), save it like create_page does (expand → repair → validate), render it
-// through the REAL landing renderer, open the result at 1200 and 420 and score it against the source:
+// through the REAL landing renderer (+ settings.bhet in <head> and settings.extra_css, which the
+// published page's template / runtime inject; the runtime also hides the #sticky-<id> placeholders on
+// load — render_v4/sticky), open it at 1200 and 420 and score it against the source:
 //   text found · position error (canvas px) · height ratio. Screenshots → test/fidelity/out/.
 //   npm run build && node scripts/clone-check.mjs [url|file …]
 import fs from "node:fs";
@@ -16,11 +18,12 @@ const BUILD_DIR = path.resolve(process.env.LANDING_BUILD_DIR || path.join(ROOT, 
 const { captureLayout } = await import(pathToFileURL(path.join(ROOT, "dist/persistence/ingest/browser-capture.js")).href);
 const { landingDomain: D } = await import(pathToFileURL(path.join(ROOT, "dist/domains/landing/index.js")).href);
 const { chromium } = await import("playwright-core");
+const ARGS = process.argv.slice(2).map((a) => (/^https?:/.test(a) ? a : path.resolve(a))); // before chdir
 process.chdir(BUILD_DIR);
 const { default: build } = await import(pathToFileURL(path.join(BUILD_DIR, "render/build/index.js")).href);
 
-const targets = process.argv.slice(2).length
-  ? process.argv.slice(2)
+const targets = ARGS.length
+  ? ARGS
   : fs.readdirSync(path.join(ROOT, "test/fidelity/fixtures")).filter((f) => f.endsWith(".html")).map((f) => path.join(ROOT, "test/fidelity/fixtures", f));
 
 const browser = await chromium.launch(process.env.CHROME_BIN ? { executablePath: process.env.CHROME_BIN } : { channel: "chrome" });
@@ -49,7 +52,10 @@ async function texts(url, width, column) {
       const el = n.parentElement;
       const s = getComputedStyle(el);
       if (s.display === "none" || s.visibility === "hidden" || el.closest("script,style,noscript")) continue;
-      const r = el.getBoundingClientRect();
+      // the glyphs' own box (a Range), not the parent's — padding would bias the comparison
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const r = range.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) continue;
       out.push({ t: t.slice(0, 40), top: r.top + scrollY, left: r.left - colLeft });
     }
@@ -72,8 +78,8 @@ for (const t of targets) {
   const { app, app_css } = await build(body, { _uid: `cc${rows.length}` });
   const name = path.basename(t).replace(/\W+/g, "_");
   const htmlFile = path.join(OUT, `${name}.clone.html`);
-  fs.writeFileSync(htmlFile, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${app_css}</head><body style="margin:0">${app}</body></html>`);
-  const row = { name, elements: canvas.element_count, valid: v.valid, errors: v.errors.slice(0, 3), warnings: v.warnings.length, repairs: fixed.length, notes: notes.length };
+  fs.writeFileSync(htmlFile, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${app_css}${saved.settings.bhet || ""}<style>${saved.settings.extra_css || ""}[id^="sticky-"]{display:none}</style></head><body style="margin:0">${app}</body></html>`);
+  const row = { name, elements: canvas.element_count, extra_css: (saved.settings.extra_css || "").length, valid: v.valid, errors: v.errors.slice(0, 3), warnings: v.warnings.length, repairs: fixed.length, notes: notes.length };
   for (const [w, cw] of [[1200, 960], [420, 420]]) {
     const src = await texts(url, w, 0);
     const cl = await texts(pathToFileURL(htmlFile).href, w, w === 1200 ? 960 : 0);

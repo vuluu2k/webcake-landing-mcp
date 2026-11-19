@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hiệu ứng</title>
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; color: #1f2937; background: #fff; }
+  header { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.92); border-bottom: 1px solid #e5e7eb; }
+  .bar { max-width: 1040px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; height: 64px; padding: 0 20px; }
+  .logo { font-weight: 800; font-size: 22px; }
+  .cta { background: #7c3aed; color: #fff; text-decoration: none; padding: 10px 22px; border-radius: 999px; transition: background .25s, transform .25s; }
+  .cta:hover { background: #5b21b6; transform: translateY(-2px); }
+  .hero { background: linear-gradient(135deg, #7c3aed 0%, #ec4899 100%); padding: 96px 20px; text-align: center; color: #fff; }
+  .hero h1 { margin: 0; font-size: 56px; }
+  .grad { background: linear-gradient(90deg, #fde68a, #fff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { font-size: 20px; opacity: .9; }
+  .cards { max-width: 1040px; margin: 0 auto; padding: 72px 20px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .card { position: relative; overflow: hidden; border-radius: 20px; background: #f5f3ff; height: 300px; transition: transform .3s, box-shadow .3s; }
+  .card:hover { transform: translateY(-6px); box-shadow: 0 16px 32px rgba(124,58,237,.25); }
+  .card .blob { position: absolute; width: 220px; height: 220px; right: -70px; top: -70px; background: #c4b5fd; border-radius: 40px; transform: rotate(25deg); }
+  .card h3 { position: relative; margin: 0; padding: 150px 24px 8px; font-size: 22px; }
+  .card p { position: relative; margin: 0; padding: 0 24px; color: #6b7280; }
+  .glass { margin: 0 auto 72px; max-width: 600px; padding: 32px; border-radius: 24px; background: rgba(255,255,255,.4); backdrop-filter: blur(12px); box-shadow: 0 8px 24px rgba(0,0,0,.08); text-align: center; }
+  @media (max-width: 767px) { .cards { grid-template-columns: 1fr; } .hero h1 { font-size: 34px; } .bar { height: 56px; } }
+</style></head>
+<body>
+  <header><div class="bar"><div class="logo">Lumen</div><a class="cta" href="https://example.com/buy">Mua ngay</a></div></header>
+  <section class="hero"><h1 data-aos="fade-up">Ánh sáng <span class="grad">cho mọi nhà</span></h1><p data-aos="fade-up" data-aos-delay="200">Đèn thông minh, tiết kiệm điện, lắp trong 5 phút.</p></section>
+  <section><div class="cards">
+    <div class="card" data-aos="zoom-in"><div class="blob"></div><h3>Tiết kiệm</h3><p>Giảm 60% tiền điện.</p></div>
+    <div class="card" data-aos="zoom-in" data-aos-delay="100"><div class="blob"></div><h3>Thông minh</h3><p>Điều khiển bằng giọng nói.</p></div>
+    <div class="card" data-aos="zoom-in" data-aos-delay="200"><div class="blob"></div><h3>Bền bỉ</h3><p>Bảo hành 5 năm.</p></div>
+  </div></section>
+  <section><div class="glass"><h3>Đăng ký nhận ưu đãi</h3><p>Giảm 20% cho đơn đầu tiên.</p></div></section>
+</body></html>

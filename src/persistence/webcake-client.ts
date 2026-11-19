@@ -907,7 +907,7 @@ export async function uploadImageToCollection(
       // No Content-Type — fetch sets the multipart boundary from the FormData.
       // Auth mirrors authHeaders() but without its JSON Content-Type.
       headers: {
-        Accept: "application/json",
+        Accept: "application/json, text/plain, */*", // builder host: application/json alone → 406
         Authorization: `Bearer ${config.jwt}`,
         Cookie: `jwt=${config.jwt}`,
         "x-org-id": `${org}`,
@@ -974,7 +974,8 @@ export async function resolveOrgRootFolderId(
   try {
     const res = await fetch(url, {
       method: "GET",
-      headers: { ...authHeaders(config, orgId) },
+      // builder routes `plug :accepts` — a bare application/json Accept gets a 406 (as publish does)
+      headers: { ...authHeaders(config, orgId), Accept: "application/json, text/plain, */*" },
       signal: timeoutSignal(HTTP_TIMEOUT_MS),
     });
     if (res.ok) {
@@ -1331,6 +1332,36 @@ async function fontSyncField(config: WebcakeConfig, pageId: string, source: any,
 }
 
 /**
+ * Generic call for the API gateway (tools/api-gateway.ts): any backend route on the API host
+ * (`base: "api"`) or the builder host (`base: "builder"`), with the client's usual auth headers.
+ * The builder scope pipes through `plug :accepts, ["html"]`, so a bare `Accept: application/json`
+ * is refused there with 406 — the editor's axios default (`…, *\/*`) passes on both hosts.
+ */
+export async function apiRequest(
+  config: WebcakeConfig,
+  req: { base: "api" | "builder"; method: string; path: string; query?: Record<string, unknown>; body?: unknown; orgId?: string }
+): Promise<{ ok: boolean; status: number; json: any; text: string }> {
+  const root = (req.base === "builder" ? config.builderBase ?? config.base : config.base).replace(/\/+$/, "");
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(req.query ?? {})) {
+    if (v == null) continue;
+    if (Array.isArray(v)) v.forEach((x) => qs.append(`${k}[]`, String(x)));
+    else qs.append(k, typeof v === "object" ? JSON.stringify(v) : String(v));
+  }
+  const url = `${root}${req.path}${qs.toString() ? `?${qs}` : ""}`;
+  const headers = { ...authHeaders(config, req.orgId), Accept: "application/json, text/plain, */*" };
+  const body = req.method === "GET" || req.body === undefined ? undefined : JSON.stringify(req.body);
+  const res = await postToHost(url, headers, body, { method: req.method });
+  let json: any = null;
+  try {
+    json = JSON.parse(res.text);
+  } catch {
+    /* non-JSON (HTML error page / plain text) */
+  }
+  return { ok: res.status >= 200 && res.status < 300, status: res.status, json, text: res.text };
+}
+
+/**
  * POST to a host-scoped route. Node's fetch cannot reach `*.localhost` hosts
  * (browsers special-case .localhost; Node's DNS does not, and undici forbids a
  * manual Host header) — so for those we connect to loopback via node:http and
@@ -1340,7 +1371,7 @@ async function postToHost(
   url: string,
   headers: Record<string, string>,
   body: string | undefined,
-  opts: { method?: "GET" | "POST"; timeoutMs?: number } = {}
+  opts: { method?: string; timeoutMs?: number } = {}
 ): Promise<{ status: number; text: string }> {
   const method = opts.method ?? "POST";
   const timeoutMs = opts.timeoutMs ?? HTTP_TIMEOUT_MS;

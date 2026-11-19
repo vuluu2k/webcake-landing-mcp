@@ -14,6 +14,7 @@ import { registerMediaTools } from "./media.js";
 import { registerIngestTools } from "./ingest.js";
 import { registerPersistenceTools } from "./persistence.js";
 import { registerCloneTools } from "./clone.js";
+import { registerApiGatewayTools } from "./api-gateway.js";
 
 export function registerTools(server: McpServer, domain: Domain, { allowLocalFiles = true }: { allowLocalFiles?: boolean } = {}) {
   registerReferenceTools(server, domain);
@@ -22,4 +23,5 @@ export function registerTools(server: McpServer, domain: Domain, { allowLocalFil
   registerIngestTools(server, domain);
   registerCloneTools(server, domain);
   registerPersistenceTools(server, domain);
+  registerApiGatewayTools(server);
 }

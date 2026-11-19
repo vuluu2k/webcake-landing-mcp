@@ -188,6 +188,8 @@ function processNode(node: any, bp: Bp, canvasW: number, pageFont: unknown, fixe
     eff.set(k, processNode(k, bp, childCanvasW, pageFont, fixes));
   }
   // 2) pull each child on-canvas (horizontal), then 3) reflow them downward.
+  const clips = isClipGroup(node);
+  if (clips) return ownH ?? 0;
   for (const k of kids) clampChild(k, bp, ownW, fixes);
   reflowChildren(kids, eff, origH, bp, fixes);
 
@@ -204,6 +206,12 @@ function processNode(node: any, bp: Bp, canvasW: number, pageFont: unknown, fixe
     return grown;
   }
   return ownH != null ? ownH : Math.ceil(maxBottom);
+}
+
+/** A group that clips its content (custom_css overflow:hidden, e.g. from clone_page): children hanging
+ *  over its edge are intended — never pulled back in, and the group is not grown around them. */
+export function isClipGroup(node: any): boolean {
+  return node?.specials?.customAdvance === true && /overflow\s*:\s*(hidden|clip)/.test(String(node?.specials?.custom_css ?? ""));
 }
 
 function pushFix(fixes: string[], msg: string): void {

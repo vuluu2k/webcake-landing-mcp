@@ -22,7 +22,7 @@ import type { IngestedCanvas, CanvasElement, CanvasSection } from "../../persist
 const MOBILE_W = CANVAS.mobileWidth;
 const DESKTOP_W = CANVAS.desktopWidth;
 
-type Ctx = { mobileOnly: boolean; notes: string[]; usedIds: Set<string>; mobileByBox: WeakMap<object, CanvasElement["mobile"]> };
+type Ctx = { mobileOnly: boolean; notes: string[]; usedIds: Set<string>; mobileByBox: WeakMap<object, CanvasElement["mobile"]>; css: string[] };
 type StyleBag = Record<string, string> | undefined;
 type Styles = Record<string, string | number>;
 type Breakpoint = { styles: Styles; config?: Record<string, any> };
@@ -121,8 +121,12 @@ function mapStyles(bag: StyleBag, type: string): Styles {
   if (bag["border-color"]) out.borderColor = bag["border-color"];
   // background: NEVER on text-block (it activates gradient-text-fill and makes
   // glyphs invisible); image-block gets it derived from src by the server.
+  if (bag["filter"] && type !== "text-block") out.filter = bag["filter"];
+  if (bag["backdrop-filter"]) out.backdropFilter = bag["backdrop-filter"];
+  // gradient text (browser capture): a text-block paints styles.background into its glyphs
+  if (type === "text-block" && bag["text-gradient"]) out.background = bag["text-gradient"];
   if (type !== "text-block" && type !== "image-block") {
-    const bg = bag["background-color"] ?? bag["background"];
+    const bg = bag["background"]?.includes("gradient(") ? bag["background"] : (bag["background-color"] ?? bag["background"]);
     if (bg && !bg.includes("url(")) out.background = bg;
     else if (bg) {
       const u = BG_URL_RE.exec(bg);
@@ -285,7 +289,35 @@ function convertChildren(ctx: Ctx, e: CanvasElement, sectionH?: number): SourceN
 function convertElement(ctx: Ctx, e: CanvasElement, sectionH?: number): SourceNode | null {
   const node = convertElementInner(ctx, e, sectionH);
   if (node && e.box?.fixed) applySticky(ctx, node, e);
+  if (node && (e.hover || e.transition)) ctx.css.push(hoverCss(node, e.hover, e.transition));
   return node;
+}
+
+/** The inner box each type paints into (render/build/index.js): hover colours go there, motion on #w-<id>. */
+const INNER_CLASS: Record<string, string> = { button: "button-css", rectangle: "rectangle-css", "text-block": "text-block-css", "image-block": "image-block-css" };
+const WRAPPER_PROPS = /^(transform|translate|scale|rotate|opacity|filter|z-index)$/;
+/**
+ * The page's own :hover rules + transition, scoped to this element (#w-<id>): a native landing node
+ * has no hover state, so this is the one piece of a clone that needs settings.extra_css.
+ */
+function hoverCss(node: SourceNode, hover?: string, transition?: string): string {
+  const id = `#w-${node.id}`;
+  const inner = INNER_CLASS[node.type] ? ` .${INNER_CLASS[node.type]}` : "";
+  // a group paints nothing itself: it takes motion + shadow (its paint box inside takes the colours)
+  const group = node.type === "group";
+  const wrap: string[] = [];
+  const paint: string[] = [];
+  for (const d of (hover ?? "").split(";").map((x) => x.trim()).filter(Boolean)) {
+    const prop = d.slice(0, d.indexOf(":")).trim().toLowerCase();
+    if (!prop || /^(position|top|left|right|bottom|width|height|display|margin|padding)/.test(prop)) continue; // geometry belongs to the canvas
+    if (WRAPPER_PROPS.test(prop) || (group && prop === "box-shadow")) wrap.push(d);
+    else if (!group) paint.push(d);
+  }
+  let css = "";
+  if (transition) css += `${id}${inner ? `,${id}${inner}` : ""}{transition:${transition}}`;
+  if (wrap.length) css += `${id}:hover{${wrap.join(";")}}`;
+  if (paint.length) css += `${id}:hover${inner}{${paint.join(";")}}`;
+  return css;
 }
 
 function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): SourceNode | null {
@@ -464,6 +496,13 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       specials: {},
       children: convertChildren(ctx, e, sectionH),
     };
+    // a clip group (browser capture): the renderer has no overflow setting, custom_css carries it
+    if (style["overflow"] === "hidden") {
+      node.specials = {
+        customAdvance: true,
+        custom_css: `overflow:hidden;${style["border-radius"] ? `border-radius:${style["border-radius"]};` : ""}${style["box-shadow"] ? `box-shadow:${style["box-shadow"]};` : ""}`,
+      };
+    }
     const ev = mapEvents(ctx, e);
     if (ev) node.events = ev;
     applyAnimation(node, e, "group");
@@ -609,15 +648,18 @@ function convertSection(ctx: Ctx, s: CanvasSection): SourceNode {
   if (s.background) {
     const u = s.background["background-image"];
     const color = s.background["background-color"];
-    if (u) styles.background = canonicalBg(u);
+    if (u?.includes("gradient(")) styles.background = u;
+    else if (u) styles.background = canonicalBg(u);
     else if (color) styles.background = color;
   }
   const mStyles = cloneJ(styles);
   if (s.mobile?.height) mStyles.height = s.mobile.height;
+  // a sticky header: the section's native "always on top" sticky (exportCss.js:207)
+  const config = s.sticky ? { sticky: true, stickyPosition: "a-t" } : undefined;
   return {
     id: uniqueId(ctx, s.id),
     type: "section",
-    responsive: { desktop: { styles: cloneJ(styles) }, mobile: { styles: mStyles } },
+    responsive: { desktop: { styles: cloneJ(styles), ...(config ? { config: { ...config } } : {}) }, mobile: { styles: mStyles, ...(config ? { config: { ...config } } : {}) } },
     children: s.elements.map((e) => convertElement(ctx, e, h)).filter(Boolean) as SourceNode[],
   };
 }
@@ -651,7 +693,7 @@ export type CanvasToSourceResult = { source: unknown; notes: string[] };
  * lossy approximation the caller should review/patch.
  */
 export function canvasToPageSource(canvas: IngestedCanvas, meta: CanvasToSourceMeta = {}): CanvasToSourceResult {
-  const ctx: Ctx = { mobileOnly: !!canvas.mobile_only, notes: [], usedIds: new Set(), mobileByBox: new WeakMap() };
+  const ctx: Ctx = { mobileOnly: !!canvas.mobile_only, notes: [], usedIds: new Set(), mobileByBox: new WeakMap(), css: [] };
   const index = (e: CanvasElement) => {
     if (e.box && e.mobile !== undefined) ctx.mobileByBox.set(e.box, e.mobile);
     (e.children ?? []).forEach(index);
@@ -667,6 +709,17 @@ export function canvasToPageSource(canvas: IngestedCanvas, meta: CanvasToSourceM
   });
   source.page = canvas.sections.map((s) => convertSection(ctx, s));
   source.popup = (canvas.popups ?? []).map((p) => convertPopup(ctx, p));
+  // Custom code only for what no native setting covers: hover states (scoped to #w-<id>) and the
+  // icon-font stylesheets glyph texts need.
+  const css = ctx.css.filter(Boolean).join("\n");
+  if (css) {
+    source.settings.extra_css = css;
+    ctx.notes.push(`hover effects of ${ctx.css.filter(Boolean).length} element(s) → settings.extra_css (scoped to #w-<id>)`);
+  }
+  if (canvas.head_links?.length) {
+    source.settings.bhet = canvas.head_links.map((h) => `<link rel="stylesheet" href="${h.replace(/"/g, "%22")}">`).join("");
+    ctx.notes.push(`icon font stylesheet(s) → settings.bhet: ${canvas.head_links.join(", ")}`);
+  }
   if (canvas.truncated) {
     ctx.notes.push(
       "the canvas payload was truncated (styles pruned) — for full typography re-ingest per section (sections:[id]) and patch the affected elements."

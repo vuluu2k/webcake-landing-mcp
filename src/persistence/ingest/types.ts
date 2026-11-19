@@ -180,6 +180,9 @@ export type CanvasElement = {
   children?: CanvasElement[];
   /** text: the source tag (h1…h6, p) when measured in a browser. */
   tag?: string;
+  /** browser capture: declarations of the page's `:hover` rules for this element, and its transition. */
+  hover?: string;
+  transition?: string;
   /** measured mobile layout (browser capture): box on the 420 canvas + typography; null = hidden on mobile; only = shown on mobile only. */
   mobile?: { box: { top: number; left: number; width: number; height: number }; style?: Record<string, string>; only?: boolean } | null;
 };
@@ -193,6 +196,8 @@ export type CanvasSection = {
   elements: CanvasElement[];
   /** measured mobile band height (browser capture). */
   mobile?: { height?: number };
+  /** position:sticky/fixed at the top of the viewport (a sticky header). */
+  sticky?: boolean;
 };
 
 export type IngestedCanvas = {
@@ -200,6 +205,8 @@ export type IngestedCanvas = {
   builder: "ladi" | "browser";
   /** every element carries its own measured mobile box (no 420/960 scaling). */
   measured_mobile?: boolean;
+  /** stylesheet urls the page needs in <head> (icon fonts) → settings.bhet. */
+  head_links?: string[];
   /** source canvas width: 420 (mobile) or 960 (desktop) — same as the Webcake canvas. */
   width: number;
   mobile_only?: boolean;

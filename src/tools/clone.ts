@@ -10,11 +10,25 @@ import type { Domain } from "../core/domain.js";
 import { text } from "../mcp/response.js";
 import { captureLayout } from "../persistence/ingest/browser-capture.js";
 import { putDraft } from "../persistence/draft-cache.js";
+import { parseHtml, fetchHtml, fetchStylesheets, applyCloneFonts } from "../persistence/html-ingest.js";
+
+/** Self-hosted fonts (@font-face in the page + its stylesheets) in the settings.fontGroups shape, via the
+ *  static ingest parser; their files are re-hosted on save. Best effort: a failure only skips fonts. */
+async function fontGroupsOf(target: { url?: string; html?: string }) {
+  try {
+    const html = target.html ?? (await fetchHtml(target.url!)).html;
+    if (!html) return [];
+    const extraCss = target.url ? await fetchStylesheets(html, target.url) : undefined;
+    return parseHtml(html, "compact", { baseUrl: target.url, extraCss }).font_groups ?? [];
+  } catch {
+    return [];
+  }
+}
 
 export function registerCloneTools(server: McpServer, domain: Domain) {
   server.tool(
     "clone_page",
-    "Clones any web page into a Webcake landing page by MEASURING it in a real browser (headless Chrome via Playwright, JavaScript executed — works for React/Vue/Next sites too). The page is loaded at 1200 px and at 420 px; every visible text, image, button, painted box, divider, svg icon and form is recorded with its box, rotation and typography and placed on the landing canvas: desktop boxes scaled onto 960, mobile boxes as measured on 420 (elements the mobile layout hides get config.hide on mobile; mobile-only ones are hidden on desktop). Links become open_link events; fixed elements are pinned. The source is validated like a save and cached: the result carries `draft_id` — save it with create_page({ draft_id, dry_run:false }). Approximations: overflow clipping and CSS animations are not reproduced, svg icons are single-colour masks, iframes become html-box embeds. Needs Playwright on the host (playwright-core + Chrome, or CHROME_BIN). No credentials, no writes.",
+    "Clones any web page into a Webcake landing page by MEASURING it in a real browser (headless Chrome via Playwright, JavaScript executed — works for React/Vue/Next sites too). The page is loaded at 1200 px and at 420 px; every visible text, image, button, painted box, divider, svg icon and form is recorded with its box, rotation and typography and placed on the landing canvas: desktop boxes scaled onto 960, mobile boxes as measured on 420 (elements the mobile layout hides get config.hide on mobile; mobile-only ones are hidden on desktop). Links become open_link events; fixed elements are pinned; a sticky header becomes the section's native sticky (a-t). Effects, native first: gradients (also gradient text), filters/backdrop blur, rotation and AOS / animate.css / WOW entrance animations map onto native settings; an overflow:hidden box whose content spills out becomes a clipping group (custom_css overflow:hidden); the page's own :hover rules + transitions become settings.extra_css scoped to #w-<id> (the one thing no native setting covers); icon-font stylesheets go to settings.bhet; self-hosted @font-face fonts to settings.fontGroups. The source is validated like a save and cached: the result carries `draft_id` — save it with create_page({ draft_id, dry_run:false }). Approximations: hover rules nested under a hovered ancestor (.card:hover img) and CSS keyframe loops are not reproduced, svg icons are single-colour masks, iframes become html-box embeds, popups/modals hidden on load are not captured. Needs Playwright on the host (playwright-core + Chrome, or CHROME_BIN). No credentials, no writes.",
     {
       url: z.string().optional().describe("Public http(s) URL of the page to clone."),
       html: z.string().optional().describe("Raw HTML instead of a URL (relative assets will not load)."),
@@ -31,6 +45,8 @@ export function registerCloneTools(server: McpServer, domain: Domain) {
         return text({ ok: false, error, ...(/playwright|chrom/i.test(error) ? { hint: "No browser on this host: use ingest_url (static HTML) or ask for a screenshot." } : {}) });
       }
       const { source, notes } = domain.canvasToSource!(canvas, { title: canvas.title, description: canvas.description });
+      const fonts = applyCloneFonts(source, await fontGroupsOf(url ? { url } : { html: html! }));
+      if (fonts.length) notes.push(`self-hosted fonts ${fonts.join(", ")} → settings.fontGroups (files re-hosted on save)`);
       const expanded = domain.expand(source);
       const autoFixed = domain.autofixLayout?.(expanded) ?? [];
       const result = domain.validate(expanded);

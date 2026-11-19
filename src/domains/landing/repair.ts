@@ -94,5 +94,29 @@ export function repairSource(source: any): string[] {
     (Array.isArray(n.children) ? n.children : []).forEach((c: any, i: number) => walk(c, `${path}.children[${i}]`));
   };
   for (const key of ["page", "popup"]) (Array.isArray(source[key]) ? source[key] : []).forEach((n: any, i: number) => walk(n, `${key}[${i}]`));
+
+  // extra_css rules that only target elements no longer on the page (#w-<id> of a deleted node) are
+  // dead code: drop them. Flat stylesheets only — anything with @-rules / nesting is left untouched.
+  if (typeof s.extra_css === "string" && s.extra_css.includes("#w-") && !/[@]/.test(s.extra_css)) {
+    const ids = new Set<string>();
+    const collect = (n: any) => {
+      if (!isObj(n)) return;
+      if (typeof n.id === "string") ids.add(n.id);
+      (Array.isArray(n.children) ? n.children : []).forEach(collect);
+    };
+    for (const key of ["page", "popup"]) (Array.isArray(source[key]) ? source[key] : []).forEach(collect);
+    const rules = s.extra_css.match(/[^{}]+\{[^{}]*\}/g);
+    if (rules && rules.join("").replace(/\s/g, "") === s.extra_css.replace(/\s/g, "")) {
+      const dead = (r: string) => {
+        const targets = [...r.slice(0, r.indexOf("{")).matchAll(/#w-([\w-]+)/g)].map((m) => m[1]);
+        return targets.length > 0 && targets.every((id) => !ids.has(id));
+      };
+      const kept = rules.filter((r: string) => !dead(r));
+      if (kept.length !== rules.length) {
+        fixed.push(`settings.extra_css: dropped ${rules.length - kept.length} rule(s) for elements no longer on the page`);
+        s.extra_css = kept.map((r: string) => r.trim()).join("\n");
+      }
+    }
+  }
   return fixed;
 }

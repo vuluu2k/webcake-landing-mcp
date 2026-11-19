@@ -29,9 +29,16 @@ type Raw = {
   style: Record<string, string>;
   input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean };
   fields?: Raw[];
+  /** clip group (an overflow:hidden box whose content spills out): children are relative to it. */
+  children?: Raw[];
+  /** declarations of the page's own `<selector>:hover` rules that match this element. */
+  hover?: string;
+  transition?: string;
+  /** entrance animation from AOS / animate.css / WOW classes, mapped to an animate.css name. */
+  animation?: Record<string, string>;
 };
-type RawSection = { key: string; top: number; height: number; background: Record<string, string>; elements: Raw[] };
-type RawCapture = { title: string; description: string; width: number; sections: RawSection[]; truncated: boolean };
+type RawSection = { key: string; top: number; height: number; background: Record<string, string>; elements: Raw[]; sticky?: boolean };
+type RawCapture = { title: string; description: string; width: number; sections: RawSection[]; truncated: boolean; headLinks: string[] };
 
 /**
  * Runs INSIDE the page (serialized by Playwright): self-contained, no outer references.
@@ -85,8 +92,13 @@ function captureInPage(maxElements: number): RawCapture {
     if (s.textTransform !== "none") out["text-transform"] = s.textTransform;
     if (s.textShadow !== "none") out["text-shadow"] = s.textShadow;
   };
+  const textClip = (s: CSSStyleDeclaration) => s.webkitBackgroundClip === "text" || s.backgroundClip === "text";
+  const gradient = (s: CSSStyleDeclaration) => (/gradient\(/.test(s.backgroundImage) && !/url\(/.test(s.backgroundImage) ? s.backgroundImage : "");
   const paint = (s: CSSStyleDeclaration, out: Record<string, string>) => {
     if (alpha(s.backgroundColor) > 0) out["background-color"] = s.backgroundColor;
+    if (gradient(s) && !textClip(s)) out["background"] = gradient(s);
+    if (s.filter && s.filter !== "none") out["filter"] = s.filter;
+    if (s.backdropFilter && s.backdropFilter !== "none") out["backdrop-filter"] = s.backdropFilter;
     const bw = parseFloat(s.borderTopWidth);
     // A border on all four sides is the box's border; a single top/bottom rule is emitted as a line (rules()).
     const all = ["Right", "Bottom", "Left"].every((d) => parseFloat(s[`border${d}Width`]) === bw);
@@ -101,7 +113,7 @@ function captureInPage(maxElements: number): RawCapture {
     if (parseFloat(s.opacity) < 1) out["opacity"] = s.opacity;
   };
   const painted = (s: CSSStyleDeclaration) =>
-    alpha(s.backgroundColor) > 0 || !!bgUrl(s) || (parseFloat(s.borderTopWidth) > 0 && s.borderTopStyle !== "none" && parseFloat(s.borderBottomWidth) > 0) || s.boxShadow !== "none";
+    alpha(s.backgroundColor) > 0 || !!bgUrl(s) || (!!gradient(s) && !textClip(s)) || (!!s.backdropFilter && s.backdropFilter !== "none") || (parseFloat(s.borderTopWidth) > 0 && s.borderTopStyle !== "none" && parseFloat(s.borderBottomWidth) > 0) || s.boxShadow !== "none";
   /** top-only / bottom-only borders (dividers, FAQ rows) → line elements at that edge. */
   const rules = (el: Element, s: CSSStyleDeclaration, box: { top: number; left: number; width: number; height: number }): Raw[] => {
     const out: Raw[] = [];
@@ -140,7 +152,85 @@ function captureInPage(maxElements: number): RawCapture {
     walk(el);
     return out.replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{2,}/g, "\n").trim();
   };
-  const textOf = (el: HTMLElement) => visibleText(el).replace(/\n/g, "<br>");
+  const esc = (x: string) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  /** The text as landing text-block HTML: inline runs that differ from the block (colour, weight,
+   *  italic, underline, gradient fill) keep their look as <span style>; hidden runs are dropped. */
+  const textOf = (root: Element): string => {
+    const walk = (n: any, ps: CSSStyleDeclaration): string => {
+      if (n.nodeType === 3) return esc(n.textContent.replace(/\s+/g, " "));
+      if (n.nodeType !== 1) return "";
+      if (n.tagName === "BR") return "<br>";
+      if (n !== root && (!shown(n) || icon(n))) return "";
+      const s = cs(n);
+      const inner = Array.from<any>(n.childNodes).map((c: any) => walk(c, s)).join("");
+      if (n === root) return inner;
+      const st: string[] = [];
+      if (textClip(s) && gradient(s)) st.push(`background:${gradient(s)};-webkit-background-clip:text;background-clip:text;color:transparent`);
+      else if (s.color !== ps.color) st.push(`color:${s.color}`);
+      if (s.fontWeight !== ps.fontWeight) st.push(`font-weight:${s.fontWeight}`);
+      if (s.fontStyle !== ps.fontStyle) st.push(`font-style:${s.fontStyle}`);
+      if (s.textDecorationLine !== ps.textDecorationLine && s.textDecorationLine !== "none") st.push(`text-decoration:${s.textDecorationLine}`);
+      return st.length ? `<span style="${st.join(";").replace(/"/g, "'")}">${inner}</span>` : inner;
+    };
+    return walk(root, cs(root)).replace(/\s*<br>\s*/g, "<br>").trim();
+  };
+
+  // The page's own :hover rules (same-origin / CORS-readable sheets; @media that matches; @supports,
+  // @layer): `X:hover` on the subject only — the hovered element is the one restyled.
+  const hoverRules: { base: string; css: string }[] = [];
+  const readRules = (rules: any) => {
+    for (const r of Array.from<any>(rules ?? [])) {
+      if (hoverRules.length > 400) return;
+      if (r.media && !window.matchMedia(r.media.mediaText).matches) continue;
+      if (r.cssRules && !r.selectorText) readRules(r.cssRules);
+      if (!r.selectorText || !r.selectorText.includes(":hover") || !r.style?.cssText) continue;
+      for (const part of r.selectorText.split(",")) {
+        const sel = part.trim();
+        if (!/:hover(?=[^\s>+~]*$)/.test(sel)) continue;
+        const base = sel.replace(/:hover/, "");
+        if (base && !base.includes(":hover")) hoverRules.push({ base, css: r.style.cssText });
+      }
+    }
+  };
+  for (const sheet of Array.from<any>(document.styleSheets)) {
+    try {
+      readRules(sheet.cssRules);
+    } catch {
+      /* cross-origin sheet without CORS: unreadable */
+    }
+  }
+  const hoverOf = (el: Element) => {
+    const css = new Set<string>();
+    for (const r of hoverRules) {
+      try {
+        if (el.matches(r.base)) r.css.split(";").map((d: string) => d.trim()).filter(Boolean).forEach((d: string) => css.add(d));
+      } catch {
+        /* selector the engine rejects */
+      }
+    }
+    return [...css].join(";");
+  };
+  // Entrance animations from the usual libraries → animate.css names (the landing animation set).
+  const AOS: Record<string, string> = {
+    fade: "fadeIn", "fade-up": "fadeInUp", "fade-down": "fadeInDown", "fade-left": "fadeInRight", "fade-right": "fadeInLeft",
+    "zoom-in": "zoomIn", "zoom-in-up": "zoomInUp", "zoom-in-down": "zoomInDown", "zoom-out": "zoomOut",
+    "flip-left": "flipInY", "flip-right": "flipInY", "flip-up": "flipInX", "flip-down": "flipInX",
+    "slide-up": "slideInUp", "slide-down": "slideInDown", "slide-left": "slideInRight", "slide-right": "slideInLeft",
+  };
+  const animationOf = (el: Element): Record<string, string> | undefined => {
+    const a = el.closest("[data-aos]");
+    if (a && AOS[a.getAttribute("data-aos")]) {
+      const out: Record<string, string> = { name: AOS[a.getAttribute("data-aos")], duration: String((Number(a.getAttribute("data-aos-duration")) || 600) / 1000) };
+      const d = Number(a.getAttribute("data-aos-delay"));
+      if (d) out.delay = String(d / 1000);
+      return out;
+    }
+    const c = el.closest('[class*="animate__"], .wow');
+    const m = c && String(c.className).match(/(?:animate__|\bwow\s+(?:animate__)?)([a-z]+[A-Z][A-Za-z]*|[a-z]+In)\b/);
+    if (m && !/^(animated|delay|faster|slow)/.test(m[1])) return { name: m[1], duration: "1" };
+    return undefined;
+  };
+  const ICON_FONT = /awesome|material|icon|remix|boxicons|ionicons|icomoon|fontello|themify|feather|phosphor|tabler/i;
 
   // sections
   let root: Element = document.body;
@@ -153,6 +243,7 @@ function captureInPage(maxElements: number): RawCapture {
   const bandEls = sizeable(root).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
   let count = 0;
   let truncated = false;
+  let usesIconFont = false;
   const sections: RawSection[] = [];
   const pageBg = (() => {
     for (const el of [root, document.body, document.documentElement]) {
@@ -168,7 +259,10 @@ function captureInPage(maxElements: number): RawCapture {
     const bs = cs(band);
     const background: Record<string, string> = { "background-color": alpha(bs.backgroundColor) > 0 ? bs.backgroundColor : pageBg };
     if (bgUrl(bs)) background["background-image"] = bgUrl(bs);
+    else if (gradient(bs)) background["background-image"] = gradient(bs);
     const elements: Raw[] = [];
+    // Paint (boxes, background images, rules) under content, keeping DOM order inside each layer.
+    const layer = (e: Raw) => (e.kind === "box" || e.kind === "line" || e.key.endsWith("~bg") ? 0 : e.kind === "image" || e.kind === "shape" || e.kind === "video" || e.kind === "embed" || e.kind === "group" ? 1 : 2);
     // A rotated element: its UNROTATED box (centred on the drawn one) + the angle, which is what the
     // landing renderer takes (styles.transform rotate(); exportCss.js:205).
     const angleOf = (el: Element) => {
@@ -177,7 +271,7 @@ function captureInPage(maxElements: number): RawCapture {
       const [a, b] = m[1].split(",").map(parseFloat);
       return Math.round((Math.atan2(b, a) * 180) / Math.PI);
     };
-    const boxOf = (el: Element, base = { top: secTop, left: 0 }) => {
+    const boxOf = (el: Element, base = origin) => {
       const r = el.getBoundingClientRect();
       const deg = angleOf(el);
       if (deg && (el as any).offsetWidth) {
@@ -187,20 +281,39 @@ function captureInPage(maxElements: number): RawCapture {
       }
       return { top: Math.round(r.top + sy - base.top), left: Math.round(r.left - base.left), width: Math.round(r.width), height: Math.round(r.height) };
     };
+    /** A text's box is its CONTENT box: the landing text-block has no padding, the source's padding is offset. */
+    const contentBox = (el: Element, s: CSSStyleDeclaration) => {
+      const b = boxOf(el);
+      if (angleOf(el)) return b;
+      const [pt, pr, pb, pl] = ["Top", "Right", "Bottom", "Left"].map((d) => (parseFloat(s[`padding${d}`]) || 0) + (parseFloat(s[`border${d}Width`]) || 0));
+      return { top: Math.round(b.top + pt), left: Math.round(b.left + pl), width: Math.max(4, Math.round(b.width - pl - pr)), height: Math.max(4, Math.round(b.height - pt - pb)) };
+    };
+    // Where push() writes and what boxOf() measures from: the section, or the clip group being filled.
+    let sink: Raw[] = elements;
+    let origin = { top: secTop, left: 0 };
     const push = (raw: Raw) => {
       const el = (raw as any).__el;
       delete (raw as any).__el;
       if (el) {
         const deg = angleOf(el);
         if (deg) raw.style.transform = `rotate(${deg}deg)`;
-        if (cs(el).position === "fixed") raw.fixed = true;
+        const es = cs(el);
+        if (es.position === "fixed") raw.fixed = true;
+        if (ICON_FONT.test(es.fontFamily)) usesIconFont = true;
+        {
+          const h = hoverOf(el);
+          if (h) raw.hover = h;
+          if (es.transitionDuration && es.transitionDuration.split(",").some((d: string) => parseFloat(d) > 0)) raw.transition = es.transition.slice(0, 300);
+          const a = animationOf(el);
+          if (a) raw.animation = a;
+        }
       }
       if (count >= maxElements) {
         truncated = true;
         return;
       }
       count++;
-      elements.push(raw);
+      sink.push(raw);
     };
     const visit = (el: Element, inForm: boolean) => {
       if (SKIP.has(el.tagName) || !shown(el) || count >= maxElements) return;
@@ -270,6 +383,42 @@ function captureInPage(maxElements: number): RawCapture {
         push({ __el: el, key: keyOf(el), kind: "button", text, box: boxOf(el), style, href });
         return;
       }
+      // overflow:hidden box whose content spills out (decor, zoomed images, rotated shapes): a group
+      // that clips its children (custom_css overflow:hidden on the group), the box's paint inside it.
+      const er = el.getBoundingClientRect();
+      if (el !== band && (s.overflowX !== "visible" || s.overflowY !== "visible") && er.width > 40 && er.height > 40 && !angleOf(el) &&
+          Array.from<any>(el.querySelectorAll("*")).slice(0, 400).some((d: any) => {
+            const q = d.getBoundingClientRect();
+            return q.width > 0 && q.height > 0 && (q.left < er.left - 2 || q.right > er.right + 2 || q.top < er.top - 2 || q.bottom > er.bottom + 2);
+          })) {
+        const group: Raw = { __el: el, key: keyOf(el) + "~clip", kind: "group", box: boxOf(el), style: { overflow: "hidden" }, children: [] };
+        const br0 = parseFloat(s.borderTopLeftRadius);
+        if (br0 > 0) group.style["border-radius"] = `${Math.round(br0)}px`;
+        const [outerSink, outerOrigin] = [sink, origin];
+        sink = group.children!;
+        origin = { top: er.top + sy, left: er.left };
+        for (const r of rules(el, s, boxOf(el))) push(r);
+        if (painted(s)) {
+          const url = bgUrl(s);
+          paint(s, style);
+          push({ __el: el, key: keyOf(el) + "~bg", kind: url ? "image" : "box", src: url || undefined, box: boxOf(el), style });
+        }
+        Array.from<any>(el.children).forEach((c) => visit(c, inForm));
+        group.children!.sort((a, b) => layer(a) - layer(b));
+        [sink, origin] = [outerSink, outerOrigin];
+        push(group);
+        // The group carries the element's motion (hover lift, entrance) and its shadow — a shadow inside
+        // an overflow:hidden box would be clipped; the paint box inside keeps only its colours.
+        const bg = group.children!.find((c) => c.key === keyOf(el) + "~bg");
+        if (s.boxShadow !== "none") group.style["box-shadow"] = s.boxShadow;
+        if (bg) {
+          delete bg.style["box-shadow"];
+          delete bg.animation;
+          delete bg.transition;
+          if (bg.hover) bg.hover = bg.hover.split(";").filter((d) => !/^\s*(transform|translate|scale|rotate|box-shadow)\s*:/.test(d)).join(";") || undefined;
+        }
+        return;
+      }
       if (el !== band) for (const r of rules(el, s, boxOf(el))) push(r);
       if (painted(s) && el !== band) {
         const url = bgUrl(s);
@@ -282,7 +431,9 @@ function captureInPage(maxElements: number): RawCapture {
       if (text && inlineOnly(el) && !linkRow) {
         const st: Record<string, string> = {};
         typo(s, st);
-        push({ __el: el, key: keyOf(el), kind: /^H[1-6]$/.test(tag) ? "headline" : "paragraph", tag: tag.toLowerCase(), text: textOf(el as HTMLElement), box: boxOf(el), style: st, href });
+        // gradient text (background-clip:text): a landing text-block paints its background INTO the glyphs
+        if (textClip(s) && gradient(s)) st["text-gradient"] = gradient(s);
+        push({ __el: el, key: keyOf(el), kind: /^H[1-6]$/.test(tag) ? "headline" : "paragraph", tag: tag.toLowerCase(), text: textOf(el), box: contentBox(el, s), style: st, href });
         Array.from<any>(el.children).filter(icon).forEach((c: any) => visit(c, inForm));
         return;
       }
@@ -290,15 +441,18 @@ function captureInPage(maxElements: number): RawCapture {
     };
     Array.from<any>(band.children).forEach((c) => visit(c, false));
     if (!band.children.length && (band as HTMLElement).innerText?.trim()) visit(band, false);
-    // Paint (boxes, background images, rules) under content, keeping DOM order inside each layer.
-    const layer = (e: Raw) => (e.kind === "box" || e.kind === "line" || e.key.endsWith("~bg") ? 0 : e.kind === "image" || e.kind === "shape" || e.kind === "video" || e.kind === "embed" ? 1 : 2);
     elements.sort((a, b) => layer(a) - layer(b));
-    sections.push({ key: keyOf(band), top: Math.round(secTop), height: Math.round(br.height), background, elements });
+    const pos = bs.position;
+    sections.push({ key: keyOf(band), top: Math.round(secTop), height: Math.round(br.height), background, elements, ...((pos === "sticky" || pos === "fixed") && br.top <= 1 ? { sticky: true } : {}) });
   }
   return {
     title: document.title,
     description: (document.querySelector('meta[name="description"]') as HTMLMetaElement | null)?.content || "",
     width: vw, sections, truncated,
+    // icon-font stylesheets (Font Awesome, Material…) the glyph texts need → settings.bhet
+    headLinks: usesIconFont
+      ? Array.from<any>(document.querySelectorAll('link[rel="stylesheet"][href]')).map((l: any) => l.href).filter((h: string) => ICON_FONT.test(h)).slice(0, 5)
+      : [],
   };
 }
 
@@ -392,7 +546,23 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
     if (e.fields) {
       el.children = e.fields.map((f) => toEl(f, mob ? mob.fields?.find((x) => x.key === f.key) ?? null : undefined, kk));
     }
+    if (e.children) {
+      // a clip group: children are relative to it on both layouts; mobile counterparts live in the mobile group
+      el.children = e.children.map((c) => toEl(c, mob ? mob.children?.find((x) => x.key === c.key) ?? null : undefined, kk));
+    }
+    if (e.hover) el.hover = e.hover;
+    if (e.transition) el.transition = e.transition;
+    if (e.animation) el.animation = e.animation;
     return el;
+  };
+  /** A mobile-only element: hidden on desktop; it and its children keep their measured mobile boxes. */
+  const mobileOnly = (el: CanvasElement, top: boolean) => {
+    el.mobile = {
+      box: el.box as { top: number; left: number; width: number; height: number },
+      style: Object.fromEntries(TYPO.filter((p) => el.style?.[p]).map((p) => [p, el.style![p]])),
+      ...(top ? { only: true } : {}),
+    };
+    (el.children ?? []).forEach((c) => c.box && mobileOnly(c, false));
   };
   const sections: CanvasSection[] = desk.sections.map((s, i) => {
     const ms = mobSec.get(s.key);
@@ -404,6 +574,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
         const m = mobEl.get(e.key);
         return toEl(e, !mob ? undefined : !m ? null : m.sec === s.key ? m.e : undefined, k);
       }),
+      ...(s.sticky ? { sticky: true } : {}),
     };
     if (ms) {
       sec.mobile = { height: Math.max(40, Math.round(ms.height * km)) };
@@ -412,7 +583,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
       for (const me of ms.elements) {
         if (deskKeys.has(me.key)) continue;
         const el = toEl(me, undefined, km);
-        el.mobile = { box: el.box as { top: number; left: number; width: number; height: number }, style: Object.fromEntries(TYPO.filter((p) => el.style?.[p]).map((p) => [p, el.style![p]])), only: true };
+        mobileOnly(el, true);
         sec.elements.push(el);
       }
     }
@@ -421,6 +592,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
   const count = sections.reduce((a, s) => a + s.elements.length, 0);
   return {
     builder: "browser", width: DESKTOP_CANVAS, sections, element_count: count, measured_mobile: !!mob,
+    ...(desk.headLinks?.length ? { head_links: desk.headLinks } : {}),
     title: desk.title, description: desk.description,
     ...(desk.truncated ? { truncated: true, hint: `more than ${MAX_ELEMENTS} elements: the rest of the page was cut — clone it in parts (html of one section at a time).` } : {}),
   } as any;

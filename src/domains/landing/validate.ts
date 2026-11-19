@@ -11,6 +11,7 @@ import Ajv2020Module from "ajv/dist/2020.js";
 import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
 import { systemFieldAlias } from "./elements/form.js";
 import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
+import { isClipGroup } from "./autofix-layout.js";
 import { estTextHeightPx, measureTextBlock } from "./text-metrics.js";
 import { isColorKey, isUnparseableByEditor } from "./color.js";
 import type { ValidationResult } from "../../core/domain.js";
@@ -1016,7 +1017,8 @@ export function validatePage(input: unknown): ValidationResult {
     canvasHM: number,
     path: string
   ) => {
-    if (!container || !Array.isArray(container.children)) return;
+    // a clip group (custom_css overflow:hidden): children hanging over its edge are intended
+    if (!container || !Array.isArray(container.children) || isClipGroup(container)) return;
     container.children.forEach((child: any, idx: number) => {
       if (!child || typeof child !== "object") return;
       const cpath = `${path}.children[${idx}]`;
