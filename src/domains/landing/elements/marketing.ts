@@ -87,6 +87,8 @@ export const MARKETING: ElementDescriptor[] = [
     seed: (el) => {
       seedPosition(el);
       setBox(el, 60, 80);
+      // the editor factory's values: without all three the counter prints NaN
+      Object.assign(el.specials, { startNumber: "0", endNumber: "0", jumpNumber: "0" });
     },
   },
   {

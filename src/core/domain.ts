@@ -31,6 +31,9 @@ export interface Domain {
   fieldTypes: Set<string>;
   /** A structurally-valid default node for `type` (fresh id), optionally renamed. */
   createElement(type: string, overrides?: { name?: string }): ElementNode;
+  /** What the editor drops for `type` (its look, settings and children) — the starting node the
+   * build tools hand out. Falls back to createElement. NOT the expand/compact seed. */
+  presetElement?(type: string, overrides?: { name?: string }): ElementNode;
   /** An empty but complete top-level source shell to fill in. */
   createPageSource(opts: { mobileOnly?: boolean; settings?: Record<string, any> }): unknown;
   /** Structural + semantic validation of a generated source. */

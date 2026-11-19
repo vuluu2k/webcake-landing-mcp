@@ -149,7 +149,7 @@ route đó vẫn chạy bình thường (mỗi lần đọc live là một lần
 ### Generation
 | Tool | Mô tả |
 |------|-------------|
-| `new_element` | Một node mặc định cho một loại (id mới) ở DẠNG THƯA — copy nguyên xi; boilerplate đã lược được server tự bù. |
+| `new_element` | Element đúng như editor Webcake thả vào cho một loại (id mới), ở DẠNG THƯA: màu, font, viền, kích thước và phần tử con mặc định (form có ô tên + số điện thoại + nút, carousel có sẵn slide). Copy rồi đổi giá trị — boilerplate lược đi được server tự bù, nhưng phần bù đó không có màu/viền. |
 | `new_page_skeleton` | Một source top-level rỗng nhưng đầy đủ `{ page, popup, settings, options, cartConfigs }`. |
 | `validate_page` | Kiểm tra cấu trúc + ngữ nghĩa (ids, event targets, containers, `field_name`). |
 

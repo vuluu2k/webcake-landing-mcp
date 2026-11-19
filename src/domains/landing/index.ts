@@ -16,13 +16,14 @@ import {
 } from "./vocab.js";
 import { GENERATION_GUIDE } from "./guide.js";
 import { INSTRUCTIONS } from "./instructions.js";
-import { LIBRARY, ELEMENT_TYPES, CONTAINER_TYPES, FIELD_TYPES, createElement } from "./elements/index.js";
+import { LIBRARY, ELEMENT_TYPES, CONTAINER_TYPES, FIELD_TYPES, createElement, presetElement } from "./elements/index.js";
 import { SYSTEM_FIELD_NAMES } from "./elements/form.js";
 import { createPageSource } from "./page.js";
 import { canvasToPageSource } from "./canvas-to-source.js";
 import type { IngestedCanvas } from "../../persistence/html-ingest.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
-import { keyReference, relationsOf } from "./element-schema.js";
+import { keyReference, relationsOf, checkElementKeys } from "./element-schema.js";
+import type { ElementNode } from "../../core/element.js";
 import { autofixLayout } from "./autofix-layout.js";
 import { repairSource } from "./repair.js";
 import { computeLayout, type LayoutOpts } from "./layout.js";
@@ -453,6 +454,31 @@ function normalizeSource(source: any): any {
   return source;
 }
 
+/** The editor's drop (presetElement) minus what the published page ignores: the editor also writes
+ * editor-only keys (a grid's styles.background, gallery borders, timegroup show_of_week) — handing
+ * them out would teach dead keys. Numeric / boolean strings the schema types otherwise are coerced. */
+function livePreset(type: string, overrides?: { name?: string }): ElementNode {
+  const el = presetElement(type, overrides);
+  const clean = (n: any) => {
+    for (const f of checkElementKeys(n)) {
+      const [b, k] = (f.at ?? "").split(".");
+      if (!k) continue;
+      const slots = b === "specials" ? [n.specials] : (["desktop", "mobile"] as const).map((bp) => n.responsive?.[bp]?.[b]);
+      const fix = /^use (.+) \((number|boolean)\)$/.exec(f.fix ?? "");
+      for (const o of slots) {
+        if (!o || !(k in o)) continue;
+        if (f.code === "NO_EFFECT" || f.code === "UNKNOWN_KEY") delete o[k];
+        // per slot: a finding is judged on one breakpoint, the other may hold another value
+        else if (f.code === "BAD_VALUE" && fix && fix[2] === "number" && /^-?\d+(\.\d+)?$/.test(String(o[k]).trim())) o[k] = Number(o[k]);
+        else if (f.code === "BAD_VALUE" && fix && fix[2] === "boolean" && /^(true|false)$/i.test(String(o[k]))) o[k] = String(o[k]).toLowerCase() === "true";
+      }
+    }
+    for (const c of n.children ?? []) clean(c);
+  };
+  clean(el);
+  return el;
+}
+
 export const landingDomain: Domain = {
   id: "landing",
   instructions: INSTRUCTIONS,
@@ -462,6 +488,7 @@ export const landingDomain: Domain = {
   containerTypes: CONTAINER_TYPES,
   fieldTypes: FIELD_TYPES,
   createElement,
+  presetElement: livePreset,
   createPageSource,
   validate: validatePage,
   coerce: coercePage,

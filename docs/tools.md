@@ -153,7 +153,7 @@ Backends without that route keep working (one full read per live fetch, as befor
 ### Generation
 | Tool | Description |
 |------|-------------|
-| `new_element` | A default node for a type (fresh id) in the SPARSE authoring shape — copy it as-is; omitted boilerplate is hydrated server-side. |
+| `new_element` | What the Webcake editor drops for a type (fresh id) in the SPARSE authoring shape: its colours, font, border, size and default children (a form with name + phone fields and a button, a carousel with slides). Copy it and change the values — omitted boilerplate is hydrated server-side, but the hydration defaults carry no paint. |
 | `new_page_skeleton` | An empty but complete top-level source `{ page, popup, settings, options, cartConfigs }`. |
 | `validate_page` | Structural + semantic validation (ids, event targets, containers, `field_name`), plus per-key checks against the element schema as `[CODE] path #id (type) key: problem → fix`: `UNKNOWN_KEY` (no element has that key — with did-you-mean), `NO_EFFECT` (this type's renderer never reads it), `BAD_VALUE` (error for an enforced enum, warning for a wrong value type), `BAD_PARENT` (e.g. slide outside a carousel). The same finding on many elements is one line. |
 

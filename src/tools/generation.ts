@@ -14,7 +14,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
   // 5) New element ------------------------------------------------------------
   server.tool(
     "new_element",
-    "Returns a default element node for a type in the sparse authoring shape: a fresh id, seeded styles for both breakpoints, and seeded specials. properties, runtime, empty events and per-breakpoint config are omitted because the server fills them from factory defaults on validate and save.",
+    "Returns the node the Webcake editor drops for a type, in the sparse authoring shape: a fresh id, the editor default look (colours, font, border, size) and settings for both breakpoints, and its default children (a form with name + phone fields and a submit button, a carousel with slides, a grid with items). Images are sized placeholders to replace. properties, runtime, empty events and per-breakpoint config are omitted because the server fills them from factory defaults on validate and save.",
     {
       type: z.string().describe("Element type to create."),
       name: z.string().optional().describe("Optional properties.name override (layer label)."),
@@ -24,7 +24,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
       if (!domain.catalog[type]) {
         return text({ error: `Unknown element type "${type}".`, valid_types: domain.elementTypes });
       }
-      const el = sparseTemplate(domain.createElement(type));
+      const el = sparseTemplate((domain.presetElement ?? domain.createElement)(type));
       if (name) el.properties = { name };
       return text(el);
     }

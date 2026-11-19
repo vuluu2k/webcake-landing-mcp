@@ -8,13 +8,13 @@
  */
 import { readFileSync } from "node:fs";
 import Ajv2020Module from "ajv/dist/2020.js";
-import { CONTAINER_TYPES, FIELD_TYPES } from "./elements/index.js";
+import { CONTAINER_TYPES, FIELD_TYPES, ELEMENT_TYPES } from "./elements/index.js";
 import { systemFieldAlias } from "./elements/form.js";
 import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
 import { isClipGroup } from "./autofix-layout.js";
 import { estTextHeightPx, measureTextBlock } from "./text-metrics.js";
 import { isColorKey, isUnparseableByEditor } from "./color.js";
-import { checkElementKeys, checkParent, collapseFindings, type Finding } from "./element-schema.js";
+import { checkElementKeys, checkParent, collapseFindings, RENDERED_TYPES, type Finding } from "./element-schema.js";
 import type { ValidationResult } from "../../core/domain.js";
 
 export type { ValidationResult };
@@ -48,6 +48,7 @@ const TOP_LEVEL_TYPES = new Set(["section", "dynamic_page", "popup"]);
 // it; select shows a blank option). The correct option shape is {id, name} — NOT
 // the HTML-style {label, value}.
 const OPTION_NAME_FIELDS = new Set(["select", "radio", "checkbox-group"]);
+const CATALOG_TYPES = new Set(ELEMENT_TYPES);
 
 // Fields whose renderer ALWAYS emits unescapeHTML(field_placeholder) with NO
 // default (renderSelect / renderCountrySelect / renderGroupSelectItem) — a missing
@@ -738,9 +739,45 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
 
-    // type 'checkbox' never renders on the published page — warn immediately.
-    if (type === "checkbox") {
-      warnings.push(`${path} (checkbox): renders blank on the published page and never submits — the published renderer has no case for this type. Use checkbox-group with a single option instead.`);
+    // A catalog type the published renderer has no HTML branch for renders an empty <div>
+    // (render-smoke: checkbox, cart-items, product-select, alertMessage — none is on a real page).
+    // Only catalog types: others (live-comment) are filled in by the render_v4 runtime.
+    if (CATALOG_TYPES.has(type) && !TOP_LEVEL_TYPES.has(type) && !RENDERED_TYPES.has(type)) {
+      const instead = { checkbox: "Use checkbox-group with a single option.", "cart-items": "The cart drawer is styled by cartConfigs.checkoutElements['CART-ITEM'].", "product-select": "Use list-product or a form with group-select." }[type as string];
+      errors.push(`[NOT_RENDERED] ${path} (${type}): the published renderer has no case for this type — it renders nothing${FIELD_TYPES.has(type) ? " and never submits" : ""}. ${instead ?? "Remove it."}`);
+    }
+    // Nothing to paint: in the DOM but empty (render-smoke EMPTY).
+    if (type === "html-box" && typeof node.specials?.html === "string" && !node.specials.html.trim()) {
+      warnings.push(`[EMPTY_RENDER] ${path} (html-box): specials.html is empty — the box renders nothing. Put the HTML in specials.html or remove the element.`);
+    }
+    if (type === "rectangle") {
+      // paints only through its own box: a fill, a border, a shadow (a svgMask needs the fill)
+      // cssRectangle emits every styles key, plus config.overlay as its own layer
+      const paints = (st: any = {}, cfg: any = {}) =>
+        (typeof st.background === "string" && st.background.trim() && !/^(transparent|none)$|rgba\([^)]*,\s*0(\.0+)?\s*\)$/i.test(st.background.trim())) ||
+        st.backgroundColor || st.backgroundImage || cfg.overlay ||
+        Object.entries(st).some(([k, v]) => /^border(Top|Right|Bottom|Left)?(Width)?$/.test(k) && /[1-9]/.test(String(v)) && !/^none\b/.test(String(v))) ||
+        ["boxShadow", "backdropFilter", "filter"].some((k) => typeof st[k] === "string" && st[k].trim() && st[k] !== "none");
+      const bps = (["desktop", "mobile"] as const).filter((bp) => !node.responsive?.[bp]?.config?.hide);
+      const tiny = (st: any = {}) => Number(st.width) * Number(st.height) <= 4; // a 1×1 anchor / spacer
+      // a transparent rectangle with an event is a click area — deliberate
+      if (bps.length && !(node.events ?? []).length && bps.every((bp) => !paints(node.responsive?.[bp]?.styles, node.responsive?.[bp]?.config) && !tiny(node.responsive?.[bp]?.styles)))
+        warnings.push(`[EMPTY_RENDER] ${path} (rectangle): no background, border or shadow — it is invisible. Give it styles.background (both breakpoints).`);
+    }
+    const hasField = (n: any): boolean => (n?.children ?? []).some((c: any) => FIELD_TYPES.has(c?.type) || c?.type === "group-select" || hasField(c));
+    if (type === "form" && !hasField(node)) {
+      warnings.push(`[EMPTY_RENDER] ${path} (form): has no input fields — nothing to fill in or submit. Add fields (input with field_name full_name / phone_number, …) and a button.`);
+    }
+    if (OPTION_NAME_FIELDS.has(type) && type !== "select" && !(Array.isArray(node.specials?.options) && node.specials.options.length)) {
+      warnings.push(`[EMPTY_RENDER] ${path} (${type}): specials.options is empty — no choices render. Add [{ id, name }, …].`);
+    }
+    // (dataType 1 + google_sheet_data: render_v4 table.js fills it client-side)
+    const sheet = node.specials?.dataType == 1 && Array.isArray(node.specials?.google_sheet_data) && node.specials.google_sheet_data.length;
+    if (type === "table" && !sheet && !(typeof node.specials?.sourceTable === "string" && node.specials.sourceTable.trim())) {
+      warnings.push(`[EMPTY_RENDER] ${path} (table): specials.sourceTable is empty — the published page renders only that HTML, so the table is blank.`);
+    }
+    if ((type === "group" || type === "group-select") && (!Array.isArray(node.children) || node.children.length === 0)) {
+      warnings.push(`[EMPTY_RENDER] ${path} (${type}): has no children — it renders nothing${type === "group-select" ? " (add group-select-item children: one per attribute + the quantity)" : ""}.`);
     }
 
     // address.field_name must be exactly 'province_id/district_id/commune_id'; any

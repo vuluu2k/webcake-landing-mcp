@@ -10,7 +10,7 @@ import { sparseTemplate } from "../core/compact.js";
 import { text } from "../mcp/response.js";
 
 const SPARSE_NOTE =
-  "Skeletons and examples are in the SPARSE authoring shape — emit elements exactly like this (id, type, BOTH breakpoints' styles, specials, real events). OMIT properties/runtime/empty events+children/config: the server hydrates them from factory defaults on validate/persist.";
+  "Skeletons and examples are in the SPARSE authoring shape — emit elements exactly like this (id, type, BOTH breakpoints' styles, specials, real events). OMIT properties/runtime/empty events+children/config: the server hydrates them from factory defaults on validate/persist. A skeleton is what the Webcake editor drops for the type (its colours, font, border, default children) — keep its style keys: the hydration defaults carry no paint.";
 
 export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 1) Generation guide -------------------------------------------------------
@@ -73,7 +73,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
           summary: doc.summary,
           useWhen: doc.useWhen,
           keySpecials: doc.keySpecials,
-          skeleton: sparseTemplate(domain.createElement(t)),
+          skeleton: sparseTemplate((domain.presetElement ?? domain.createElement)(t)),
           example: doc.example ?? null,
           ...(domain.elementKeys?.(t) ?? {}),
         };

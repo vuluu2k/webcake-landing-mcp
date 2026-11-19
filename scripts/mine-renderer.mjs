@@ -408,6 +408,17 @@ const clientFiles = [];
 const mined = JSON.parse(fs.readFileSync("src/domains/landing/element-keys.generated.json", "utf8"));
 const universe = new Set();
 for (const t of Object.values(mined)) for (const b of BUCKETS) for (const k of Object.keys(t[b] || {})) universe.add(k);
+// + every key the editor itself writes on a dropped element (scripts/mine-presets.mjs): a key the
+// runtime reads but no sampled page happens to use (timegroup currentTime / typeTimeGroup) is real.
+try {
+  const walkKeys = (n) => {
+    if (!n || typeof n !== "object") return;
+    for (const k of Object.keys(n.specials || {})) universe.add(k);
+    for (const bp of ["desktop", "mobile"]) for (const b of ["config", "styles"]) for (const k of Object.keys(n.responsive?.[bp]?.[b] || {})) universe.add(k);
+    for (const c of n.children || []) walkKeys(c);
+  };
+  for (const p of Object.values(JSON.parse(fs.readFileSync("src/domains/landing/element-presets.json", "utf8")))) walkKeys(p.default);
+} catch {}
 const tokensOf = (files) => {
   const s = new Set();
   for (const f of files) for (const m of fs.readFileSync(f, "utf8").matchAll(/[A-Za-z_$][\w$]*/g)) if (universe.has(m[0])) s.add(m[0]);
