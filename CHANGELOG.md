@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-11-19
+
+### Added
+- `new_element` and the `get_element`/`list_elements` skeletons now return the exact node the Webcake editor drops for a type — its default colors, font, border and size, plus default children (a form with name/phone fields and a submit button, a carousel with slides, a grid with items, a group-select with three items) — instead of a bare structural seed; images come back as sized placeholders ready to swap for real content.
+- `validate_page` now warns `[EMPTY_RENDER]` when an element renders invisible or empty on the published page: an `html-box` with empty `specials.html`, a `rectangle` with no background/border/shadow, a `form` with no input fields, a `select`/`radio`/`checkbox-group` with no `specials.options`, a `table` with no source data, or a `group`/`group-select` with no children.
+
+### Changed
+- `validate_page` now blocks (`[NOT_RENDERED]` error) every catalog element type the published renderer has no case for — `checkbox`, `cart-items`, `product-select`, and `alertMessage` — instead of only warning on `checkbox`, and each error names a working alternative where one exists.
+
+### Fixed
+- The `random-number` element now seeds `specials.startNumber`/`endNumber`/`jumpNumber` to `"0"` by default, matching the editor's own factory default, so a page built from `new_element`/`get_element` without setting all three no longer shows a NaN counter.
+
 ## [1.12.0] - 2026-11-19
 
 ### Added

@@ -6,6 +6,18 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-11-19
+
+### Added
+- `new_element` và skeleton của `get_element`/`list_elements` nay trả về đúng node mà editor Webcake thả ra cho type đó — màu, font, viền, kích thước mặc định, cùng children mặc định (form có ô tên/SĐT và nút submit, carousel có slide, grid có item, group-select có ba mục) — thay vì chỉ một seed cấu trúc trơn; ảnh trả về là placeholder đúng kích thước, sẵn sàng để thay bằng nội dung thật.
+- `validate_page` nay cảnh báo `[EMPTY_RENDER]` khi một element render ra vô hình hoặc trống trên trang đã publish: `html-box` có `specials.html` rỗng, `rectangle` không có background/viền/shadow, `form` không có ô nhập, `select`/`radio`/`checkbox-group` không có `specials.options`, `table` không có dữ liệu nguồn, hoặc `group`/`group-select` không có children.
+
+### Changed
+- `validate_page` nay chặn (lỗi `[NOT_RENDERED]`) mọi type trong catalog mà renderer thật không có nhánh xử lý — `checkbox`, `cart-items`, `product-select`, `alertMessage` — thay vì chỉ cảnh báo với `checkbox`, và mỗi lỗi nêu rõ phương án thay thế nếu có.
+
+### Fixed
+- Element `random-number` nay seed `specials.startNumber`/`endNumber`/`jumpNumber` mặc định là `"0"`, khớp với giá trị factory mặc định của chính editor, nhờ vậy trang dựng từ `new_element`/`get_element` mà không set đủ cả ba giá trị sẽ không còn hiện đếm số bị NaN.
+
 ## [1.12.0] - 2026-11-19
 
 ### Added
