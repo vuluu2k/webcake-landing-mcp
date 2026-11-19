@@ -180,11 +180,13 @@ export type CanvasElement = {
   children?: CanvasElement[];
   /** text: the source tag (h1…h6, p) when measured in a browser. */
   tag?: string;
+  /** browser capture: a <video>'s own file (src is its poster). */
+  video?: string;
   /** browser capture: declarations of the page's `:hover` rules for this element, and its transition. */
   hover?: string;
   transition?: string;
   /** measured mobile layout (browser capture): box on the 420 canvas + typography; null = hidden on mobile; only = shown on mobile only. */
-  mobile?: { box: { top: number; left: number; width: number; height: number }; style?: Record<string, string>; only?: boolean } | null;
+  mobile?: { box: { top: number; left: number; width: number; height: number }; style?: Record<string, string>; only?: boolean; crop?: { top: number; left: number; width: number; height: number } } | null;
 };
 
 export type CanvasSection = {

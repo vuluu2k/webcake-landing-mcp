@@ -292,17 +292,39 @@ export async function captureTilesWithPlaywright(
 
 /** True when `hostname` resolves to a loopback / link-local / RFC-1918 private host. */
 export function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase().replace(/^\[|\]$/g, ""); // strip IPv6 brackets
-  if (h === "localhost" || h.endsWith(".localhost") || h === "::1" || h === "0.0.0.0") return true;
+  let h = hostname.toLowerCase().replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+  // IPv4-mapped / -compatible IPv6 (::ffff:127.0.0.1, ::ffff:7f00:1) → the IPv4 it carries
+  const mapped = /^(?:0*:)*(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/.exec(h);
+  if (mapped && h.includes(":")) h = mapped[1];
+  const hex = /^(?:0*:)*ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h);
+  if (hex) h = [parseInt(hex[1], 16) >> 8, parseInt(hex[1], 16) & 255, parseInt(hex[2], 16) >> 8, parseInt(hex[2], 16) & 255].join(".");
+  if (h === "localhost" || h.endsWith(".localhost") || h === "::1" || h === "::" || /^[0:]+$/.test(h) || h === "0.0.0.0") return true;
   if (/^127\./.test(h)) return true; // loopback
   if (/^10\./.test(h)) return true; // private A
   if (/^192\.168\./.test(h)) return true; // private C
   if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true; // private B
-  if (/^169\.254\./.test(h)) return true; // link-local
+  if (/^169\.254\./.test(h)) return true; // link-local / cloud metadata
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(h)) return true; // CGNAT 100.64/10 (Alibaba metadata 100.100.100.200)
   if (/^0\./.test(h)) return true; // "this" network
-  if (h.startsWith("fc") || h.startsWith("fd")) return true; // IPv6 ULA
+  if (/^(fc|fd)[0-9a-f]{0,2}:/.test(h)) return true; // IPv6 ULA
   if (h.startsWith("fe80")) return true; // IPv6 link-local
   return false;
+}
+
+/** Like isAllowedScreenshotUrl, plus DNS: rejects a public-looking name that resolves to a private
+ *  address (localtest.me → 127.0.0.1). Results cached per host for the process. */
+const resolvedPrivate = new Map<string, boolean>();
+export async function isPublicUrl(raw: string): Promise<boolean> {
+  if (!isAllowedScreenshotUrl(raw).ok) return false;
+  if (process.env.RENDER_ALLOW_PRIVATE) return true;
+  const host = new URL(raw).hostname.replace(/^\[|\]$/g, "");
+  if (/^[\d.]+$/.test(host) || host.includes(":")) return true; // an IP literal: already checked above
+  if (!resolvedPrivate.has(host)) {
+    const { lookup } = await import("node:dns/promises");
+    const addrs = await lookup(host, { all: true }).catch(() => []);
+    resolvedPrivate.set(host, addrs.some((a: any) => isPrivateHost(a.address)));
+  }
+  return !resolvedPrivate.get(host);
 }
 
 /** Validate a screenshot target URL: http(s) only, no private host (unless RENDER_ALLOW_PRIVATE). */

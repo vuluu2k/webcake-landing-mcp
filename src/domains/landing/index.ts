@@ -22,6 +22,7 @@ import { createPageSource } from "./page.js";
 import { canvasToPageSource } from "./canvas-to-source.js";
 import type { IngestedCanvas } from "../../persistence/html-ingest.js";
 import { validatePage, coercePage, pageSchema } from "./validate.js";
+import { keyReference, relationsOf } from "./element-schema.js";
 import { autofixLayout } from "./autofix-layout.js";
 import { repairSource } from "./repair.js";
 import { computeLayout, type LayoutOpts } from "./layout.js";
@@ -503,4 +504,5 @@ export const landingDomain: Domain = {
   // the guide prescribes), so the model never hand-computes `left`/`top`.
   computeLayout: (opts) => computeLayout(opts as LayoutOpts),
   canvasToSource: (canvas, meta) => canvasToPageSource(canvas as IngestedCanvas, meta),
+  elementKeys: (type) => ({ keys: keyReference(type), relations: relationsOf(type) }),
 };

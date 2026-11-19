@@ -129,6 +129,9 @@ function reflowChildren(
       // intentional layering (badge over rect, image behind text…): the author
       // declared b inside a's declared box → leave it alone.
       if (b.origTop < a.origTop + a.declaredH - TOL) continue;
+      // only a sibling that GREW (wrapped text) or was itself pushed can push b — tight gaps the
+      // author (or the measured source) chose are kept.
+      if (a.eff <= a.declaredH + TOL && a.cur === a.origTop) continue;
       // only a sibling in the same horizontal column can be hit by the spill.
       const intersects = a.left < b.left + b.w - TOL && b.left < a.left + a.w - TOL;
       if (!intersects) continue;
@@ -151,22 +154,32 @@ function reflowChildren(
  */
 function processNode(node: any, bp: Bp, canvasW: number, pageFont: unknown, fixes: string[]): number {
   if (!node || typeof node !== "object") return 0;
+  // hidden on this breakpoint (config.hide): it takes no room there — no estimate, no push, no growth
+  if (node?.responsive?.[bp]?.config?.hide === true) return 0;
   const styles = node?.responsive?.[bp]?.styles ?? {};
   const ownW = num(styles.width) ?? canvasW;
   const ownH = num(styles.height);
-  const kids = Array.isArray(node.children) ? node.children.filter((k: any) => k && typeof k === "object") : [];
+  const kids = Array.isArray(node.children) ? node.children.filter((k: any) => k && typeof k === "object" && k?.responsive?.[bp]?.config?.hide !== true) : [];
 
   if (kids.length === 0) {
     // Leaf: a text-block renders at its measured height regardless of declared
     // height. Resize the declared box to match (clears the own-box warning) and
     // report it as the effective height the parent reflows against.
+    // A text whose height was MEASURED (config.virtualHeight = its rendered height — written by the editor
+    // and by clone_page) is trusted: re-estimating it with font metrics only adds error.
+    const vh = num(node?.responsive?.[bp]?.config?.virtualHeight);
     if (node.type === "text-block" && !isIconGlyph(node.specials?.text)) {
       const est = estTextHeightPx(node.specials?.text, styles, pageFont);
+      // (a measure made stale by an edit is dropped where the edit happens — patch_page / update_page,
+      // dropStaleMeasure — not guessed here: font metrics err by 2–3× on some fonts)
+      if (vh != null && ownH != null && vh >= ownH - 2) return ownH;
       if (est != null) {
         const h = num(styles.height);
         const fs = num(styles.fontSize) ?? 16;
         if (h != null && est > h + Math.min(fs * 1.4, 24)) {
           styles.height = est;
+          // the live page sizes a text-block by virtualHeight: keep it in step, or the text is clipped
+          if (vh != null) node.responsive[bp].config.virtualHeight = est;
           pushFix(fixes, `"${idOf(node)}" [${bp}]: resized height ${h}→${est} to fit wrapped text (real font metrics).`);
         }
         return est;
@@ -179,7 +192,11 @@ function processNode(node: any, bp: Bp, canvasW: number, pageFont: unknown, fixe
   // get resized to their measured height) — the reflow's layering test needs the
   // author's intended box, not the corrected one.
   const origH = new Map<any, number | undefined>();
-  for (const k of kids) origH.set(k, num(k?.responsive?.[bp]?.styles?.height));
+  const origTop = new Map<any, number | undefined>();
+  for (const k of kids) {
+    origH.set(k, num(k?.responsive?.[bp]?.styles?.height));
+    origTop.set(k, num(k?.responsive?.[bp]?.styles?.top));
+  }
 
   // 1) post-order: settle each child's effective height first.
   const eff = new Map<any, number>();
@@ -193,14 +210,21 @@ function processNode(node: any, bp: Bp, canvasW: number, pageFont: unknown, fixe
   for (const k of kids) clampChild(k, bp, ownW, fixes);
   reflowChildren(kids, eff, origH, bp, fixes);
 
-  // 4) grow this container to contain its (reflowed) children.
+  // 4) grow this container by what the corrections ADDED (wrapped text, pushed siblings) — a child the
+  //    author / the measured source placed hanging over the edge (decor, a tilted picture) is intended,
+  //    and is not a reason to grow.
+  // per child: each one is excused only for its OWN declared overhang
   let maxBottom = 0;
+  let spill = 0;
   for (const k of kids) {
     const t = num(k?.responsive?.[bp]?.styles?.top) ?? 0;
-    maxBottom = Math.max(maxBottom, t + (eff.get(k) ?? 0));
+    const bottom = t + (eff.get(k) ?? 0);
+    maxBottom = Math.max(maxBottom, bottom);
+    const declared = (origTop.get(k) ?? t) + (origH.get(k) ?? 0);
+    spill = Math.max(spill, Math.ceil(bottom) - Math.max(ownH ?? 0, Math.ceil(declared)));
   }
-  if (ownH != null && Math.ceil(maxBottom) > ownH + TOL) {
-    const grown = Math.ceil(maxBottom);
+  if (ownH != null && Math.ceil(maxBottom) > ownH + TOL && spill > TOL) {
+    const grown = ownH + spill;
     node.responsive[bp].styles.height = grown;
     pushFix(fixes, `"${idOf(node)}" [${bp}]: grew height ${ownH}→${grown} to contain its content.`);
     return grown;

@@ -7,7 +7,7 @@
  * config.hide on mobile. The result is the IngestedCanvas IR canvasToPageSource already converts.
  */
 import type { IngestedCanvas, CanvasElement, CanvasSection } from "./types.js";
-import { withContext, isAllowedScreenshotUrl } from "../screenshot-playwright.js";
+import { withContext, isAllowedScreenshotUrl, isPublicUrl } from "../screenshot-playwright.js";
 
 // captureInPage runs in the browser; the project has no DOM lib, so its globals are loosely typed here.
 declare const document: any, window: any, getComputedStyle: any;
@@ -17,34 +17,41 @@ type HTMLIFrameElement = any; type HTMLInputElement = any; type HTMLMetaElement 
 export const DESKTOP_VIEWPORT = 1200;
 const DESKTOP_CANVAS = 960;
 const MOBILE_CANVAS = 420;
-const MAX_ELEMENTS = 700;
+const MAX_ELEMENTS = 1500;
 
 /** One element as measured in the page (viewport px; top relative to its section). */
 type Raw = {
   fixed?: boolean;
   /** in-page only: the element, read by push() then dropped. */
   __el?: any;
-  key: string; kind: string; tag?: string; text?: string; src?: string; href?: string; svg?: string;
+  key: string; kind: string; tag?: string; text?: string; src?: string; href?: string; svg?: string; video?: string;
+  /** in-page click target: { type:'popup', action:'POPUPn' } | { type:'section', action:'SECTIONn' }. */
+  target?: { type: string; action: string };
   box: { top: number; left: number; width: number; height: number };
   style: Record<string, string>;
   input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean };
   fields?: Raw[];
-  /** clip group (an overflow:hidden box whose content spills out): children are relative to it. */
+  /** clip group (an overflow:hidden box whose content spills out) / slider / slide: children are relative to it. */
   children?: Raw[];
+  /** slider: the source shows prev/next arrows. */
+  nav?: boolean;
+  /** image clipped by an overflow:hidden ancestor: the full image's box relative to the visible box. */
+  crop?: { top: number; left: number; width: number; height: number };
   /** declarations of the page's own `<selector>:hover` rules that match this element. */
   hover?: string;
   transition?: string;
   /** entrance animation from AOS / animate.css / WOW classes, mapped to an animate.css name. */
   animation?: Record<string, string>;
 };
-type RawSection = { key: string; top: number; height: number; background: Record<string, string>; elements: Raw[]; sticky?: boolean };
-type RawCapture = { title: string; description: string; width: number; sections: RawSection[]; truncated: boolean; headLinks: string[] };
+type RawSection = { key: string; top: number; height: number; background: Record<string, string>; elements: Raw[]; sticky?: boolean; width?: number; style?: Record<string, string> };
+type RawCapture = { title: string; description: string; width: number; sections: RawSection[]; truncated: boolean; headLinks: string[]; popups?: RawSection[] };
 
 /**
  * Runs INSIDE the page (serialized by Playwright): self-contained, no outer references.
  * Sections = the vertical bands under the first element with more than one sizeable child.
  */
-function captureInPage(maxElements: number): RawCapture {
+function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
+  const maxElements = opt.max;
   const vw = document.documentElement.clientWidth;
   const sy = window.scrollY;
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "META", "LINK", "BR", "HEAD", "OPTION"]);
@@ -91,6 +98,29 @@ function captureInPage(maxElements: number): RawCapture {
     out["text-align"] = s.textAlign === "start" ? "left" : s.textAlign === "end" ? "right" : s.textAlign;
     if (s.textTransform !== "none") out["text-transform"] = s.textTransform;
     if (s.textShadow !== "none") out["text-shadow"] = s.textShadow;
+  };
+  // Every colour as rgba(r, g, b, a) — what the editor's colour trait parses. The browser may report
+  // rgb(), oklch(), lab(), color(srgb …) (Tailwind v4…): paint it on a 1×1 canvas and read the pixel.
+  const cvs = document.createElement("canvas");
+  cvs.width = cvs.height = 1;
+  const c2d = cvs.getContext("2d", { willReadFrequently: true });
+  const colorCache = new Map<string, string>();
+  const rgba = (c: string): string => {
+    if (!c2d || colorCache.has(c)) return colorCache.get(c) ?? c;
+    c2d.clearRect(0, 0, 1, 1);
+    c2d.fillStyle = "rgba(1, 2, 3, 0.5)";
+    c2d.fillStyle = c;
+    if (c2d.fillStyle === "rgba(1, 2, 3, 0.5)") return c; // not a colour the canvas understands
+    c2d.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = c2d.getImageData(0, 0, 1, 1).data;
+    const out = `rgba(${r}, ${g}, ${b}, ${Math.round((a / 255) * 1000) / 1000})`;
+    colorCache.set(c, out);
+    return out;
+  };
+  const colorsIn = (v: string) => (typeof v === "string" ? v.replace(/\b(?:rgba?|hsla?|hwb|oklch|oklab|lab|lch|color)\([^()]*\)/g, rgba) : v);
+  const normColors = (st: Record<string, string>) => {
+    for (const k of Object.keys(st)) if (/color|background|shadow|fill|gradient|border/.test(k)) st[k] = colorsIn(st[k]);
+    return st;
   };
   const textClip = (s: CSSStyleDeclaration) => s.webkitBackgroundClip === "text" || s.backgroundClip === "text";
   const gradient = (s: CSSStyleDeclaration) => (/gradient\(/.test(s.backgroundImage) && !/url\(/.test(s.backgroundImage) ? s.backgroundImage : "");
@@ -165,8 +195,8 @@ function captureInPage(maxElements: number): RawCapture {
       const inner = Array.from<any>(n.childNodes).map((c: any) => walk(c, s)).join("");
       if (n === root) return inner;
       const st: string[] = [];
-      if (textClip(s) && gradient(s)) st.push(`background:${gradient(s)};-webkit-background-clip:text;background-clip:text;color:transparent`);
-      else if (s.color !== ps.color) st.push(`color:${s.color}`);
+      if (textClip(s) && gradient(s)) st.push(`background:${colorsIn(gradient(s))};-webkit-background-clip:text;background-clip:text;color:transparent`);
+      else if (s.color !== ps.color) st.push(`color:${rgba(s.color)}`);
       if (s.fontWeight !== ps.fontWeight) st.push(`font-weight:${s.fontWeight}`);
       if (s.fontStyle !== ps.fontStyle) st.push(`font-style:${s.fontStyle}`);
       if (s.textDecorationLine !== ps.textDecorationLine && s.textDecorationLine !== "none") st.push(`text-decoration:${s.textDecorationLine}`);
@@ -230,7 +260,41 @@ function captureInPage(maxElements: number): RawCapture {
     if (m && !/^(animated|delay|faster|slow)/.test(m[1])) return { name: m[1], duration: "1" };
     return undefined;
   };
+  // Sliders of the usual libraries → native carousel; their own slides (library clones excluded).
+  const SLIDER_SEL = ".swiper, .swiper-container, .slick-slider, .splide, .owl-carousel, .carousel, .glide, .flickity-enabled, .keen-slider, .embla";
+  const SLIDE_SEL = ".swiper-slide:not(.swiper-slide-duplicate), .slick-slide:not(.slick-cloned), .splide__slide:not(.splide__slide--clone), .owl-item:not(.cloned), .carousel-item, .glide__slide:not(.glide__slide--clone), .flickity-slider > *, .keen-slider__slide, .embla__slide";
+  const slidesOf = (el: Element) => (el.matches(SLIDER_SEL) ? Array.from<any>(el.querySelectorAll(SLIDE_SEL)).filter((s: any) => s.closest(SLIDER_SEL) === el) : []);
   const ICON_FONT = /awesome|material|icon|remix|boxicons|ionicons|icomoon|fontello|themify|feather|phosphor|tabler/i;
+
+  // Popups: modal-like boxes hidden on load (Bootstrap .modal, <dialog>, [role=dialog], .popup…), in DOM
+  // order → POPUP1…; the buttons/links that open them become open_popup events.
+  const POPUP_SEL = 'dialog, [role="dialog"], [aria-modal="true"], .modal, .popup, [class*="popup"], [class*="modal"], [id*="popup"], [id*="modal"]';
+  const popupEls = Array.from<any>(document.querySelectorAll(POPUP_SEL)).filter((c: any, i: number, all: any[]) => {
+    if (all.some((o: any) => o !== c && o.contains(c))) return false; // outermost only
+    const s = cs(c);
+    // a modal overlays the page (fixed / dialog); a hidden "popup-menu" dropdown sits in the flow
+    const overlay = c.tagName === "DIALOG" || s.position === "fixed" || c.getAttribute("role") === "dialog" || c.getAttribute("aria-modal") === "true" || c.classList.contains("modal");
+    return overlay && (s.display === "none" || s.visibility === "hidden" || parseFloat(s.opacity) < 0.05 || (c.tagName === "DIALOG" && !c.open)) && c.querySelector("*");
+  }).slice(0, 8);
+  const popupIdOf = (target: Element | null) => {
+    const i = target ? popupEls.findIndex((p: any) => p === target || p.contains(target)) : -1;
+    return i >= 0 ? `POPUP${i + 1}` : "";
+  };
+  const targetOf = (el: Element): { type: string; action: string } | undefined => {
+    const trig = el.closest('[data-bs-target], [data-target], [data-popup], a[href^="#"], [aria-controls]');
+    if (!trig) return undefined;
+    const ref = trig.getAttribute("data-bs-target") || trig.getAttribute("data-target") || trig.getAttribute("data-popup") || trig.getAttribute("aria-controls") || trig.getAttribute("href") || "";
+    let dest: Element | null = null;
+    try {
+      dest = ref.length > 1 ? document.querySelector(ref.startsWith("#") || ref.startsWith(".") ? ref : `#${ref}`) : null;
+    } catch {
+      dest = null;
+    }
+    const pid = popupIdOf(dest);
+    if (pid) return { type: "popup", action: pid };
+    const si = dest ? bandEls.findIndex((b: any) => b.contains(dest)) : -1;
+    return si >= 0 ? { type: "section", action: `SECTION${si + 1}` } : undefined;
+  };
 
   // sections
   let root: Element = document.body;
@@ -240,7 +304,51 @@ function captureInPage(maxElements: number): RawCapture {
     if (kids.length === 1 && kids[0].children.length) root = kids[0];
     else break;
   }
-  const bandEls = sizeable(root).sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+  const byTop = (a: any, b: any) => a.getBoundingClientRect().top - b.getBoundingClientRect().top;
+  // fixed / absolute layers (floating widgets, side TOCs, overlays) are not bands: each becomes a pinned
+  // group inside the section where it sits.
+  const isOverlay = (c: Element) => ["fixed", "absolute"].includes(cs(c).position);
+  // A tall band made of full-width blocks stacked one under another (<main> wrapping every section)
+  // is split into those blocks, down to 3 levels.
+  const flatten = (els: Element[], depth: number): Element[] =>
+    els.flatMap((b: any) => {
+      const r = b.getBoundingClientRect();
+      const kids = sizeable(b).filter((c: any) => !isOverlay(c)).sort(byTop);
+      const stacked = kids.length >= 2 && kids.every((c: any, i: number) => {
+        const q = c.getBoundingClientRect();
+        // stacked: each block starts below the middle of the previous one (angled / overlapping
+        // sections with negative margins still count)
+        const prev = i ? kids[i - 1].getBoundingClientRect() : null;
+        return q.width >= r.width * 0.5 && (!prev || q.top >= prev.top + prev.height * 0.5);
+      });
+      return depth < 3 && r.height > window.innerHeight * 1.5 && stacked ? flatten(kids, depth + 1) : [b];
+    });
+  const topLevel = sizeable(root).sort(byTop);
+  const overlayEls = topLevel.filter(isOverlay);
+  const bandEls = flatten(topLevel.filter((c) => !isOverlay(c)), 0).sort(byTop);
+  // popups mode: show each hidden popup and measure its content box as its own band
+  const popupContents: Element[] = [];
+  if (opt.popups) {
+    for (const p of popupEls) {
+      if (p.tagName === "DIALOG") (p as any).open = true;
+      p.classList.add("show", "open", "active", "is-open", "in");
+      for (const [k, v] of [["display", "block"], ["visibility", "visible"], ["opacity", "1"], ["transform", "none"]]) p.style.setProperty(k, v, "important");
+      // the visible card inside a full-screen overlay
+      const vw0 = document.documentElement.clientWidth;
+      const sized = (c: any) => {
+        const r = c.getBoundingClientRect();
+        return r.width > 40 && r.height > 40;
+      };
+      // the library's own card class first (it may fill a phone screen), else the first box smaller than the overlay
+      const inner =
+        Array.from<any>(p.querySelectorAll(".modal-content, .modal-dialog, .popup-content, .popup-inner, [role='document']")).find(sized) ||
+        [p, ...Array.from<any>(p.querySelectorAll("[class*='content'], [class*='inner'], [class*='box'], div"))].find((c: any) => {
+          const r = c.getBoundingClientRect();
+          return sized(c) && (r.width < vw0 * 0.97 || r.height < window.innerHeight * 0.9);
+        });
+      popupContents.push(inner || p);
+    }
+  }
   let count = 0;
   let truncated = false;
   let usesIconFont = false;
@@ -253,16 +361,32 @@ function captureInPage(maxElements: number): RawCapture {
     return "rgb(255, 255, 255)";
   })();
 
-  for (const band of bandEls.length ? bandEls : [root]) {
+  const popupSections: RawSection[] = [];
+  const bands = opt.popups ? popupContents : bandEls.length ? bandEls : [root];
+  // A section spans from its band's top to the NEXT band's top (margins between bands are part of the
+  // page; the first starts at 0, the last runs to the end of the document).
+  // (docH is read once, before any band is measured)
+  const docH = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+  const spanOf = (i: number) => {
+    const r = bands[i].getBoundingClientRect();
+    if (opt.popups) return { top: r.top + sy, height: r.height };
+    const top = i === 0 ? 0 : r.top + sy;
+    // overlapping bands (angled sections, negative margins): this one ends where the next begins —
+    // landing sections stack, so counting the overlap twice would push everything below down
+    if (i + 1 < bands.length) return { top, height: Math.max(1, bands[i + 1].getBoundingClientRect().top + sy - top) };
+    return { top, height: Math.max(r.bottom + sy, docH) - top };
+  };
+  for (const band of bands) {
     const br = band.getBoundingClientRect();
-    const secTop = br.top + sy;
+    const span = spanOf(bands.indexOf(band));
+    const secTop = span.top;
     const bs = cs(band);
-    const background: Record<string, string> = { "background-color": alpha(bs.backgroundColor) > 0 ? bs.backgroundColor : pageBg };
+    const background: Record<string, string> = { "background-color": rgba(alpha(bs.backgroundColor) > 0 ? bs.backgroundColor : pageBg) };
     if (bgUrl(bs)) background["background-image"] = bgUrl(bs);
-    else if (gradient(bs)) background["background-image"] = gradient(bs);
+    else if (gradient(bs)) background["background-image"] = colorsIn(gradient(bs));
     const elements: Raw[] = [];
     // Paint (boxes, background images, rules) under content, keeping DOM order inside each layer.
-    const layer = (e: Raw) => (e.kind === "box" || e.kind === "line" || e.key.endsWith("~bg") ? 0 : e.kind === "image" || e.kind === "shape" || e.kind === "video" || e.kind === "embed" || e.kind === "group" ? 1 : 2);
+    const layer = (e: Raw) => (e.kind === "box" || e.kind === "line" || e.key.endsWith("~bg") ? 0 : e.kind === "image" || e.kind === "shape" || e.kind === "video" || e.kind === "embed" || e.kind === "group" || e.kind === "slider" ? 1 : 2);
     // A rotated element: its UNROTATED box (centred on the drawn one) + the angle, which is what the
     // landing renderer takes (styles.transform rotate(); exportCss.js:205).
     const angleOf = (el: Element) => {
@@ -290,15 +414,44 @@ function captureInPage(maxElements: number): RawCapture {
     };
     // Where push() writes and what boxOf() measures from: the section, or the clip group being filled.
     let sink: Raw[] = elements;
-    let origin = { top: secTop, left: 0 };
+    let origin = { top: secTop, left: opt.popups ? br.left : 0 };
+    // ancestors above this one clip natively (a clip group / slide): only those below it are applied
+    let clipStop: Element | null = band.parentElement;
+    /** The part of `el` its overflow-clipping ancestors (up to clipStop) let through, in page px. */
+    const visibleRect = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      let v = { l: r.left, t: r.top + sy, r: r.right, b: r.bottom + sy };
+      for (let a = el.parentElement; a && a !== clipStop && a !== document.body; a = a.parentElement) {
+        const s2 = cs(a);
+        const q = a.getBoundingClientRect();
+        if (s2.overflowX !== "visible") v = { ...v, l: Math.max(v.l, q.left), r: Math.min(v.r, q.right) };
+        if (s2.overflowY !== "visible") v = { ...v, t: Math.max(v.t, q.top + sy), b: Math.min(v.b, q.bottom + sy) };
+      }
+      // …and the band's own span: a landing section does not clip, so a picture hanging into the next
+      // band would push or overlap it — keep it inside its section
+      if (!opt.popups && clipStop === band.parentElement)
+        v = { l: Math.max(v.l, 0), r: Math.min(v.r, document.documentElement.clientWidth), t: Math.max(v.t, secTop), b: Math.min(v.b, secTop + span.height) };
+      return { v, full: { l: r.left, t: r.top + sy, r: r.right, b: r.bottom + sy } };
+    };
     const push = (raw: Raw) => {
       const el = (raw as any).__el;
       delete (raw as any).__el;
       if (el) {
         const deg = angleOf(el);
         if (deg) raw.style.transform = `rotate(${deg}deg)`;
+        // clipped by an overflow:hidden ancestor: keep the visible part (an image keeps its full size as a crop)
+        if (!deg && ["image", "box", "shape", "line"].includes(raw.kind)) {
+          const { v, full } = visibleRect(el);
+          if (v.r - v.l < 2 || v.b - v.t < 2) return; // entirely clipped away
+          if (v.l > full.l + 1 || v.t > full.t + 1 || v.r < full.r - 1 || v.b < full.b - 1) {
+            raw.box = { top: Math.round(v.t - origin.top), left: Math.round(v.l - origin.left), width: Math.round(v.r - v.l), height: Math.round(v.b - v.t) };
+            if (raw.kind === "image") raw.crop = { top: Math.round(full.t - v.t), left: Math.round(full.l - v.l), width: Math.round(full.r - full.l), height: Math.round(full.b - full.t) };
+          }
+        }
         const es = cs(el);
-        if (es.position === "fixed") raw.fixed = true;
+        if (es.position === "fixed" && !opt.popups) raw.fixed = true;
+        const tg = targetOf(el);
+        if (tg) raw.target = tg;
         if (ICON_FONT.test(es.fontFamily)) usesIconFont = true;
         {
           const h = hoverOf(el);
@@ -312,6 +465,7 @@ function captureInPage(maxElements: number): RawCapture {
         truncated = true;
         return;
       }
+      normColors(raw.style);
       count++;
       sink.push(raw);
     };
@@ -346,7 +500,9 @@ function captureInPage(maxElements: number): RawCapture {
       }
       if (tag === "VIDEO" || tag === "IFRAME") {
         const src = (el as HTMLVideoElement).poster || (el as HTMLIFrameElement).src || "";
-        push({ __el: el, key: keyOf(el), kind: tag === "VIDEO" ? "video" : "embed", src, box: boxOf(el), style });
+        // a playable file url only (MSE / HLS players expose blob: urls)
+        const video = tag === "VIDEO" ? [(el as HTMLVideoElement).currentSrc, el.querySelector("source")?.src].find((u: any) => /^https?:/i.test(u || "")) || "" : "";
+        push({ __el: el, key: keyOf(el), kind: tag === "VIDEO" ? "video" : "embed", src, ...(video ? { video } : {}), box: boxOf(el), style });
         return;
       }
       if (tag === "FORM" && !inForm) {
@@ -383,6 +539,40 @@ function captureInPage(maxElements: number): RawCapture {
         push({ __el: el, key: keyOf(el), kind: "button", text, box: boxOf(el), style, href });
         return;
       }
+      // a slider: one native carousel; each slide measured where it is — a hidden one is laid over the
+      // first slide for the measurement (out of flow, so nothing else moves) and restored after.
+      const slides = slidesOf(el);
+      if (slides.length >= 2) {
+        const er0 = el.getBoundingClientRect();
+        const first = slides[0].getBoundingClientRect();
+        const slider: Raw = { __el: el, key: keyOf(el) + "~slider", kind: "slider", box: boxOf(el), style: {}, children: [], nav: !!el.querySelector(".swiper-button-next, .slick-next, .splide__arrow, .owl-next, .carousel-control-next, .glide__arrow, .flickity-prev-next-button, [class*='next']") };
+        const [outerSink, outerOrigin, outerStop] = [sink, origin, clipStop];
+        for (const sl of slides.slice(0, 12)) {
+          const saved = sl.getAttribute("style");
+          if (!shown(sl)) {
+            for (const [k2, v2] of [["display", "block"], ["visibility", "visible"], ["opacity", "1"], ["position", "absolute"], ["top", "0"], ["left", "0"], ["width", `${first.width}px`], ["transform", "none"]]) sl.style.setProperty(k2, v2, "important");
+          }
+          const sr = sl.getBoundingClientRect();
+          const slide: Raw = { key: keyOf(sl), kind: "slide", box: { top: 0, left: 0, width: Math.round(sr.width || first.width), height: Math.round(sr.height || first.height) }, style: {}, children: [] };
+          sink = slide.children!;
+          origin = { top: sr.top + sy, left: sr.left };
+          clipStop = sl; // a slide clips its own content
+          const ss = cs(sl);
+          if (painted(ss)) {
+            const st0: Record<string, string> = {};
+            paint(ss, st0);
+            push({ key: keyOf(sl) + "~bg", kind: bgUrl(ss) ? "image" : "box", src: bgUrl(ss) || undefined, box: { top: 0, left: 0, width: slide.box.width, height: slide.box.height }, style: st0 });
+          }
+          Array.from<any>(sl.children).forEach((c) => visit(c, inForm));
+          slide.children!.sort((a, b) => layer(a) - layer(b));
+          if (saved === null) sl.removeAttribute("style");
+          else sl.setAttribute("style", saved);
+          slider.children!.push(slide);
+        }
+        [sink, origin, clipStop] = [outerSink, outerOrigin, outerStop];
+        if (er0.width > 0) push(slider);
+        return;
+      }
       // overflow:hidden box whose content spills out (decor, zoomed images, rotated shapes): a group
       // that clips its children (custom_css overflow:hidden on the group), the box's paint inside it.
       const er = el.getBoundingClientRect();
@@ -394,9 +584,10 @@ function captureInPage(maxElements: number): RawCapture {
         const group: Raw = { __el: el, key: keyOf(el) + "~clip", kind: "group", box: boxOf(el), style: { overflow: "hidden" }, children: [] };
         const br0 = parseFloat(s.borderTopLeftRadius);
         if (br0 > 0) group.style["border-radius"] = `${Math.round(br0)}px`;
-        const [outerSink, outerOrigin] = [sink, origin];
+        const [outerSink, outerOrigin, outerStop] = [sink, origin, clipStop];
         sink = group.children!;
         origin = { top: er.top + sy, left: er.left };
+        clipStop = el;
         for (const r of rules(el, s, boxOf(el))) push(r);
         if (painted(s)) {
           const url = bgUrl(s);
@@ -405,7 +596,7 @@ function captureInPage(maxElements: number): RawCapture {
         }
         Array.from<any>(el.children).forEach((c) => visit(c, inForm));
         group.children!.sort((a, b) => layer(a) - layer(b));
-        [sink, origin] = [outerSink, outerOrigin];
+        [sink, origin, clipStop] = [outerSink, outerOrigin, outerStop];
         push(group);
         // The group carries the element's motion (hover lift, entrance) and its shadow — a shadow inside
         // an overflow:hidden box would be clipped; the paint box inside keeps only its colours.
@@ -437,18 +628,62 @@ function captureInPage(maxElements: number): RawCapture {
         Array.from<any>(el.children).filter(icon).forEach((c: any) => visit(c, inForm));
         return;
       }
+      // mixed content (<div><b>Name</b> some text</div>): the element's own text runs, measured by Range
+      for (const n of Array.from<any>(el.childNodes)) {
+        if (n.nodeType !== 3 || !n.textContent.trim()) continue;
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        const r = range.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        const st: Record<string, string> = {};
+        typo(s, st);
+        push({ key: `${keyOf(el)}~t${Array.from<any>(el.childNodes).indexOf(n)}`, kind: "paragraph", text: esc(n.textContent.trim().replace(/\s+/g, " ")), box: { top: Math.round(r.top + sy - origin.top), left: Math.round(r.left - origin.left), width: Math.round(r.width), height: Math.round(r.height) }, style: st, href });
+      }
       Array.from<any>(el.children).forEach((c) => visit(c, inForm));
     };
-    Array.from<any>(band.children).forEach((c) => visit(c, false));
+    // a band that IS a slider is measured as one (its children are slides, not elements)
+    if (slidesOf(band).length >= 2) visit(band, false);
+    else Array.from<any>(band.children).forEach((c) => visit(c, false));
+    if (!opt.popups) {
+      for (const ov of overlayEls) {
+        const ot = ov.getBoundingClientRect().top + sy;
+        if (ot < secTop || ot >= secTop + span.height || !shown(ov)) continue;
+        // one pinned group: its children keep their places relative to it
+        const orr = ov.getBoundingClientRect();
+        const g: Raw = { __el: ov, key: keyOf(ov) + "~layer", kind: "group", box: boxOf(ov), style: {}, children: [] };
+        const [outerSink, outerOrigin] = [sink, origin];
+        sink = g.children!;
+        origin = { top: orr.top + sy, left: orr.left };
+        const os = cs(ov);
+        if (painted(os)) {
+          const st0: Record<string, string> = {};
+          paint(os, st0);
+          push({ key: keyOf(ov) + "~bg", kind: bgUrl(os) ? "image" : "box", src: bgUrl(os) || undefined, box: { top: 0, left: 0, width: Math.round(orr.width), height: Math.round(orr.height) }, style: st0 });
+        }
+        Array.from<any>(ov.children).forEach((c) => visit(c, false));
+        g.children!.sort((a, b) => layer(a) - layer(b));
+        [sink, origin] = [outerSink, outerOrigin];
+        if (g.children!.length) push(g);
+      }
+    }
     if (!band.children.length && (band as HTMLElement).innerText?.trim()) visit(band, false);
     elements.sort((a, b) => layer(a) - layer(b));
     const pos = bs.position;
-    sections.push({ key: keyOf(band), top: Math.round(secTop), height: Math.round(br.height), background, elements, ...((pos === "sticky" || pos === "fixed") && br.top <= 1 ? { sticky: true } : {}) });
+    if (opt.popups) {
+      const pst: Record<string, string> = {};
+      paint(bs, pst);
+      if (!pst["background-color"] && !pst["background"]) pst["background-color"] = "rgb(255, 255, 255)";
+      normColors(pst);
+      popupSections.push({ key: `POPUP${popupContents.indexOf(band) + 1}`, top: 0, height: Math.round(br.height), width: Math.round(br.width), background: {}, style: pst, elements });
+      continue;
+    }
+    sections.push({ key: keyOf(band), top: Math.round(secTop), height: Math.round(span.height), background, elements, ...((pos === "sticky" || pos === "fixed") && br.top <= 1 ? { sticky: true } : {}) });
   }
   return {
     title: document.title,
     description: (document.querySelector('meta[name="description"]') as HTMLMetaElement | null)?.content || "",
-    width: vw, sections, truncated,
+    width: vw, sections: opt.popups ? [] : sections, truncated,
+    ...(opt.popups ? { popups: popupSections } : {}),
     // icon-font stylesheets (Font Awesome, Material…) the glyph texts need → settings.bhet
     headLinks: usesIconFont
       ? Array.from<any>(document.querySelectorAll('link[rel="stylesheet"][href]')).map((l: any) => l.href).filter((h: string) => ICON_FONT.test(h)).slice(0, 5)
@@ -460,24 +695,47 @@ async function captureAt(target: { url?: string; html?: string }, width: number)
   const r = await withContext(width, 1, async (ctx: any) => {
     // Every request the page makes (subresources, redirects, html-embedded urls) passes the same
     // public-host guard as the url itself: no SSRF into the host's private network.
-    await ctx.route("**/*", (route: any) => {
+    await ctx.route("**/*", async (route: any) => {
       const u = route.request().url();
-      return /^(data|blob|about):/.test(u) || isAllowedScreenshotUrl(u).ok ? route.continue() : route.abort();
+      return /^(data|blob|about):/.test(u) || (await isPublicUrl(u)) ? route.continue() : route.abort();
     });
+    // WebSockets bypass ctx.route: refuse them outright (a measurement needs none)
+    await ctx.routeWebSocket?.("**/*", (ws: any) => ws.close()).catch?.(() => undefined);
     const page = await ctx.newPage();
     try {
       if (target.url) await page.goto(target.url, { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
       else await page.setContent(target.html!, { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
-      // Scroll through once so lazy images and reveal-on-scroll content are in their final state.
+      // An app shell that scrolls inside a full-height box (body = one viewport, content in a
+      // overflow:auto div): unlock it so the document is as tall as the page.
+      await page.evaluate(() => {
+        const vh = window.innerHeight;
+        if (document.documentElement.scrollHeight > vh * 1.5) return;
+        const scroller = Array.from<any>(document.querySelectorAll("body *")).find((e: any) => {
+          const s = getComputedStyle(e);
+          return /(auto|scroll)/.test(s.overflowY) && e.scrollHeight > e.clientHeight + 200 && e.clientHeight > vh * 0.6;
+        });
+        for (let n = scroller; n; n = n.parentElement)
+          for (const [k, v] of [["height", "auto"], ["max-height", "none"], ["overflow", "visible"], ["overflow-y", "visible"]]) n.style.setProperty(k, v, "important");
+      });
+      // Scroll through slowly so lazy images and reveal-on-scroll content (IntersectionObserver) settle
+      // in their final, shown state (~12 s at most).
+      // (instant scrolling: a page with scroll-behavior:smooth would still be gliding back to the top
+      // when the measurement runs, and sticky bars would be measured mid-page)
       await page.evaluate(async () => {
-        for (let y = 0; y < document.body.scrollHeight; y += 600) {
-          window.scrollTo(0, y);
-          await new Promise((res) => setTimeout(res, 60));
+        document.documentElement.style.setProperty("scroll-behavior", "auto", "important");
+        const h = document.documentElement.scrollHeight;
+        const step = Math.max(400, Math.ceil(h / 80));
+        for (let y = 0; y < h; y += step) {
+          window.scrollTo({ top: y, behavior: "instant" as any });
+          await new Promise((res) => setTimeout(res, 150));
         }
-        window.scrollTo(0, 0);
+        window.scrollTo({ top: 0, behavior: "instant" as any });
       });
       await page.waitForTimeout(400);
-      return await page.evaluate(captureInPage, MAX_ELEMENTS);
+      const main = await page.evaluate(captureInPage, { max: MAX_ELEMENTS, popups: false });
+      // second pass reveals the hidden popups (mutates the page: after the main capture)
+      const pop = await page.evaluate(captureInPage, { max: 200, popups: true }).catch(() => null);
+      return { ...main, popups: pop?.popups ?? [] };
     } finally {
       await page.close().catch(() => undefined);
     }
@@ -499,7 +757,7 @@ const scaleBox = (b: Raw["box"], k: number) => ({
 const TYPO = ["font-size", "line-height", "letter-spacing", "text-align"];
 
 /** One-line text gets room to spare: the page font may render wider than the source's (no wrap = no reflow). */
-function slack(box: Raw["box"], style: Record<string, string>, kind: string): Raw["box"] {
+function slack(box: Raw["box"], style: Record<string, string>, kind: string, canvasW = DESKTOP_CANVAS): Raw["box"] {
   if (!["headline", "paragraph", "button"].includes(kind)) return box;
   const fs = parseFloat(style["font-size"] ?? "16");
   const lh = parseFloat(style["line-height"] ?? "1.25") * fs;
@@ -507,7 +765,10 @@ function slack(box: Raw["box"], style: Record<string, string>, kind: string): Ra
   const extra = Math.max(6, Math.round(box.width * 0.1));
   const align = style["text-align"];
   const left = align === "center" ? box.left - extra / 2 : align === "right" ? box.left - extra : box.left;
-  return kind === "button" ? box : { ...box, left: Math.round(Math.max(0, left)), width: box.width + extra };
+  if (kind === "button") return box;
+  // never past the canvas edges: what does not fit in the slack stays as measured
+  const l = Math.round(Math.max(0, left));
+  return { ...box, left: l, width: Math.max(box.width, Math.min(box.width + extra, canvasW - l)) };
 }
 
 /** Desktop + mobile captures → the IngestedCanvas IR (desktop boxes on 960, mobile as measured). */
@@ -532,16 +793,19 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
     };
     if (e.text) el.text = e.text;
     if (e.src) el.src = e.src;
+    if (e.video) el.video = e.video;
+    if (e.crop) el.crop = scaleBox(e.crop, kk);
     if (e.svg) el.svg = e.svg;
     if (e.input) el.input = e.input;
     if (e.tag) el.tag = e.tag;
-    if (e.kind === "embed" && e.src) el.html = `<iframe src="${e.src}" style="width:100%;height:100%;border:0" allowfullscreen></iframe>`;
-    if (e.href && /^https?:|^tel:|^mailto:/.test(e.href)) el.events = [{ type: e.href.startsWith("tel:") ? "phone" : "link", action: e.href.replace(/^tel:/, "") }];
+    if (e.kind === "embed" && e.src && /^https?:/i.test(e.src)) el.html = `<iframe src="${e.src}" style="width:100%;height:100%;border:0" allowfullscreen></iframe>`;
+    if (e.target) el.events = [e.target];
+    else if (e.href && /^https?:|^tel:|^mailto:/.test(e.href) && !/#[\w-]+$/.test(e.href)) el.events = [{ type: e.href.startsWith("tel:") ? "phone" : "link", action: e.href.replace(/^tel:/, "") }];
     if (e.kind === "button") el.children = [{ id: `${el.id}_T`, type: "button_text", text: e.text, style: scaleStyle(e.style, kk) }];
     if (mob === null) el.mobile = null; // not shown in the mobile layout
     else if (mob) {
       const ms = scaleStyle(mob.style, km);
-      el.mobile = { box: slack(scaleBox(mob.box, km), ms, e.kind), style: Object.fromEntries(TYPO.filter((p) => ms[p]).map((p) => [p, ms[p]])) };
+      el.mobile = { box: slack(scaleBox(mob.box, km), ms, e.kind, MOBILE_CANVAS), style: Object.fromEntries(TYPO.filter((p) => ms[p]).map((p) => [p, ms[p]])), ...(mob.crop ? { crop: scaleBox(mob.crop, km) } : {}) };
     }
     if (e.fields) {
       el.children = e.fields.map((f) => toEl(f, mob ? mob.fields?.find((x) => x.key === f.key) ?? null : undefined, kk));
@@ -550,6 +814,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
       // a clip group: children are relative to it on both layouts; mobile counterparts live in the mobile group
       el.children = e.children.map((c) => toEl(c, mob ? mob.children?.find((x) => x.key === c.key) ?? null : undefined, kk));
     }
+    if (e.nav) el.config = { ...(el.config ?? {}), nav: true };
     if (e.hover) el.hover = e.hover;
     if (e.transition) el.transition = e.transition;
     if (e.animation) el.animation = e.animation;
@@ -564,34 +829,112 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
     };
     (el.children ?? []).forEach((c) => c.box && mobileOnly(c, false));
   };
+  // Desktop ↔ mobile matching, GLOBAL: the two layouts may cut the page into different bands (a
+  // two-rail desktop that splits into nothing, a one-column mobile that splits into many). Every mobile
+  // element is placed by its absolute page position; each desktop section gets a mobile FRAME — from its
+  // matched elements down to the next section's frame — and its mobile boxes are relative to that frame.
+  // Matching is by DOM path, else by what the element shows (text / picture / icon); a section that
+  // barely matches hides nothing on mobile (scaled fallback) and gets no mobile-only additions.
+  const sigOf = (e: Raw) => (e.text ? `t:${e.text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 80)}` : e.src ? `s:${e.src}` : e.svg ? `v:${e.svg.slice(0, 120)}` : "");
+  type MobRef = { e: Raw; abs: number; sec: RawSection };
+  const mobAll: MobRef[] = (mob?.sections ?? []).flatMap((ms) => ms.elements.map((e) => ({ e, abs: ms.top + e.box.top, sec: ms })));
+  const byKey = new Map(mobAll.map((r) => [r.e.key, r]));
+  const bySig = new Map<string, MobRef[]>();
+  for (const r of mobAll) {
+    const g = sigOf(r.e);
+    if (g) (bySig.get(g) ?? bySig.set(g, []).get(g)!).push(r);
+  }
+  const used = new Set<MobRef>();
+  const byKeyPick = (e: Raw): MobRef | undefined => {
+    const k1 = byKey.get(e.key);
+    if (k1 && !used.has(k1)) return used.add(k1), k1;
+    return undefined;
+  };
+  const bySigPick = (e: Raw, ok: (r: MobRef) => boolean): MobRef | undefined => {
+    const cand = (bySig.get(sigOf(e)) ?? []).find((x) => !used.has(x) && ok(x));
+    if (cand) used.add(cand);
+    return cand;
+  };
+  // pass 1: DOM paths. When they mostly hold (a server-rendered page), frames come from them and the
+  // content signature only matches INSIDE the section's own frame (the same "Tour" in a footer is not
+  // the nav's "Tour"); when they don't (a client-rendered page re-keyed between loads), signatures
+  // match freely and the frames come from those.
+  const matchesOf: (MobRef | undefined)[][] = desk.sections.map((s) => s.elements.map((e) => (mob ? byKeyPick(e) : undefined)));
+  const total = desk.sections.reduce((a, s) => a + s.elements.length, 0);
+  const keyed = matchesOf.flat().filter(Boolean).length;
+  const keysHold = total > 0 && keyed / total >= 0.3;
+  if (mob && !keysHold)
+    desk.sections.forEach((s, i) => s.elements.forEach((e, j) => (matchesOf[i][j] ??= bySigPick(e, () => true))));
+  // frames: the same band on mobile when its key matches, else the first matched element (monotonic)
+  const mobEnd = Math.max(0, ...(mob?.sections ?? []).map((ms) => ms.top + ms.height));
+  const frames: number[] = [];
+  desk.sections.forEach((s, i) => {
+    const same = mobSec.get(s.key);
+    const hits = matchesOf[i].filter(Boolean) as MobRef[];
+    const prev = frames.length ? frames[frames.length - 1] : 0;
+    // the mobile band of its first matched element — unless that band also holds the section before
+    // (mobile cut coarser than desktop): then just above its highest matched element
+    let top = same ? same.top : hits.length ? Math.min(...hits.map((h) => h.sec.top)) : NaN;
+    if (!same && hits.length && top <= prev) top = Math.min(...hits.map((h) => h.abs)) - 16;
+    if (!Number.isFinite(top)) top = prev;
+    if (i === 0) top = 0;
+    frames.push(Math.max(top, frames.length ? frames[frames.length - 1] : 0));
+  });
+  const frameOf = (abs: number) => {
+    let i = 0;
+    while (i + 1 < frames.length && frames[i + 1] <= abs) i++;
+    return i;
+  };
+  if (mob && keysHold)
+    desk.sections.forEach((s, i) => {
+      const end = i + 1 < frames.length ? frames[i + 1] : Infinity;
+      s.elements.forEach((e, j) => (matchesOf[i][j] ??= bySigPick(e, (r) => r.abs >= frames[i] && r.abs < end)));
+    });
+  const relative = (r: MobRef, frameTop: number): Raw => ({ ...r.e, box: { ...r.e.box, top: Math.round(r.abs - frameTop) } });
   const sections: CanvasSection[] = desk.sections.map((s, i) => {
-    const ms = mobSec.get(s.key);
+    const hits = matchesOf[i];
+    const reliable = !!mob && (s.elements.length === 0 || hits.filter(Boolean).length / s.elements.length >= 0.3);
+    const fTop = frames[i];
+    const fEnd = i + 1 < frames.length ? frames[i + 1] : mobEnd;
     const sec: CanvasSection = {
       id: `SECTION${i + 1}`,
       height: Math.max(40, Math.round(s.height * k)),
       background: s.background,
-      elements: s.elements.map((e) => {
-        const m = mobEl.get(e.key);
-        return toEl(e, !mob ? undefined : !m ? null : m.sec === s.key ? m.e : undefined, k);
-      }),
+      elements: s.elements.map((e, j) => toEl(e, !mob || !reliable ? undefined : hits[j] ? relative(hits[j]!, fTop) : null, k)),
       ...(s.sticky ? { sticky: true } : {}),
     };
-    if (ms) {
-      sec.mobile = { height: Math.max(40, Math.round(ms.height * km)) };
-      // Shown only in the mobile layout (a hamburger bar, a mobile logo): hidden on desktop.
-      const deskKeys = new Set(s.elements.map((e) => e.key));
-      for (const me of ms.elements) {
-        if (deskKeys.has(me.key)) continue;
-        const el = toEl(me, undefined, km);
-        mobileOnly(el, true);
-        sec.elements.push(el);
-      }
-    }
+    if (mob && fEnd > fTop) sec.mobile = { height: Math.max(40, Math.round((fEnd - fTop) * km)) };
     return sec;
+  });
+  // Shown only in the mobile layout (a hamburger bar, a mobile logo): hidden on desktop, in the frame
+  // that holds it (only where that section matched reliably).
+  for (const r of mobAll) {
+    if (used.has(r)) continue;
+    const i = frameOf(r.abs);
+    const hits = matchesOf[i] ?? [];
+    if (!desk.sections[i] || (desk.sections[i].elements.length && hits.filter(Boolean).length / desk.sections[i].elements.length < 0.3)) continue;
+    const el = toEl(relative(r, frames[i]), undefined, km);
+    mobileOnly(el, true);
+    sections[i].elements.push(el);
+  }
+  // popups: their own canvas box, children relative to it; the mobile counterpart by POPUPn
+  const mobPop = new Map((mob?.popups ?? []).map((p) => [p.key, p]));
+  const popups: CanvasElement[] = (desk.popups ?? []).map((p) => {
+    const mp = mobPop.get(p.key);
+    const kp = Math.min(k, DESKTOP_CANVAS / Math.max(1, p.width ?? DESKTOP_CANVAS));
+    const el: CanvasElement = {
+      id: p.key, type: "popup",
+      box: { top: 0, left: 0, width: Math.round((p.width ?? 600) * kp), height: Math.round(p.height * kp) },
+      style: scaleStyle(p.style ?? {}, kp),
+      children: p.elements.map((e) => toEl(e, mp ? mp.elements.find((x) => x.key === e.key) ?? null : undefined, kp)),
+    };
+    if (mp) el.mobile = { box: { top: 0, left: 0, width: Math.min(MOBILE_CANVAS, Math.round((mp.width ?? 380) * km)), height: Math.round(mp.height * km) } };
+    return el;
   });
   const count = sections.reduce((a, s) => a + s.elements.length, 0);
   return {
     builder: "browser", width: DESKTOP_CANVAS, sections, element_count: count, measured_mobile: !!mob,
+    ...(popups.length ? { popups } : {}),
     ...(desk.headLinks?.length ? { head_links: desk.headLinks } : {}),
     title: desk.title, description: desk.description,
     ...(desk.truncated ? { truncated: true, hint: `more than ${MAX_ELEMENTS} elements: the rest of the page was cut — clone it in parts (html of one section at a time).` } : {}),
@@ -603,6 +946,7 @@ export async function captureLayout(target: { url?: string; html?: string }) {
   if (target.url) {
     const ok = isAllowedScreenshotUrl(target.url);
     if (!ok.ok) throw new Error(ok.error);
+    if (!(await isPublicUrl(target.url))) throw new Error("the url resolves to a private / loopback address");
   }
   const desk = await captureAt(target, DESKTOP_VIEWPORT);
   const mob = await captureAt(target, MOBILE_CANVAS).catch(() => null);

@@ -22,7 +22,7 @@ import type { IngestedCanvas, CanvasElement, CanvasSection } from "../../persist
 const MOBILE_W = CANVAS.mobileWidth;
 const DESKTOP_W = CANVAS.desktopWidth;
 
-type Ctx = { mobileOnly: boolean; notes: string[]; usedIds: Set<string>; mobileByBox: WeakMap<object, CanvasElement["mobile"]>; css: string[] };
+type Ctx = { mobileOnly: boolean; notes: string[]; usedIds: Set<string>; mobileByBox: WeakMap<object, CanvasElement["mobile"]>; css: string[]; measured: boolean };
 type StyleBag = Record<string, string> | undefined;
 type Styles = Record<string, string | number>;
 type Breakpoint = { styles: Styles; config?: Record<string, any> };
@@ -293,6 +293,8 @@ function convertElement(ctx: Ctx, e: CanvasElement, sectionH?: number): SourceNo
   return node;
 }
 
+const ICON_CDN = /^https:\/\/(cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net|unpkg\.com|fonts\.googleapis\.com|use\.fontawesome\.com|maxcdn\.bootstrapcdn\.com|stackpath\.bootstrapcdn\.com|code\.ionicframework\.com|unicons\.iconscout\.com|cdn\.lineicons\.com|site-assets\.fontawesome\.com)\//;
+
 /** The inner box each type paints into (render/build/index.js): hover colours go there, motion on #w-<id>. */
 const INNER_CLASS: Record<string, string> = { button: "button-css", rectangle: "rectangle-css", "text-block": "text-block-css", "image-block": "image-block-css" };
 const WRAPPER_PROPS = /^(transform|translate|scale|rotate|opacity|filter|z-index)$/;
@@ -308,13 +310,15 @@ function hoverCss(node: SourceNode, hover?: string, transition?: string): string
   const wrap: string[] = [];
   const paint: string[] = [];
   for (const d of (hover ?? "").split(";").map((x) => x.trim()).filter(Boolean)) {
+    // the source page's CSS lands in raw <style>: nothing that could close the tag / open a rule
+    if (/[<>{}\\]/.test(d)) continue;
     const prop = d.slice(0, d.indexOf(":")).trim().toLowerCase();
     if (!prop || /^(position|top|left|right|bottom|width|height|display|margin|padding)/.test(prop)) continue; // geometry belongs to the canvas
     if (WRAPPER_PROPS.test(prop) || (group && prop === "box-shadow")) wrap.push(d);
     else if (!group) paint.push(d);
   }
   let css = "";
-  if (transition) css += `${id}${inner ? `,${id}${inner}` : ""}{transition:${transition}}`;
+  if (transition && !/[<>{}\\;]/.test(transition)) css += `${id}${inner ? `,${id}${inner}` : ""}{transition:${transition}}`;
   if (wrap.length) css += `${id}:hover{${wrap.join(";")}}`;
   if (paint.length) css += `${id}:hover${inner}{${paint.join(";")}}`;
   return css;
@@ -337,6 +341,13 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       responsive: responsiveOf(ctx, e.box, mapStyles(style, "text-block"), sectionH),
       specials: { text: e.text ?? "", tag: e.tag && /^(h[1-6]|p)$/.test(e.tag) ? e.tag : t === "paragraph" ? "p" : "h3" },
     };
+    // measured in a browser: the rendered height is known — record it the way the editor does
+    if (ctx.measured) {
+      for (const bp of ["desktop", "mobile"] as const) {
+        const h = node.responsive[bp].styles.height;
+        if (typeof h === "number") node.responsive[bp].config = { ...(node.responsive[bp].config ?? {}), virtualHeight: h };
+      }
+    }
     const ev = mapEvents(ctx, e);
     if (ev) node.events = ev;
     applyAnimation(node, e, "text-block");
@@ -353,6 +364,19 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
     };
     setBothConfigs(node, { iconSize: 12, iconTop: 5, linePaddingLeft: 23, linePaddingBottom: 10 });
     return node;
+  }
+
+  // Native video player for what the landing video element plays (youtube / vimeo / a file); other
+  // iframes stay html-box embeds.
+  const yt = /(?:youtube(?:-nocookie)?\.com\/(?:embed\/|watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/.exec(e.src ?? "");
+  const vimeo = /player\.vimeo\.com\/video\/(\d+)|vimeo\.com\/(\d+)/.exec(e.src ?? "");
+  if ((t === "html_code" && (yt || vimeo)) || (t === "video" && e.video)) {
+    const specials: Record<string, any> = yt
+      ? { typeVideo: "youtube", id: yt[1], img: `https://i.ytimg.com/vi/${yt[1]}/hqdefault.jpg` }
+      : vimeo
+        ? { typeVideo: "vimeo", video: `https://vimeo.com/${vimeo[1] ?? vimeo[2]}` }
+        : { typeVideo: "webcake", video: e.video, ...(e.src ? { img: e.src } : {}) };
+    return { id: uniqueId(ctx, e.id), type: "video", responsive: responsiveOf(ctx, e.box, {}, sectionH), specials };
   }
 
   if (t === "image" || t === "video") {
@@ -373,6 +397,14 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       if (e.crop.top !== undefined) crop.topBgImage = e.crop.top;
       if (e.crop.left !== undefined) crop.leftBgImage = e.crop.left;
       if (Object.keys(crop).length) setBothConfigs(node, crop);
+      // measured mobile layout: its own crop, or none (the image fits its mobile box)
+      if (ctx.measured && e.mobile !== undefined) {
+        const mc = e.mobile?.crop;
+        const mcfg: Record<string, any> = { ...(node.responsive.mobile.config ?? {}) };
+        for (const k of ["widthBgImage", "heightBgImage", "topBgImage", "leftBgImage"]) delete mcfg[k];
+        if (mc) Object.assign(mcfg, { widthBgImage: mc.width, heightBgImage: mc.height, topBgImage: mc.top, leftBgImage: mc.left });
+        node.responsive.mobile.config = mcfg;
+      }
     }
     const ev = mapEvents(ctx, e);
     if (ev) node.events = ev;
@@ -537,6 +569,41 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
     return node;
   }
 
+  // browser capture: a slider → the native carousel (slideWidth × slideToShow), each slide with its content
+  if (t === "slider") {
+    const slides = (e.children ?? []).filter((c) => c.type === "slide");
+    if (!slides.length) return null;
+    const sw = (slides[0].box?.width || 0) > 0 ? slides[0].box!.width! : Math.round((e.box?.width ?? 0) / slides.length);
+    if (!(sw > 0)) {
+      ctx.notes.push(`${e.id}: slider with no measurable slide width — skipped.`);
+      return null;
+    }
+    const show = Math.max(1, Math.round((e.box?.width ?? sw) / sw));
+    const node: SourceNode = {
+      id: uniqueId(ctx, e.id),
+      type: "carousel",
+      responsive: responsiveOf(ctx, e.box, {}, sectionH),
+      specials: {},
+      children: slides.map((s) => ({
+        id: uniqueId(ctx, s.id),
+        type: "slide",
+        responsive: responsiveOf(ctx, s.box, {}, sectionH),
+        specials: {},
+        children: convertChildren(ctx, s, sectionH),
+      })),
+    };
+    const m = e.mobile ? e.mobile.box : null;
+    const msw = slides[0].mobile && slides[0].mobile.box.width > 0 ? slides[0].mobile.box.width : Math.max(1, Math.round(sw * (MOBILE_W / DESKTOP_W)));
+    const mshow = m ? Math.max(1, Math.round(m.width / msw)) : show;
+    node.responsive.desktop.styles.width = show * sw;
+    node.responsive.mobile.styles.width = mshow * msw;
+    const base = { showNavigation: !!e.config?.["nav"], autoplayMode: "repeat", delayTimeMs: 5000, infinity: true };
+    node.responsive.desktop.config = { ...(node.responsive.desktop.config ?? {}), ...base, slideWidth: sw, slideToShow: show };
+    node.responsive.mobile.config = { ...(node.responsive.mobile.config ?? {}), ...base, slideWidth: msw, slideToShow: mshow };
+    ctx.notes.push(`${e.id}: slider → native carousel (${slides.length} slides, ${show} visible on desktop, ${mshow} on mobile)`);
+    return node;
+  }
+
   if (t === "carousel" || t === "gallery") {
     const media = (e.children ?? [])
       .filter((c) => c.type === "image" && c.src)
@@ -693,7 +760,7 @@ export type CanvasToSourceResult = { source: unknown; notes: string[] };
  * lossy approximation the caller should review/patch.
  */
 export function canvasToPageSource(canvas: IngestedCanvas, meta: CanvasToSourceMeta = {}): CanvasToSourceResult {
-  const ctx: Ctx = { mobileOnly: !!canvas.mobile_only, notes: [], usedIds: new Set(), mobileByBox: new WeakMap(), css: [] };
+  const ctx: Ctx = { mobileOnly: !!canvas.mobile_only, notes: [], usedIds: new Set(), mobileByBox: new WeakMap(), css: [], measured: canvas.builder === "browser" };
   const index = (e: CanvasElement) => {
     if (e.box && e.mobile !== undefined) ctx.mobileByBox.set(e.box, e.mobile);
     (e.children ?? []).forEach(index);
@@ -716,9 +783,12 @@ export function canvasToPageSource(canvas: IngestedCanvas, meta: CanvasToSourceM
     source.settings.extra_css = css;
     ctx.notes.push(`hover effects of ${ctx.css.filter(Boolean).length} element(s) → settings.extra_css (scoped to #w-<id>)`);
   }
-  if (canvas.head_links?.length) {
-    source.settings.bhet = canvas.head_links.map((h) => `<link rel="stylesheet" href="${h.replace(/"/g, "%22")}">`).join("");
-    ctx.notes.push(`icon font stylesheet(s) → settings.bhet: ${canvas.head_links.join(", ")}`);
+  // icon-font stylesheets only from the public CDNs that serve them (a cloned page must not get an
+  // arbitrary third-party stylesheet on the user's domain)
+  const links = (canvas.head_links ?? []).filter((h) => ICON_CDN.test(h));
+  if (links.length) {
+    source.settings.bhet = links.map((h) => `<link rel="stylesheet" href="${h.replace(/["<>]/g, encodeURIComponent)}">`).join("");
+    ctx.notes.push(`icon font stylesheet(s) → settings.bhet: ${links.join(", ")}`);
   }
   if (canvas.truncated) {
     ctx.notes.push(

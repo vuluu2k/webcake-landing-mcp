@@ -14,6 +14,7 @@ import { ANIMATABLE_TYPES, ANIMATION_NAMES } from "./vocab.js";
 import { isClipGroup } from "./autofix-layout.js";
 import { estTextHeightPx, measureTextBlock } from "./text-metrics.js";
 import { isColorKey, isUnparseableByEditor } from "./color.js";
+import { checkElementKeys, checkParent, collapseFindings, type Finding } from "./element-schema.js";
 import type { ValidationResult } from "../../core/domain.js";
 
 export type { ValidationResult };
@@ -85,6 +86,18 @@ function num(v: unknown): number | undefined {
     return Number.isFinite(n) ? n : undefined;
   }
   return undefined;
+}
+
+/** A text-block whose height was MEASURED on this breakpoint: config.virtualHeight (written by the editor
+ *  on 4696/4920 real text-blocks, and by clone_page) ≥ styles.height − 2. Its box is the rendered height,
+ *  so the font-metric wrap / spill / badge estimates are skipped (autofix-layout.ts trusts it the same way). */
+function measuredText(node: any, bp: "desktop" | "mobile", pageFont?: unknown): boolean {
+  const vh = node?.responsive?.[bp]?.config?.virtualHeight;
+  const styles = node?.responsive?.[bp]?.styles;
+  const h = num(styles?.height);
+  // (an edit that makes the measure stale drops it — dropStaleMeasure in tree.ts)
+  void pageFont;
+  return typeof vh === "number" && Number.isFinite(vh) && h != null && vh >= h - 2;
 }
 
 // Text height is estimated with REAL per-character font metrics + greedy
@@ -297,9 +310,15 @@ export function validatePage(input: unknown): ValidationResult {
     }
   });
 
-  const walk = (node: any, path: string) => {
+  // Key-schema findings (element-schema.ts), collapsed per code/type/key at the end.
+  const keyFindings: { f: Finding; path: string }[] = [];
+
+  const walk = (node: any, path: string, parentType?: string) => {
     if (!node || typeof node !== "object") return;
     elementCount++;
+    for (const f of checkElementKeys(node)) keyFindings.push({ f, path });
+    const misplaced = checkParent(node, parentType);
+    if (misplaced) keyFindings.push({ f: misplaced, path });
 
     if (typeof node.id === "string") ids.set(node.id, (ids.get(node.id) || 0) + 1);
     else errors.push(`${path}: missing string "id".`);
@@ -595,7 +614,7 @@ export function validatePage(input: unknown): ValidationResult {
           const w = num(styles?.width);
           const h = num(styles?.height);
           const fs = num(styles?.fontSize) ?? 16;
-          if (!w || !h) continue;
+          if (!w || !h || measuredText(node, bp, pageFont)) continue;
           const est = estTextHeightPx(rawText, styles, pageFont);
           if (est == null) continue;
           if (est > h + Math.min(fs * 1.4, 24)) {
@@ -878,7 +897,7 @@ export function validatePage(input: unknown): ValidationResult {
     if (type === "form") forms.push(node);
 
     if (Array.isArray(node.children)) {
-      node.children.forEach((c: any, idx: number) => walk(c, `${path}.children[${idx}]`));
+      node.children.forEach((c: any, idx: number) => walk(c, `${path}.children[${idx}]`, type));
     }
   };
 
@@ -1118,7 +1137,7 @@ export function validatePage(input: unknown): ValidationResult {
           const left = num(s?.left) ?? 0;
           const w = num(s?.width);
           const h = num(s?.height);
-          if (top == null || h == null || !w) continue;
+          if (top == null || h == null || !w || measuredText(child, bp, pageFont)) continue;
           const est = estTextHeightPx(rawText, s, pageFont);
           if (est == null || est <= h) continue;
           const estBottom = top + est;
@@ -1181,7 +1200,7 @@ export function validatePage(input: unknown): ValidationResult {
           const top = num(s?.top);
           const left = num(s?.left);
           const w = num(s?.width);
-          if (top == null || left == null || !w) continue;
+          if (top == null || left == null || !w || measuredText(child, bp, pageFont)) continue;
           const m = measureTextBlock(rawText, s, pageFont);
           if (!m || m.lines !== 1) continue; // pill labels are single-line
           // the pill: a rounded rectangle sibling whose box contains the text row
@@ -1345,6 +1364,10 @@ export function validatePage(input: unknown): ValidationResult {
     const settings = page?.settings;
     if (settings && typeof settings === "object") {
       const extraCss = settings.extra_css;
+      // extra_css is written into a raw <style>: markup in it closes the tag and runs as HTML / script
+      if (typeof extraCss === "string" && /<\/?\s*(style|script)|<!--/i.test(extraCss)) {
+        errors.push(`settings.extra_css contains HTML (</style>, <script> or <!--) — it is injected raw into a <style> tag, so this would break out of it and run as page markup. Keep extra_css to CSS rules only; put HTML in settings.bhet / bbet.`);
+      }
       if (typeof extraCss === "string" && extraCss.trim()) {
         const opens = (extraCss.match(/{/g) ?? []).length;
         const closes = (extraCss.match(/}/g) ?? []).length;
@@ -1380,6 +1403,9 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
   }
+
+  for (const sev of ["error", "warning"] as const)
+    (sev === "error" ? errors : warnings).push(...collapseFindings(keyFindings.filter((x) => x.f.severity === sev)));
 
   // ── inline base64 image data in page settings ───────────────────────────────
   // Same rule as on elements: favicon / og image / a url(data:…;base64,…) inside

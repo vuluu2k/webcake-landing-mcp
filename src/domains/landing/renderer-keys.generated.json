@@ -1,0 +1,3458 @@
+{
+ "meta": {
+  "source": "landing_page_build/render/build (index.js, exportCss.js, event-data.js, animate.js, common.js) + landing_page_backend/assets/render_v4",
+  "branch": "master",
+  "types": 43,
+  "note": "at = file:line of the first read. styles_open: the CSS builder emits every styles key (minus styles_dropped). client_specials: all specials are shipped to window.event_data for the client runtime."
+ },
+ "dispatched_html": [
+  "address",
+  "auto-number",
+  "button",
+  "carousel",
+  "cart-quantity",
+  "checkbox-group",
+  "countdown",
+  "country-select",
+  "editor-blog",
+  "form",
+  "gallery",
+  "grid",
+  "grid-item",
+  "group",
+  "group-select",
+  "group-select-item",
+  "html-box",
+  "image-block",
+  "input",
+  "input-datetime",
+  "input-file",
+  "line",
+  "list-paragraph",
+  "list-product",
+  "notify",
+  "popup",
+  "quantity_input",
+  "radio",
+  "random-number",
+  "rectangle",
+  "search-list-product",
+  "section",
+  "select",
+  "signature",
+  "slide",
+  "spin-wheel",
+  "survey",
+  "table",
+  "text-block",
+  "textarea",
+  "timegroup",
+  "verify-code",
+  "video"
+ ],
+ "dispatched_css": [
+  "address",
+  "auto-number",
+  "button",
+  "carousel",
+  "cart-quantity",
+  "checkbox-group",
+  "countdown",
+  "country-select",
+  "form",
+  "gallery",
+  "grid",
+  "group",
+  "group-select-item",
+  "image-block",
+  "input",
+  "input-datetime",
+  "input-file",
+  "line",
+  "list-paragraph",
+  "list-product",
+  "notify",
+  "popup",
+  "quantity_input",
+  "radio",
+  "random-number",
+  "rectangle",
+  "search-list-product",
+  "section",
+  "select",
+  "signature",
+  "slide",
+  "spin-wheel",
+  "survey",
+  "table",
+  "text-block",
+  "textarea",
+  "timegroup",
+  "verify-code",
+  "video"
+ ],
+ "dispatched_data": [
+  "auto-number",
+  "button",
+  "carousel",
+  "form",
+  "gallery",
+  "grid",
+  "grid-item",
+  "group",
+  "group-select",
+  "group-select-item",
+  "input-file",
+  "list-paragraph",
+  "list-product",
+  "notify",
+  "popup",
+  "random-number",
+  "search-list-product",
+  "section",
+  "slide",
+  "spin-wheel",
+  "table",
+  "text-block",
+  "video"
+ ],
+ "shared": {
+  "config": {
+   "animation": {
+    "at": "animate.js:8"
+   },
+   "hide": {
+    "at": "exportCss.js:196"
+   },
+   "isFullHeightScreen": {
+    "at": "exportCss.js:189"
+   },
+   "pagination": {
+    "at": "exportCss.js:235",
+    "values": [
+     2
+    ]
+   },
+   "scrollAuto": {
+    "at": "exportCss.js:166",
+    "values": [
+     "yes"
+    ]
+   },
+   "sticky": {
+    "at": "index.js:101"
+   },
+   "stickyBottom": {
+    "at": "exportCss.js:279"
+   },
+   "stickyFlex": {
+    "at": "event-data.js:348"
+   },
+   "stickyHeight": {
+    "at": "event-data.js:348"
+   },
+   "stickyLR": {
+    "at": "event-data.js:348"
+   },
+   "stickyLeft": {
+    "at": "exportCss.js:276"
+   },
+   "stickyPosition": {
+    "at": "exportCss.js:167",
+    "values": [
+     "a-b",
+     "a-t",
+     "b-c",
+     "b-l",
+     "b-r",
+     "flex",
+     "l-c",
+     "r-c",
+     "t-c",
+     "t-l",
+     "t-r"
+    ]
+   },
+   "stickyRight": {
+    "at": "exportCss.js:277"
+   },
+   "stickyTop": {
+    "at": "exportCss.js:278"
+   },
+   "stickyUnpinAtSection": {
+    "at": "event-data.js:348"
+   },
+   "stickyUnpinAtSections": {
+    "at": "event-data.js:348"
+   },
+   "stickyWidth": {
+    "at": "event-data.js:348"
+   },
+   "virtualHeight": {
+    "at": "exportCss.js:193"
+   }
+  },
+  "specials": {
+   "animationText": {
+    "at": "event-data.js:333"
+   },
+   "ctype": {
+    "at": "index.js:93",
+    "values": [
+     "fake_sold",
+     "original_price",
+     "price",
+     "selected_attrs",
+     "vimg"
+    ]
+   },
+   "customAdvance": {
+    "at": "exportCss.js:239"
+   },
+   "customLeft": {
+    "at": "exportCss.js:202",
+    "default": 0
+   },
+   "customTop": {
+    "at": "exportCss.js:202",
+    "default": 0
+   },
+   "customTracking": {
+    "at": "index.js:202"
+   },
+   "custom_class": {
+    "at": "index.js:206",
+    "default": ""
+   },
+   "custom_css": {
+    "at": "exportCss.js:239"
+   },
+   "direction": {
+    "at": "exportCss.js:202",
+    "default": "row",
+    "values": [
+     "column"
+    ]
+   },
+   "except": {
+    "at": "index.js:2115"
+   },
+   "exceptCategory": {
+    "at": "index.js:2120"
+   },
+   "exceptTags": {
+    "at": "index.js:2121"
+   },
+   "expect": {
+    "at": "index.js:2116"
+   },
+   "expectCategory": {
+    "at": "index.js:2119"
+   },
+   "expectTags": {
+    "at": "index.js:2122"
+   },
+   "isCustomTracking": {
+    "at": "index.js:202"
+   },
+   "pageLoadEvent": {
+    "at": "index.js:209",
+    "values": [
+     "auto-show"
+    ]
+   },
+   "position": {
+    "at": "exportCss.js:202",
+    "default": "center",
+    "values": [
+     "custom"
+    ]
+   },
+   "scrollAuto": {
+    "at": "exportCss.js:257",
+    "values": [
+     "yes"
+    ]
+   },
+   "select": {
+    "at": "index.js:2123",
+    "default": "product",
+    "values": [
+     "category",
+     "product"
+    ]
+   },
+   "sprod": {
+    "at": "index.js:94"
+   },
+   "sprod_attr": {
+    "at": "index.js:91"
+   },
+   "sprod_id": {
+    "at": "index.js:90"
+   },
+   "sprod_val": {
+    "at": "index.js:92"
+   },
+   "squantity": {
+    "at": "index.js:96"
+   },
+   "svariant": {
+    "at": "index.js:95"
+   },
+   "text": {
+    "at": "index.js:97"
+   },
+   "type": {
+    "at": "index.js:2117",
+    "default": "except",
+    "values": [
+     "except"
+    ]
+   },
+   "video_background": {
+    "at": "event-data.js:329"
+   },
+   "video_background_thumbnail": {
+    "at": "event-data.js:330"
+   }
+  },
+  "styles": {
+   "fontSize": {
+    "at": "event-data.js:355"
+   },
+   "height": {
+    "at": "exportCss.js:190"
+   },
+   "left": {
+    "at": "exportCss.js:173",
+    "default": 0
+   },
+   "mixBlendMode": {
+    "at": "exportCss.js:198"
+   },
+   "top": {
+    "at": "exportCss.js:172",
+    "default": 0
+   },
+   "transform": {
+    "at": "exportCss.js:204",
+    "default": "",
+    "values": [
+     "rotate(0deg)"
+    ]
+   },
+   "width": {
+    "at": "exportCss.js:185"
+   },
+   "zIndex": {
+    "at": "exportCss.js:179",
+    "default": ""
+   }
+  }
+ },
+ "client_mentioned": [
+  "allowZoom",
+  "alt",
+  "alwayValue",
+  "animation",
+  "assignCoupon",
+  "attrName",
+  "autoPlay",
+  "autoReplay",
+  "autoplayMode",
+  "avatarSize",
+  "background",
+  "backgroundColor",
+  "backgroundImage",
+  "border",
+  "borderColor",
+  "borderRadius",
+  "boxShadow",
+  "cancelAutoIfScrollTo",
+  "chatgpt_conversion_value",
+  "chatgpt_tracking_currency",
+  "closePopupOther",
+  "code",
+  "color",
+  "colorBtn",
+  "colorPrice",
+  "colorTitle",
+  "column",
+  "commentContentLayout",
+  "commentLayout",
+  "commentType",
+  "country",
+  "ctype",
+  "cursor",
+  "customArrangementSheet",
+  "customMessage",
+  "customize",
+  "dailyEnd",
+  "dailyStart",
+  "dataSheet",
+  "dataType",
+  "datasetId",
+  "defaultVal",
+  "defaultVariationId",
+  "default_value",
+  "default_values",
+  "delay",
+  "delayPopup",
+  "delayStart",
+  "delayTimeMs",
+  "detectAddress",
+  "display",
+  "distance",
+  "distanceAmong",
+  "duration",
+  "endNumber",
+  "endTime",
+  "exceptCategory",
+  "extra_url",
+  "fb_conversion_value",
+  "fb_custom_tracking",
+  "fb_event_type",
+  "fb_tracking_currency",
+  "field_name",
+  "field_placeholder",
+  "field_quantity",
+  "field_type",
+  "filter",
+  "fixed",
+  "flexDirection",
+  "fontSize",
+  "fontWeight",
+  "forPrintablePOS",
+  "form_id",
+  "form_type",
+  "format_title",
+  "formula",
+  "gap",
+  "height",
+  "hidden_commune",
+  "hide",
+  "hideRelated",
+  "html",
+  "id",
+  "img",
+  "infinity",
+  "inputs",
+  "isCustomTracking",
+  "isFormat",
+  "isFormula",
+  "isTextParams",
+  "items",
+  "jumpNumber",
+  "justifyContent",
+  "keep_solution",
+  "language",
+  "left",
+  "limit",
+  "lineHeight",
+  "list",
+  "lock",
+  "marginBottom",
+  "maxHeight",
+  "maxWidth",
+  "media",
+  "message",
+  "method",
+  "multiForm",
+  "multiFormParent",
+  "name",
+  "numerical_order",
+  "opacity",
+  "openInPage",
+  "options",
+  "overflow",
+  "overlay",
+  "padding",
+  "paddingRight",
+  "partnerServiceId",
+  "phone_validator",
+  "placeholder",
+  "popup",
+  "popupTurnOver",
+  "popup_target",
+  "position",
+  "promotion",
+  "random",
+  "redirect_url",
+  "repeat",
+  "required",
+  "required_commune",
+  "resize",
+  "rotate",
+  "round",
+  "row",
+  "saveDataOrder",
+  "scrollAuto",
+  "scrollTo",
+  "sheetID",
+  "showAvatar",
+  "showControl",
+  "showCoupon",
+  "showNavigation",
+  "showText",
+  "slideToShow",
+  "slideWidth",
+  "soundMode",
+  "source",
+  "spin",
+  "sprod",
+  "sprod_attr",
+  "sprod_id",
+  "sprod_val",
+  "src",
+  "startNumber",
+  "startTime",
+  "sticky",
+  "stickyBottom",
+  "stickyHeight",
+  "stickyPosition",
+  "stickyTop",
+  "stickyUnpinAtSections",
+  "stickyWidth",
+  "submit",
+  "submit_success",
+  "svariant",
+  "sync",
+  "sync_to_crm",
+  "tag",
+  "target_url",
+  "text",
+  "textAlign",
+  "textDecoration",
+  "textParams",
+  "thumbnail",
+  "thumbnailAutoplay",
+  "thumbnailAutoplayRepeat",
+  "thumbnailHeight",
+  "thumbnailPosition",
+  "thumbnailWidth",
+  "tiktok_conversion_value",
+  "tiktok_event_type",
+  "tiktok_tracking_currency",
+  "timeDelayMs",
+  "top",
+  "transform",
+  "transition",
+  "type",
+  "typeVideo",
+  "validate",
+  "validate_country",
+  "video",
+  "width",
+  "zIndex"
+ ],
+ "server_mentioned": [
+  "allowZoom",
+  "alt",
+  "animateMode",
+  "animation",
+  "attrName",
+  "autoplayMode",
+  "background",
+  "backgroundBtn",
+  "backgroundPosition",
+  "backgroundSize",
+  "backgroundTxt",
+  "border",
+  "borderColor",
+  "borderRadius",
+  "borderStyle",
+  "borderWidth",
+  "boxShadow",
+  "code",
+  "color",
+  "colorBg",
+  "colorBgIcon",
+  "colorBtn",
+  "colorIconBtn",
+  "colorPrice",
+  "colorQuantity",
+  "colorTextBtn",
+  "colorTitle",
+  "column",
+  "compressible",
+  "country",
+  "ctype",
+  "cursor",
+  "customAdvance",
+  "customLeft",
+  "customTop",
+  "customTranslation",
+  "custom_class",
+  "custom_css",
+  "dataSheet",
+  "dataType",
+  "datasetId",
+  "defaultVal",
+  "default_value",
+  "delay",
+  "delayTimeMs",
+  "display",
+  "distance",
+  "distanceAmong",
+  "distanceToGallery",
+  "duration",
+  "enable_background_compare",
+  "exceptCategory",
+  "field_name",
+  "field_placeholder",
+  "field_quantity",
+  "field_type",
+  "filter",
+  "fixed",
+  "flexDirection",
+  "fontFamily",
+  "fontSize",
+  "fontWeight",
+  "format_title",
+  "gap",
+  "height",
+  "heightBgImage",
+  "heightSvg",
+  "hidden_commune",
+  "hidden_title",
+  "hide",
+  "html",
+  "iconColor",
+  "iconFontSize",
+  "iconImage",
+  "iconSize",
+  "iconTop",
+  "iconType",
+  "id",
+  "imageCompression",
+  "img",
+  "infinity",
+  "inputHeight",
+  "inputPattern",
+  "isCustomTracking",
+  "isFullHeightScreen",
+  "isLimited",
+  "isMinimumLimited",
+  "isTransparent",
+  "items",
+  "keep_solution",
+  "language",
+  "left",
+  "leftBgImage",
+  "limit",
+  "linePaddingBottom",
+  "linePaddingLeft",
+  "list",
+  "marginText",
+  "maxHeight",
+  "maxValue",
+  "maxValueNumber",
+  "maxWidth",
+  "media",
+  "message",
+  "minValue",
+  "minValueNumber",
+  "mixBlendMode",
+  "name",
+  "notiLeft",
+  "notiPos",
+  "notiTop",
+  "numerical_order",
+  "opacity",
+  "options",
+  "overflow",
+  "overlay",
+  "padding",
+  "padding_content",
+  "phone_validator",
+  "placeholder",
+  "placeholderCommune",
+  "placeholderDistrict",
+  "placeholderProvince",
+  "popup",
+  "position",
+  "promotion",
+  "random",
+  "repeat",
+  "required",
+  "required_commune",
+  "required_districts",
+  "required_province",
+  "resize",
+  "rotate",
+  "round",
+  "row",
+  "scrollAuto",
+  "selectIcon",
+  "sheetID",
+  "showControl",
+  "showCoupon",
+  "showDay",
+  "showHour",
+  "showNavigation",
+  "showSecond",
+  "showText",
+  "showThumbnail",
+  "show_control_volume",
+  "slideToShow",
+  "slideWidth",
+  "source",
+  "sourceTable",
+  "spin",
+  "sprod",
+  "sprod_attr",
+  "sprod_id",
+  "sprod_val",
+  "src",
+  "startNumber",
+  "sticky",
+  "stickyBottom",
+  "stickyHeight",
+  "stickyLeft",
+  "stickyPosition",
+  "stickyRight",
+  "stickyTop",
+  "stickyUnpinAtSections",
+  "stickyWidth",
+  "submit",
+  "svariant",
+  "svgMask",
+  "tag",
+  "text",
+  "textAlign",
+  "textDecoration",
+  "textTransform",
+  "thumbnail",
+  "thumbnailAutoplay",
+  "thumbnailAutoplayRepeat",
+  "thumbnailHeight",
+  "thumbnailPosition",
+  "thumbnailWidth",
+  "top",
+  "topBgImage",
+  "transform",
+  "transition",
+  "type",
+  "typeVideo",
+  "validate",
+  "validate_country",
+  "video",
+  "video_background",
+  "video_background_thumbnail",
+  "virtualHeight",
+  "width",
+  "widthBgImage",
+  "widthSvg",
+  "zIndex"
+ ],
+ "types": {
+  "address": {
+   "client_specials": true,
+   "css": [
+    "cssAddress"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderAddress"
+   ],
+   "specials": {
+    "country": {
+     "at": "index.js:677"
+    },
+    "field_name": {
+     "at": "index.js:678",
+     "default": "province_id/district_id/commune_id"
+    },
+    "hidden_commune": {
+     "at": "index.js:680"
+    },
+    "hide_postal_code": {
+     "at": "index.js:681",
+     "default": true
+    },
+    "layout_column": {
+     "at": "index.js:679"
+    },
+    "placeholderCommune": {
+     "at": "index.js:688"
+    },
+    "placeholderDistrict": {
+     "at": "index.js:687"
+    },
+    "placeholderPostalCode": {
+     "at": "index.js:689",
+     "default": "Postal"
+    },
+    "placeholderProvince": {
+     "at": "index.js:686"
+    },
+    "range_field_address": {
+     "at": "index.js:696",
+     "default": 1
+    },
+    "required_commune": {
+     "at": "index.js:683"
+    },
+    "required_districts": {
+     "at": "index.js:684"
+    },
+    "required_postal_code": {
+     "at": "index.js:682"
+    },
+    "required_province": {
+     "at": "index.js:685"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:1081"
+    },
+    "borderWidth": {
+     "at": "index.js:695",
+     "default": 1
+    },
+    "color": {
+     "at": "exportCss.js:1082"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "auto-number": {
+   "client_specials": true,
+   "css": [
+    "cssAutoNumber"
+   ],
+   "data": [
+    "number_struct"
+   ],
+   "html": [
+    "renderAutoNumber"
+   ],
+   "specials": {
+    "startNumber": {
+     "at": "index.js:1030",
+     "default": 0
+    }
+   },
+   "styles": {
+    "fontSize": {
+     "at": "event-data.js:657"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "button": {
+   "client_specials": true,
+   "config": {
+    "keep_solution": {
+     "at": "exportCss.js:759"
+    },
+    "overlay": {
+     "at": "exportCss.js:767"
+    }
+   },
+   "css": [
+    "cssButton"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderButton"
+   ],
+   "specials": {
+    "keep_solution": {
+     "at": "exportCss.js:759"
+    },
+    "text": {
+     "at": "index.js:370",
+     "default": ""
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:742"
+    },
+    "height": {
+     "at": "exportCss.js:741"
+    },
+    "width": {
+     "at": "exportCss.js:740"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "carousel": {
+   "client_specials": true,
+   "config": {
+    "animation": {
+     "at": "event-data.js:500"
+    },
+    "arrowHeight": {
+     "at": "exportCss.js:1588",
+     "default": 25
+    },
+    "arrowLeftToLeft": {
+     "at": "exportCss.js:1578",
+     "default": 0
+    },
+    "arrowLeftToTop": {
+     "at": "exportCss.js:1579",
+     "default": 0
+    },
+    "arrowPosition": {
+     "at": "exportCss.js:1577",
+     "default": "mid",
+     "values": [
+      "bottom",
+      "custom",
+      "mid",
+      "top"
+     ]
+    },
+    "arrowRightToRight": {
+     "at": "exportCss.js:1580",
+     "default": 0
+    },
+    "arrowRightToTop": {
+     "at": "exportCss.js:1581",
+     "default": 0
+    },
+    "arrowWidth": {
+     "at": "exportCss.js:1587",
+     "default": 25
+    },
+    "autoSlide": {
+     "at": "event-data.js:510"
+    },
+    "autoplayMode": {
+     "at": "event-data.js:510"
+    },
+    "centerMode": {
+     "at": "event-data.js:510"
+    },
+    "colorArrow": {
+     "at": "exportCss.js:1582",
+     "default": "rgba(0, 0, 0, 1)"
+    },
+    "delayTime": {
+     "at": "event-data.js:510"
+    },
+    "delayTimeMs": {
+     "at": "event-data.js:510"
+    },
+    "iconArrow": {
+     "at": "exportCss.js:1583",
+     "default": "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 1280 1896.0833'> <path d='M1107 877l-742 742q-19 19-45 19t-45-19l-166-166q-19-19-19-45t19-45l531-531-531-531q-19-19-19-45t19-45L275 45q19-19 45-19t45 19l742 742q19 19 19 45t-19 45z'></path> </svg>"
+    },
+    "infinity": {
+     "at": "event-data.js:510"
+    },
+    "selectIcon": {
+     "at": "exportCss.js:1586",
+     "default": "default",
+     "values": [
+      "default"
+     ]
+    },
+    "showNavigation": {
+     "at": "exportCss.js:1585"
+    },
+    "slideToShow": {
+     "at": "exportCss.js:1575",
+     "default": 1
+    },
+    "slideWidth": {
+     "at": "exportCss.js:1576"
+    },
+    "sticky": {
+     "at": "event-data.js:510"
+    },
+    "stickyBottom": {
+     "at": "event-data.js:510"
+    },
+    "stickyFlex": {
+     "at": "event-data.js:510"
+    },
+    "stickyHeight": {
+     "at": "event-data.js:510"
+    },
+    "stickyLR": {
+     "at": "event-data.js:510"
+    },
+    "stickyPosition": {
+     "at": "event-data.js:510"
+    },
+    "stickyTop": {
+     "at": "event-data.js:510"
+    },
+    "stickyUnpinAtSection": {
+     "at": "event-data.js:510"
+    },
+    "stickyUnpinAtSections": {
+     "at": "event-data.js:510"
+    },
+    "stickyWidth": {
+     "at": "event-data.js:510"
+    }
+   },
+   "css": [
+    "cssCarousel"
+   ],
+   "data": [
+    "carousel_struct"
+   ],
+   "html": [
+    "renderCarousel"
+   ],
+   "specials": {
+    "datasetId": {
+     "at": "event-data.js:494"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:1595"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "cart-quantity": {
+   "client_specials": true,
+   "css": [
+    "cssCartQuantity"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderCartQuantity"
+   ],
+   "styles": {
+    "height": {
+     "at": "exportCss.js:2151"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "checkbox-group": {
+   "client_specials": true,
+   "config": {
+    "checkboxSize": {
+     "at": "exportCss.js:1177"
+    },
+    "columns": {
+     "at": "exportCss.js:1168",
+     "default": 1
+    },
+    "distance": {
+     "at": "exportCss.js:1167",
+     "default": 0
+    }
+   },
+   "css": [
+    "cssCheckboxGroup"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderCheckboxGroup"
+   ],
+   "specials": {
+    "options": {
+     "at": "index.js:755"
+    },
+    "required": {
+     "at": "index.js:755"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "countdown": {
+   "client_specials": true,
+   "config": {
+    "layout": {
+     "at": "exportCss.js:1856",
+     "values": [
+      "1"
+     ]
+    }
+   },
+   "css": [
+    "cssCountdown"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderCountdown"
+   ],
+   "specials": {
+    "animateMode": {
+     "at": "index.js:940",
+     "default": "none",
+     "values": [
+      "timer"
+     ]
+    },
+    "customTranslation": {
+     "at": "index.js:939"
+    },
+    "gap": {
+     "at": "exportCss.js:1851",
+     "default": 5
+    },
+    "language": {
+     "at": "index.js:934",
+     "default": "english",
+     "values": [
+      "custom",
+      "english",
+      "filipino",
+      "indonesian",
+      "khmer",
+      "lao",
+      "malay",
+      "thai",
+      "vietnam"
+     ]
+    },
+    "showDay": {
+     "at": "index.js:936"
+    },
+    "showHour": {
+     "at": "index.js:938",
+     "default": true
+    },
+    "showSecond": {
+     "at": "index.js:937"
+    },
+    "showText": {
+     "at": "index.js:935"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "country-select": {
+   "client_specials": true,
+   "css": [
+    "cssSelect"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderCountrySelect"
+   ],
+   "specials": {
+    "countries": {
+     "at": "index.js:625"
+    },
+    "default_country": {
+     "at": "index.js:626",
+     "default": "none",
+     "values": [
+      "none"
+     ]
+    },
+    "display_format": {
+     "at": "index.js:630",
+     "default": "default"
+    },
+    "field_name": {
+     "at": "index.js:627"
+    },
+    "field_placeholder": {
+     "at": "index.js:628"
+    },
+    "required": {
+     "at": "index.js:629"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:1043"
+    },
+    "color": {
+     "at": "exportCss.js:1044"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "editor-blog": {
+   "client_specials": true,
+   "css": [],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderEditorBlog"
+   ],
+   "specials": {
+    "html": {
+     "at": "index.js:1270"
+    }
+   }
+  },
+  "form": {
+   "client_specials": true,
+   "config": {
+    "marginText": {
+     "at": "exportCss.js:809"
+    },
+    "placeholder": {
+     "at": "exportCss.js:818"
+    },
+    "sticky": {
+     "at": "event-data.js:685"
+    },
+    "stickyBottom": {
+     "at": "event-data.js:685"
+    },
+    "stickyFlex": {
+     "at": "event-data.js:685"
+    },
+    "stickyHeight": {
+     "at": "event-data.js:685"
+    },
+    "stickyLR": {
+     "at": "event-data.js:685"
+    },
+    "stickyPosition": {
+     "at": "event-data.js:685"
+    },
+    "stickyTop": {
+     "at": "event-data.js:685"
+    },
+    "stickyUnpinAtSection": {
+     "at": "event-data.js:685"
+    },
+    "stickyUnpinAtSections": {
+     "at": "event-data.js:685"
+    },
+    "stickyWidth": {
+     "at": "event-data.js:685"
+    }
+   },
+   "css": [
+    "cssForm"
+   ],
+   "data": [
+    "form_struct"
+   ],
+   "html": [
+    "renderForm"
+   ],
+   "styles": {
+    "fontSize": {
+     "at": "event-data.js:692"
+    },
+    "textDecoration": {
+     "at": "exportCss.js:798"
+    },
+    "textTransform": {
+     "at": "exportCss.js:797"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "borderColor",
+    "borderStyle",
+    "borderWidth",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "gallery": {
+   "client_specials": true,
+   "config": {
+    "allowZoom": {
+     "at": "event-data.js:443"
+    },
+    "animation": {
+     "at": "event-data.js:432"
+    },
+    "arrowHeight": {
+     "at": "exportCss.js:1201",
+     "default": 20
+    },
+    "arrowLeftToLeft": {
+     "at": "exportCss.js:1191",
+     "default": 0
+    },
+    "arrowLeftToTop": {
+     "at": "exportCss.js:1192",
+     "default": 0
+    },
+    "arrowPosition": {
+     "at": "exportCss.js:1190",
+     "default": "mid",
+     "values": [
+      "bottom",
+      "custom",
+      "mid",
+      "top"
+     ]
+    },
+    "arrowRightToRight": {
+     "at": "exportCss.js:1193",
+     "default": 0
+    },
+    "arrowRightToTop": {
+     "at": "exportCss.js:1194",
+     "default": 0
+    },
+    "arrowWidth": {
+     "at": "exportCss.js:1200",
+     "default": 20
+    },
+    "colorArrow": {
+     "at": "exportCss.js:1195",
+     "default": "rgba(255, 255, 255, 1)"
+    },
+    "distanceAmong": {
+     "at": "exportCss.js:1331",
+     "default": 10
+    },
+    "distanceToGallery": {
+     "at": "exportCss.js:1202",
+     "default": 10
+    },
+    "iconArrow": {
+     "at": "exportCss.js:1196",
+     "default": "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 1280 1896.0833'> <path d='M1107 877l-742 742q-19 19-45 19t-45-19l-166-166q-19-19-19-45t19-45l531-531-531-531q-19-19-19-45t19-45L275 45q19-19 45-19t45 19l742 742q19 19 19 45t-19 45z'></path> </svg>"
+    },
+    "selectIcon": {
+     "at": "exportCss.js:1199",
+     "default": "default",
+     "values": [
+      "default"
+     ]
+    },
+    "showNavigation": {
+     "at": "exportCss.js:1198"
+    },
+    "showThumbnail": {
+     "at": "exportCss.js:1204"
+    },
+    "sticky": {
+     "at": "event-data.js:443"
+    },
+    "stickyBottom": {
+     "at": "event-data.js:443"
+    },
+    "stickyFlex": {
+     "at": "event-data.js:443"
+    },
+    "stickyHeight": {
+     "at": "event-data.js:443"
+    },
+    "stickyLR": {
+     "at": "event-data.js:443"
+    },
+    "stickyPosition": {
+     "at": "event-data.js:443"
+    },
+    "stickyTop": {
+     "at": "event-data.js:443"
+    },
+    "stickyUnpinAtSection": {
+     "at": "event-data.js:443"
+    },
+    "stickyUnpinAtSections": {
+     "at": "event-data.js:443"
+    },
+    "stickyWidth": {
+     "at": "event-data.js:443"
+    },
+    "thumbnailAutoplay": {
+     "at": "event-data.js:443"
+    },
+    "thumbnailAutoplayRepeat": {
+     "at": "event-data.js:443"
+    },
+    "thumbnailHeight": {
+     "at": "exportCss.js:1338",
+     "default": 80
+    },
+    "thumbnailPosition": {
+     "at": "exportCss.js:1189",
+     "default": "bottom",
+     "values": [
+      "bottom",
+      "left",
+      "right",
+      "top"
+     ]
+    },
+    "thumbnailWidth": {
+     "at": "exportCss.js:1337",
+     "default": 80
+    }
+   },
+   "css": [
+    "cssGallery"
+   ],
+   "data": [
+    "gallery_struct"
+   ],
+   "html": [
+    "renderGallery"
+   ],
+   "specials": {
+    "media": {
+     "at": "index.js:778"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:1203",
+     "default": ""
+    },
+    "height": {
+     "at": "exportCss.js:1360"
+    },
+    "width": {
+     "at": "exportCss.js:1359"
+    }
+   }
+  },
+  "grid": {
+   "client_specials": true,
+   "config": {
+    "column": {
+     "at": "exportCss.js:2303",
+     "default": 1
+    },
+    "pagination": {
+     "at": "exportCss.js:2302",
+     "values": [
+      1,
+      2
+     ]
+    },
+    "row": {
+     "at": "exportCss.js:2304",
+     "default": 1
+    },
+    "timeSlide": {
+     "at": "event-data.js:793"
+    }
+   },
+   "css": [
+    "cssGrid"
+   ],
+   "data": [
+    "grid_struct"
+   ],
+   "html": [
+    "renderGrid"
+   ],
+   "styles": {
+    "left": {
+     "at": "event-data.js:801"
+    },
+    "top": {
+     "at": "event-data.js:800"
+    }
+   }
+  },
+  "grid-item": {
+   "css": [],
+   "data": [
+    "grid_item_struct"
+   ],
+   "html": [
+    "renderGridItem"
+   ]
+  },
+  "group": {
+   "client_specials": true,
+   "config": {
+    "animation": {
+     "at": "event-data.js:719"
+    },
+    "sticky": {
+     "at": "event-data.js:724"
+    },
+    "stickyBottom": {
+     "at": "event-data.js:724"
+    },
+    "stickyFlex": {
+     "at": "event-data.js:724"
+    },
+    "stickyHeight": {
+     "at": "event-data.js:724"
+    },
+    "stickyLR": {
+     "at": "event-data.js:724"
+    },
+    "stickyPosition": {
+     "at": "event-data.js:724"
+    },
+    "stickyTop": {
+     "at": "event-data.js:724"
+    },
+    "stickyUnpinAtSection": {
+     "at": "event-data.js:724"
+    },
+    "stickyUnpinAtSections": {
+     "at": "event-data.js:724"
+    },
+    "stickyWidth": {
+     "at": "event-data.js:724"
+    }
+   },
+   "css": [
+    "cssGroup"
+   ],
+   "data": [
+    "group_struct"
+   ],
+   "html": [
+    "renderGroup"
+   ],
+   "specials": {
+    "scrollAuto": {
+     "at": "exportCss.js:2291",
+     "values": [
+      "yes"
+     ]
+    }
+   },
+   "styles": {
+    "left": {
+     "at": "exportCss.js:2287"
+    },
+    "width": {
+     "at": "exportCss.js:2286"
+    }
+   }
+  },
+  "group-select": {
+   "client_specials": true,
+   "css": [],
+   "data": [
+    "group_select_struct"
+   ],
+   "html": [
+    "renderGroupSelect"
+   ]
+  },
+  "group-select-item": {
+   "css": [
+    "cssGroupSelectItem"
+   ],
+   "data": [
+    "group_select_item_struct"
+   ],
+   "html": [
+    "renderGroupSelectItem"
+   ],
+   "specials": {
+    "attrName": {
+     "at": "event-data.js:771"
+    },
+    "default_value": {
+     "at": "index.js:1302",
+     "default": "default-none",
+     "values": [
+      "default-none"
+     ]
+    },
+    "field_name": {
+     "at": "index.js:1301"
+    },
+    "field_placeholder": {
+     "at": "index.js:1303"
+    },
+    "field_quantity": {
+     "at": "index.js:1306"
+    },
+    "options": {
+     "at": "index.js:1304"
+    },
+    "required": {
+     "at": "index.js:1305"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:2246"
+    },
+    "color": {
+     "at": "exportCss.js:2247"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "html-box": {
+   "client_specials": true,
+   "css": [],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderHTMLBox"
+   ],
+   "specials": {
+    "html": {
+     "at": "index.js:1262",
+     "default": ""
+    }
+   }
+  },
+  "image-block": {
+   "client_specials": true,
+   "config": {
+    "backgroundCompare": {
+     "at": "exportCss.js:589"
+    },
+    "heightBgImage": {
+     "at": "exportCss.js:586"
+    },
+    "keep_solution": {
+     "at": "exportCss.js:595"
+    },
+    "leftBgImage": {
+     "at": "exportCss.js:588",
+     "default": 0
+    },
+    "overlay": {
+     "at": "exportCss.js:601"
+    },
+    "svgMask": {
+     "at": "exportCss.js:552"
+    },
+    "topBgImage": {
+     "at": "exportCss.js:587",
+     "default": 0
+    },
+    "widthBgImage": {
+     "at": "exportCss.js:585"
+    }
+   },
+   "css": [
+    "cssImageBlock"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderImageBlock"
+   ],
+   "specials": {
+    "alt": {
+     "at": "index.js:320",
+     "default": ""
+    },
+    "enable_background_compare": {
+     "at": "index.js:2176"
+    },
+    "keep_solution": {
+     "at": "exportCss.js:595"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:593"
+    },
+    "borderColor": {
+     "at": "exportCss.js:557"
+    },
+    "borderImage": {
+     "at": "exportCss.js:560"
+    },
+    "borderRadius": {
+     "at": "exportCss.js:566"
+    },
+    "borderStyle": {
+     "at": "exportCss.js:590",
+     "values": [
+      "none"
+     ]
+    },
+    "borderWidth": {
+     "at": "exportCss.js:591"
+    },
+    "height": {
+     "at": "exportCss.js:545"
+    },
+    "width": {
+     "at": "exportCss.js:545"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "backgroundPosition",
+    "backgroundRepeat",
+    "backgroundSize",
+    "borderImage",
+    "bottom",
+    "height",
+    "left",
+    "mixBlendMode",
+    "right",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "input": {
+   "client_specials": true,
+   "css": [
+    "cssInput"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderInput"
+   ],
+   "specials": {
+    "condition": {
+     "at": "index.js:466",
+     "values": [
+      "country_default",
+      "custom",
+      "limit_5",
+      "limit_6"
+     ]
+    },
+    "defaultVal": {
+     "at": "index.js:484"
+    },
+    "defaultVariationQuantity": {
+     "at": "index.js:483"
+    },
+    "field_name": {
+     "at": "index.js:431",
+     "values": [
+      "email",
+      "phone_number",
+      "postal_code",
+      "quantity",
+      "recheck_phone_number"
+     ]
+    },
+    "field_placeholder": {
+     "at": "index.js:433",
+     "default": ""
+    },
+    "field_type": {
+     "at": "index.js:432",
+     "default": "text",
+     "values": [
+      "number",
+      "postal_code"
+     ]
+    },
+    "hideContent": {
+     "at": "index.js:448"
+    },
+    "inputPattern": {
+     "at": "index.js:446"
+    },
+    "isLimited": {
+     "at": "index.js:442"
+    },
+    "isMinimumLimited": {
+     "at": "index.js:444"
+    },
+    "limit": {
+     "at": "index.js:443"
+    },
+    "maxValue": {
+     "at": "index.js:440"
+    },
+    "maxValueNumber": {
+     "at": "index.js:441"
+    },
+    "minValue": {
+     "at": "index.js:438"
+    },
+    "minValueNumber": {
+     "at": "index.js:439"
+    },
+    "minimumLimit": {
+     "at": "index.js:445"
+    },
+    "pattern": {
+     "at": "index.js:477",
+     "default": ""
+    },
+    "phone_validator": {
+     "at": "index.js:435"
+    },
+    "required": {
+     "at": "index.js:434"
+    },
+    "useInputPattern": {
+     "at": "index.js:447"
+    },
+    "validate": {
+     "at": "index.js:437"
+    },
+    "validate_country": {
+     "at": "index.js:436"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:831"
+    },
+    "color": {
+     "at": "exportCss.js:832"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "input-datetime": {
+   "client_specials": true,
+   "css": [
+    "cssInputDatetime"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderInputDatetime"
+   ],
+   "specials": {
+    "field_name": {
+     "at": "index.js:523"
+    },
+    "field_placeholder": {
+     "at": "index.js:523",
+     "default": ""
+    },
+    "limit_option_type": {
+     "at": "index.js:523",
+     "values": [
+      "fixed"
+     ]
+    },
+    "required": {
+     "at": "index.js:523"
+    },
+    "since_day": {
+     "at": "index.js:523",
+     "default": ""
+    },
+    "until_day": {
+     "at": "index.js:523",
+     "default": ""
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:864"
+    },
+    "color": {
+     "at": "exportCss.js:865"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "input-file": {
+   "client_specials": true,
+   "config": {
+    "display_type": {
+     "at": "exportCss.js:901",
+     "default": "default",
+     "values": [
+      "default"
+     ]
+    },
+    "preview_size": {
+     "at": "exportCss.js:902",
+     "default": 32
+    }
+   },
+   "css": [
+    "cssInputFile"
+   ],
+   "data": [
+    "input_file_struct"
+   ],
+   "html": [
+    "renderInputFile"
+   ],
+   "specials": {
+    "field_name": {
+     "at": "index.js:994"
+    },
+    "field_placeholder": {
+     "at": "index.js:994",
+     "default": ""
+    },
+    "maxFile": {
+     "at": "index.js:994"
+    },
+    "required": {
+     "at": "index.js:994"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:897"
+    },
+    "color": {
+     "at": "exportCss.js:898"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "line": {
+   "client_specials": true,
+   "css": [
+    "cssLine"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderLine"
+   ],
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "list-paragraph": {
+   "client_specials": true,
+   "config": {
+    "iconColor": {
+     "at": "exportCss.js:1793",
+     "default": "rgba(0, 0, 0, 1)"
+    },
+    "iconFontSize": {
+     "at": "exportCss.js:1787"
+    },
+    "iconImage": {
+     "at": "exportCss.js:1790"
+    },
+    "iconSize": {
+     "at": "exportCss.js:1786",
+     "default": 40
+    },
+    "iconTop": {
+     "at": "exportCss.js:1783",
+     "default": 0
+    },
+    "iconType": {
+     "at": "exportCss.js:1782",
+     "default": "shape",
+     "values": [
+      "image",
+      "shape"
+     ]
+    },
+    "linePaddingBottom": {
+     "at": "exportCss.js:1785",
+     "default": 0
+    },
+    "linePaddingLeft": {
+     "at": "exportCss.js:1784",
+     "default": 0
+    }
+   },
+   "css": [
+    "cssListParagraph"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderListParagraph"
+   ],
+   "specials": {
+    "text": {
+     "at": "index.js:1082"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "list-product": {
+   "css": [
+    "cssListProduct"
+   ],
+   "data": [
+    "list_product_struct"
+   ],
+   "html": [
+    "renderListProduct"
+   ],
+   "specials": {
+    "background_size": {
+     "at": "exportCss.js:2347",
+     "default": "cover"
+    },
+    "boldExtraTitle": {
+     "at": "exportCss.js:2446"
+    },
+    "boldName": {
+     "at": "exportCss.js:2441"
+    },
+    "border_type_btn": {
+     "at": "exportCss.js:2434"
+    },
+    "border_width_btn": {
+     "at": "exportCss.js:2436"
+    },
+    "btn_border": {
+     "at": "exportCss.js:2434"
+    },
+    "btn_height": {
+     "at": "exportCss.js:2435"
+    },
+    "btn_width": {
+     "at": "exportCss.js:2384",
+     "default": 182
+    },
+    "direction": {
+     "at": "index.js:1346",
+     "default": "row",
+     "values": [
+      "column",
+      "row"
+     ]
+    },
+    "except": {
+     "at": "index.js:1343"
+    },
+    "exceptCategory": {
+     "at": "index.js:1348"
+    },
+    "exceptTags": {
+     "at": "index.js:1350"
+    },
+    "expect": {
+     "at": "index.js:1344"
+    },
+    "expectCategory": {
+     "at": "index.js:1347"
+    },
+    "expectTags": {
+     "at": "index.js:1349"
+    },
+    "font_family": {
+     "at": "index.js:1352"
+    },
+    "format_price": {
+     "at": "event-data.js:829",
+     "default": "range",
+     "values": [
+      "discount",
+      "discount-revert"
+     ]
+    },
+    "format_title": {
+     "at": "event-data.js:828",
+     "default": "default",
+     "values": [
+      "name-category",
+      "sku",
+      "sku-name"
+     ]
+    },
+    "hide_product_image": {
+     "at": "index.js:1479",
+     "default": false
+    },
+    "iconCart": {
+     "at": "exportCss.js:2495"
+    },
+    "is_runout": {
+     "at": "index.js:1353"
+    },
+    "list_product_font": {
+     "at": "exportCss.js:2338"
+    },
+    "numerical_order": {
+     "at": "event-data.js:831",
+     "default": false
+    },
+    "remain_quantity_text": {
+     "at": "event-data.js:840",
+     "default": ""
+    },
+    "row_layout": {
+     "at": "index.js:1475",
+     "default": "layout_1",
+     "values": [
+      "layout_2"
+     ]
+    },
+    "select": {
+     "at": "index.js:1351",
+     "default": "product",
+     "values": [
+      "category",
+      "product"
+     ]
+    },
+    "show_add_button": {
+     "at": "index.js:1473",
+     "default": "show",
+     "values": [
+      "hide",
+      "hide_icon"
+     ]
+    },
+    "show_extra_sku": {
+     "at": "exportCss.js:2345",
+     "default": false
+    },
+    "show_flash_sale_icon": {
+     "at": "exportCss.js:2346",
+     "default": true
+    },
+    "show_rating_star": {
+     "at": "index.js:1477",
+     "default": false
+    },
+    "show_remain_quantity": {
+     "at": "event-data.js:826",
+     "default": true
+    },
+    "show_thumbnail": {
+     "at": "event-data.js:827"
+    },
+    "show_total_sold": {
+     "at": "index.js:1478",
+     "default": false
+    },
+    "textAlign": {
+     "at": "exportCss.js:2334",
+     "default": "left"
+    },
+    "text_add_button": {
+     "at": "index.js:1474",
+     "default": ""
+    },
+    "thumbnail_height": {
+     "at": "exportCss.js:2336"
+    },
+    "thumbnail_size": {
+     "at": "exportCss.js:2335",
+     "default": 195
+    },
+    "type": {
+     "at": "index.js:1345",
+     "default": "except",
+     "values": [
+      "except"
+     ]
+    }
+   },
+   "styles": {
+    "borderRadius": {
+     "at": "exportCss.js:2432",
+     "default": 0
+    },
+    "colorBg": {
+     "at": "exportCss.js:2369"
+    },
+    "colorBgIcon": {
+     "at": "exportCss.js:2484"
+    },
+    "colorBtn": {
+     "at": "exportCss.js:2423",
+     "default": "rgba(246,4,87,1)"
+    },
+    "colorBtnBorder": {
+     "at": "exportCss.js:2431"
+    },
+    "colorFlashSale": {
+     "at": "exportCss.js:2463"
+    },
+    "colorIconBtn": {
+     "at": "exportCss.js:2427"
+    },
+    "colorPrice": {
+     "at": "exportCss.js:2458"
+    },
+    "colorQuantity": {
+     "at": "exportCss.js:2492"
+    },
+    "colorTextBtn": {
+     "at": "exportCss.js:2488"
+    },
+    "colorTextSale": {
+     "at": "exportCss.js:2472"
+    },
+    "colorTitle": {
+     "at": "exportCss.js:2440"
+    },
+    "height": {
+     "at": "exportCss.js:2353",
+     "default": 165
+    },
+    "width": {
+     "at": "exportCss.js:2354",
+     "default": 400
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "notify": {
+   "client_specials": true,
+   "config": {
+    "content_font": {
+     "at": "exportCss.js:1925",
+     "default": 12
+    },
+    "notiBottom": {
+     "at": "exportCss.js:1953",
+     "default": 20
+    },
+    "notiLeft": {
+     "at": "exportCss.js:1950",
+     "default": 20
+    },
+    "notiPos": {
+     "at": "exportCss.js:1940",
+     "values": [
+      "b-c",
+      "b-l",
+      "b-r",
+      "default",
+      "t-c",
+      "t-l",
+      "t-r"
+     ]
+    },
+    "notiRight": {
+     "at": "exportCss.js:1952",
+     "default": 20
+    },
+    "notiTop": {
+     "at": "exportCss.js:1951",
+     "default": 20
+    },
+    "time_font": {
+     "at": "exportCss.js:1926",
+     "default": 11
+    },
+    "title_font": {
+     "at": "exportCss.js:1924",
+     "default": 13
+    }
+   },
+   "css": [
+    "cssNotify"
+   ],
+   "data": [
+    "notify_struct"
+   ],
+   "html": [
+    "renderNotify"
+   ],
+   "specials": {
+    "dataSetData": {
+     "at": "event-data.js:608"
+    },
+    "dataSheet": {
+     "at": "event-data.js:590"
+    },
+    "dataType": {
+     "at": "event-data.js:559",
+     "default": 1,
+     "values": [
+      1,
+      2
+     ]
+    },
+    "datasetId": {
+     "at": "event-data.js:594"
+    },
+    "sheetID": {
+     "at": "event-data.js:564",
+     "default": "Sheet1"
+    },
+    "source": {
+     "at": "event-data.js:563"
+    }
+   },
+   "styles": {
+    "height": {
+     "at": "exportCss.js:1898"
+    },
+    "width": {
+     "at": "exportCss.js:1941"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "popup": {
+   "client_specials": true,
+   "config": {
+    "keep_solution": {
+     "at": "exportCss.js:2193"
+    },
+    "overlay": {
+     "at": "exportCss.js:2230"
+    }
+   },
+   "css": [
+    "cssPopup"
+   ],
+   "data": [
+    "popup_struct"
+   ],
+   "html": [
+    "renderPopup"
+   ],
+   "specials": {
+    "keep_solution": {
+     "at": "exportCss.js:2193"
+    },
+    "show_control_volume": {
+     "at": "index.js:1279"
+    },
+    "video_background": {
+     "at": "index.js:1279"
+    }
+   },
+   "styles": {
+    "--type": {
+     "at": "exportCss.js:2197"
+    },
+    "background": {
+     "at": "exportCss.js:2185",
+     "default": ""
+    },
+    "borderColor": {
+     "at": "exportCss.js:2237",
+     "default": "#000"
+    },
+    "borderRadius": {
+     "at": "exportCss.js:2234"
+    },
+    "borderStyle": {
+     "at": "exportCss.js:2235",
+     "default": "solid"
+    },
+    "borderWidth": {
+     "at": "exportCss.js:2236"
+    },
+    "height": {
+     "at": "exportCss.js:2191"
+    },
+    "width": {
+     "at": "exportCss.js:2190"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "quantity_input": {
+   "client_specials": true,
+   "css": [
+    "cssQuantityInputNumber"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderQuantityInputNumber"
+   ],
+   "specials": {
+    "defaultVal": {
+     "at": "index.js:743"
+    },
+    "field_name": {
+     "at": "index.js:743"
+    },
+    "hideSpinBtn": {
+     "at": "index.js:743"
+    },
+    "maxValue": {
+     "at": "index.js:743"
+    },
+    "maxValueNumber": {
+     "at": "index.js:743"
+    },
+    "minValue": {
+     "at": "index.js:743"
+    },
+    "minValueNumber": {
+     "at": "index.js:743"
+    }
+   },
+   "styles": {
+    "height": {
+     "at": "exportCss.js:1117"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "radio": {
+   "client_specials": true,
+   "config": {
+    "checkboxSize": {
+     "at": "exportCss.js:1008"
+    },
+    "columns": {
+     "at": "exportCss.js:998",
+     "default": 1
+    },
+    "distance": {
+     "at": "exportCss.js:997",
+     "default": 0
+    }
+   },
+   "css": [
+    "cssRadio"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderRadio"
+   ],
+   "specials": {
+    "field_name": {
+     "at": "index.js:546",
+     "default": "Radio"
+    },
+    "options": {
+     "at": "index.js:545"
+    },
+    "required": {
+     "at": "index.js:547"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "random-number": {
+   "client_specials": true,
+   "css": [
+    "cssRandomNumber"
+   ],
+   "data": [
+    "number_struct"
+   ],
+   "html": [
+    "renderRandomNumber"
+   ],
+   "specials": {
+    "startNumber": {
+     "at": "index.js:1039",
+     "default": 0
+    }
+   },
+   "styles": {
+    "fontSize": {
+     "at": "event-data.js:657"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "rectangle": {
+   "client_specials": true,
+   "config": {
+    "keep_solution": {
+     "at": "exportCss.js:705"
+    },
+    "overlay": {
+     "at": "exportCss.js:728"
+    },
+    "svgMask": {
+     "at": "exportCss.js:653"
+    }
+   },
+   "css": [
+    "cssRectangle"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderRectangle"
+   ],
+   "specials": {
+    "keep_solution": {
+     "at": "exportCss.js:705"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:650"
+    },
+    "borderColor": {
+     "at": "exportCss.js:664"
+    },
+    "borderImage": {
+     "at": "exportCss.js:667"
+    },
+    "borderRadius": {
+     "at": "exportCss.js:673"
+    },
+    "boxShadow": {
+     "at": "exportCss.js:684"
+    },
+    "filter": {
+     "at": "exportCss.js:685"
+    },
+    "height": {
+     "at": "exportCss.js:649"
+    },
+    "width": {
+     "at": "exportCss.js:648"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "borderImage",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "search-list-product": {
+   "css": [
+    "cssSearchListProduct"
+   ],
+   "data": [
+    "search_list_product_struct"
+   ],
+   "html": [
+    "renderSearchListProduct"
+   ],
+   "styles": {
+    "background": {
+     "at": "exportCss.js:2531"
+    },
+    "borderRadius": {
+     "at": "exportCss.js:2526"
+    },
+    "color": {
+     "at": "exportCss.js:2530"
+    }
+   },
+   "styles_dropped": [
+    "-webkit-text-stroke",
+    "height",
+    "left",
+    "mixBlendMode",
+    "textAlign",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "section": {
+   "client_specials": true,
+   "config": {
+    "keep_solution": {
+     "at": "exportCss.js:418"
+    },
+    "overlay": {
+     "at": "exportCss.js:460"
+    }
+   },
+   "css": [
+    "cssSection"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderSection"
+   ],
+   "specials": {
+    "compressible": {
+     "at": "exportCss.js:409"
+    },
+    "globalSection": {
+     "at": "index.js:278"
+    },
+    "imageCompression": {
+     "at": "exportCss.js:408"
+    },
+    "keep_solution": {
+     "at": "exportCss.js:418"
+    },
+    "show_control_volume": {
+     "at": "index.js:281"
+    },
+    "video_background": {
+     "at": "index.js:281"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:410",
+     "default": "#fff"
+    },
+    "filter": {
+     "at": "exportCss.js:406",
+     "default": ""
+    },
+    "height": {
+     "at": "exportCss.js:415"
+    },
+    "opacity": {
+     "at": "exportCss.js:405",
+     "default": 1
+    }
+   }
+  },
+  "select": {
+   "client_specials": true,
+   "css": [
+    "cssSelect"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderSelect"
+   ],
+   "specials": {
+    "default_value": {
+     "at": "index.js:587",
+     "default": "default-none",
+     "values": [
+      "default-none",
+      "none"
+     ]
+    },
+    "field_name": {
+     "at": "index.js:589"
+    },
+    "field_placeholder": {
+     "at": "index.js:588"
+    },
+    "options": {
+     "at": "index.js:586"
+    },
+    "required": {
+     "at": "index.js:590"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:1043"
+    },
+    "color": {
+     "at": "exportCss.js:1044"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "signature": {
+   "client_specials": true,
+   "css": [
+    "cssSignature"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderSignature"
+   ],
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "slide": {
+   "config": {
+    "delayTime": {
+     "at": "event-data.js:539"
+    },
+    "keep_solution": {
+     "at": "exportCss.js:1731"
+    },
+    "slideToShow": {
+     "at": "exportCss.js:1672",
+     "default": 1
+    },
+    "transition": {
+     "at": "exportCss.js:1686",
+     "default": "default"
+    }
+   },
+   "css": [
+    "cssSlide"
+   ],
+   "data": [
+    "slide_struct"
+   ],
+   "html": [
+    "renderSlide"
+   ],
+   "parent_reads": [
+    "config.centerMode",
+    "config.slideToShow",
+    "config.slideWidth",
+    "config.transition",
+    "config.transitionTime",
+    "styles.height",
+    "styles.width"
+   ],
+   "specials": {
+    "alt": {
+     "at": "index.js:1069",
+     "default": ""
+    },
+    "keep_solution": {
+     "at": "exportCss.js:1731"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:1666"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "spin-wheel": {
+   "client_specials": true,
+   "config": {
+    "btnSize": {
+     "at": "exportCss.js:2011",
+     "default": 80
+    }
+   },
+   "css": [
+    "cssSpinWheel"
+   ],
+   "data": [
+    "spin_wheel_struct"
+   ],
+   "html": [
+    "renderSpinWheel"
+   ],
+   "specials": {
+    "background": {
+     "at": "exportCss.js:1999"
+    },
+    "backgroundBtn": {
+     "at": "exportCss.js:1999"
+    },
+    "code": {
+     "at": "index.js:1147"
+    },
+    "codeDataset": {
+     "at": "index.js:1144"
+    },
+    "dataType": {
+     "at": "index.js:1143",
+     "values": [
+      2
+     ]
+    },
+    "datasetId": {
+     "at": "index.js:1143"
+    },
+    "message": {
+     "at": "index.js:1164"
+    },
+    "rotateBackground": {
+     "at": "exportCss.js:1999",
+     "default": 0
+    },
+    "showCoupon": {
+     "at": "index.js:1120",
+     "values": [
+      "no"
+     ]
+    }
+   },
+   "styles": {
+    "color": {
+     "at": "exportCss.js:2014",
+     "default": "#FFFFFF"
+    },
+    "fontSize": {
+     "at": "exportCss.js:2005",
+     "default": 16
+    },
+    "rotate": {
+     "at": "exportCss.js:2004",
+     "default": 0
+    },
+    "textAlign": {
+     "at": "exportCss.js:2006",
+     "default": "start"
+    },
+    "widthText": {
+     "at": "exportCss.js:2007"
+    }
+   }
+  },
+  "survey": {
+   "client_specials": true,
+   "css": [
+    "cssSurvey"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderSurvey"
+   ],
+   "specials": {
+    "alignment": {
+     "at": "index.js:396",
+     "default": "center"
+    },
+    "customInputSize": {
+     "at": "exportCss.js:2623"
+    },
+    "hoveredBackground": {
+     "at": "exportCss.js:2632"
+    },
+    "hoveredBorder": {
+     "at": "exportCss.js:2633"
+    },
+    "hoveredColor": {
+     "at": "exportCss.js:2631"
+    },
+    "hoveredScale": {
+     "at": "exportCss.js:2634"
+    },
+    "imageHeight": {
+     "at": "exportCss.js:2622"
+    },
+    "imageWidth": {
+     "at": "exportCss.js:2621"
+    },
+    "inputHeight": {
+     "at": "exportCss.js:2625"
+    },
+    "inputWidth": {
+     "at": "exportCss.js:2624"
+    },
+    "options": {
+     "at": "index.js:397"
+    },
+    "required": {
+     "at": "index.js:399"
+    },
+    "selectedBackground": {
+     "at": "exportCss.js:2628"
+    },
+    "selectedBorder": {
+     "at": "exportCss.js:2629"
+    },
+    "selectedColor": {
+     "at": "exportCss.js:2627"
+    },
+    "selectedScale": {
+     "at": "exportCss.js:2630"
+    },
+    "showInputQuantity": {
+     "at": "index.js:400"
+    },
+    "type": {
+     "at": "index.js:398",
+     "values": [
+      "image",
+      "text"
+     ]
+    }
+   },
+   "styles": {
+    "borderRadius": {
+     "at": "exportCss.js:2666"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "table": {
+   "client_specials": true,
+   "css": [
+    "cssTable"
+   ],
+   "data": [
+    "table_struct"
+   ],
+   "html": [
+    "renderTable"
+   ],
+   "specials": {
+    "borderColor": {
+     "at": "exportCss.js:2069"
+    },
+    "borderStyle": {
+     "at": "exportCss.js:2070"
+    },
+    "borderWidth": {
+     "at": "exportCss.js:2068"
+    },
+    "dataType": {
+     "at": "event-data.js:626",
+     "values": [
+      1
+     ]
+    },
+    "google_sheet_data": {
+     "at": "event-data.js:640"
+    },
+    "head_background": {
+     "at": "exportCss.js:2061"
+    },
+    "head_color": {
+     "at": "exportCss.js:2062"
+    },
+    "hidden_title": {
+     "at": "exportCss.js:2060"
+    },
+    "padding_content": {
+     "at": "exportCss.js:2067"
+    },
+    "row_even_background": {
+     "at": "exportCss.js:2063"
+    },
+    "row_even_color": {
+     "at": "exportCss.js:2064"
+    },
+    "row_odd_background": {
+     "at": "exportCss.js:2065"
+    },
+    "row_odd_color": {
+     "at": "exportCss.js:2066"
+    },
+    "sheetID": {
+     "at": "event-data.js:628"
+    },
+    "source": {
+     "at": "event-data.js:627"
+    },
+    "sourceTable": {
+     "at": "index.js:1174",
+     "default": ""
+    }
+   },
+   "styles": {
+    "fontFamily": {
+     "at": "exportCss.js:2089",
+     "default": "inherit"
+    },
+    "fontSize": {
+     "at": "exportCss.js:2088"
+    },
+    "fontWeight": {
+     "at": "exportCss.js:2090",
+     "default": "inherit"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "text-block": {
+   "client_specials": true,
+   "css": [
+    "cssTextBlock"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderTextBlock"
+   ],
+   "specials": {
+    "tag": {
+     "at": "index.js:342",
+     "default": "p"
+    },
+    "text": {
+     "at": "index.js:343",
+     "default": ""
+    }
+   },
+   "styles": {
+    "-webkitBackgroundClip": {
+     "at": "exportCss.js:501"
+    },
+    "background": {
+     "at": "exportCss.js:492"
+    },
+    "backgroundTxt": {
+     "at": "exportCss.js:498",
+     "default": ""
+    },
+    "width": {
+     "at": "exportCss.js:495"
+    }
+   },
+   "styles_dropped": [
+    "-webkitBackgroundClip",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "textarea": {
+   "client_specials": true,
+   "css": [
+    "cssTextarea"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderTextarea"
+   ],
+   "specials": {
+    "field_name": {
+     "at": "index.js:571"
+    },
+    "field_placeholder": {
+     "at": "index.js:571",
+     "default": ""
+    },
+    "isLimited": {
+     "at": "index.js:573"
+    },
+    "isMinimumLimited": {
+     "at": "index.js:574"
+    },
+    "limit": {
+     "at": "index.js:573"
+    },
+    "minimumLimit": {
+     "at": "index.js:574"
+    },
+    "required": {
+     "at": "index.js:571"
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "timegroup": {
+   "client_specials": true,
+   "css": [
+    "cssTimeGroup"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderTimeGroups"
+   ],
+   "specials": {
+    "text": {
+     "at": "index.js:987",
+     "default": ""
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
+  "verify-code": {
+   "client_specials": true,
+   "css": [
+    "cssVerifyCode"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderVerifyCode"
+   ],
+   "specials": {
+    "button_get_code_text": {
+     "at": "index.js:2030",
+     "default": "Get code"
+    },
+    "field_placeholder": {
+     "at": "index.js:2033"
+    },
+    "length_otp": {
+     "at": "index.js:2031",
+     "default": 4,
+     "values": [
+      4,
+      6
+     ]
+    },
+    "type_otp_input": {
+     "at": "index.js:2032",
+     "default": "split-input",
+     "values": [
+      "one-input",
+      "split-input"
+     ]
+    }
+   },
+   "styles": {
+    "backgroundBtnCode": {
+     "at": "exportCss.js:2599",
+     "default": "#26a69a"
+    },
+    "backgroundOtpInput": {
+     "at": "exportCss.js:2550",
+     "default": "#d2d2d2"
+    },
+    "borderColor": {
+     "at": "index.js:2035"
+    },
+    "borderStyle": {
+     "at": "index.js:2036"
+    },
+    "borderWidth": {
+     "at": "index.js:2034"
+    },
+    "fontFamilyBtnCode": {
+     "at": "exportCss.js:2589"
+    },
+    "fontSizeBtnCode": {
+     "at": "exportCss.js:2587"
+    },
+    "fontWeightBtnCode": {
+     "at": "exportCss.js:2588"
+    },
+    "heightBtnCode": {
+     "at": "exportCss.js:2606",
+     "default": 30
+    },
+    "heightOtpInput": {
+     "at": "exportCss.js:2549",
+     "default": 40
+    },
+    "letterSpacingBtnCode": {
+     "at": "exportCss.js:2590"
+    },
+    "widthBtnCode": {
+     "at": "exportCss.js:2605",
+     "default": 74
+    },
+    "widthOtpInput": {
+     "at": "exportCss.js:2548",
+     "default": 30
+    }
+   }
+  },
+  "video": {
+   "client_specials": true,
+   "config": {
+    "keep_solution": {
+     "at": "exportCss.js:1481"
+    },
+    "sticky": {
+     "at": "event-data.js:474"
+    },
+    "stickyBottom": {
+     "at": "event-data.js:474"
+    },
+    "stickyFlex": {
+     "at": "event-data.js:474"
+    },
+    "stickyHeight": {
+     "at": "event-data.js:474"
+    },
+    "stickyLR": {
+     "at": "event-data.js:474"
+    },
+    "stickyPosition": {
+     "at": "event-data.js:474"
+    },
+    "stickyTop": {
+     "at": "event-data.js:474"
+    },
+    "stickyUnpinAtSection": {
+     "at": "event-data.js:474"
+    },
+    "stickyUnpinAtSections": {
+     "at": "event-data.js:474"
+    },
+    "stickyWidth": {
+     "at": "event-data.js:474"
+    }
+   },
+   "css": [
+    "cssVideo"
+   ],
+   "data": [
+    "video_struct"
+   ],
+   "html": [
+    "renderVideo"
+   ],
+   "specials": {
+    "hideDownload": {
+     "at": "index.js:870"
+    },
+    "img": {
+     "at": "index.js:869",
+     "default": ""
+    },
+    "keep_solution": {
+     "at": "exportCss.js:1481"
+    },
+    "typeVideo": {
+     "at": "index.js:868",
+     "values": [
+      "vimeo",
+      "youtube"
+     ]
+    },
+    "videoFit": {
+     "at": "exportCss.js:1477"
+    }
+   },
+   "styles": {
+    "background": {
+     "at": "exportCss.js:1476"
+    },
+    "height": {
+     "at": "exportCss.js:1480"
+    },
+    "width": {
+     "at": "exportCss.js:1479"
+    }
+   },
+   "styles_dropped": [
+    "background",
+    "border",
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  }
+ }
+}

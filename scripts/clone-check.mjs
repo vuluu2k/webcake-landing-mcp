@@ -31,13 +31,23 @@ const browser = await chromium.launch(process.env.CHROME_BIN ? { executablePath:
 async function texts(url, width, column) {
   const page = await browser.newPage({ viewport: { width, height: 900 } });
   await page.goto(url, { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
+  // Same as the capture: an app shell scrolling inside a full-height box is unlocked first.
+  await page.evaluate(() => {
+    const vh = window.innerHeight;
+    if (document.documentElement.scrollHeight > vh * 1.5) return;
+    const sc = [...document.querySelectorAll("body *")].find((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 200 && e.clientHeight > vh * 0.6);
+    for (let n = sc; n; n = n.parentElement) for (const [k, v] of [["height", "auto"], ["max-height", "none"], ["overflow", "visible"], ["overflow-y", "visible"]]) n.style.setProperty(k, v, "important");
+  });
   // The published page paints backgrounds lazily (.lazy) on scroll: scroll through like a visitor.
   await page.evaluate(async () => {
-    for (let y = 0; y < document.body.scrollHeight; y += 400) {
-      window.scrollTo(0, y);
-      await new Promise((r) => setTimeout(r, 40));
+    // as slow as the capture: reveal-on-scroll content must settle the same way on both sides
+    document.documentElement.style.setProperty("scroll-behavior", "auto", "important");
+    const h = document.documentElement.scrollHeight;
+    for (let y = 0; y < h; y += Math.max(400, Math.ceil(h / 80))) {
+      window.scrollTo({ top: y, behavior: "instant" });
+      await new Promise((r) => setTimeout(r, 150));
     }
-    window.scrollTo(0, 0);
+    window.scrollTo({ top: 0, behavior: "instant" });
   });
   await page.waitForTimeout(300);
   const name = path.basename(url).replace(/\W+/g, "_");
@@ -52,11 +62,22 @@ async function texts(url, width, column) {
       const el = n.parentElement;
       const s = getComputedStyle(el);
       if (s.display === "none" || s.visibility === "hidden" || el.closest("script,style,noscript")) continue;
+      // hidden by an ancestor's opacity / visibility (closed menus, off-state tabs) is not on the page
+      if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true, contentVisibilityAuto: true })) continue;
       // the glyphs' own box (a Range), not the parent's — padding would bias the comparison
       const range = document.createRange();
       range.selectNodeContents(n);
       const r = range.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) continue;
+      // clipped away by an overflow:hidden ancestor (a collapsed menu): not visible either
+      let clip = false;
+      for (let a = el; a && a !== document.body; a = a.parentElement) {
+        const s2 = getComputedStyle(a);
+        if (s2.overflow === "visible") continue;
+        const q = a.getBoundingClientRect();
+        if (r.bottom <= q.top + 1 || r.top >= q.bottom - 1 || r.right <= q.left + 1 || r.left >= q.right - 1) { clip = true; break; }
+      }
+      if (clip) continue;
       out.push({ t: t.slice(0, 40), top: r.top + scrollY, left: r.left - colLeft });
     }
     return { out, height: document.documentElement.scrollHeight };
@@ -85,6 +106,7 @@ for (const t of targets) {
     const cl = await texts(pathToFileURL(htmlFile).href, w, w === 1200 ? 960 : 0);
     const k = cw / w;
     let found = 0, dx = 0, dy = 0;
+    const dys = [];
     const used = new Set();
     for (const s of src.out) {
       const i = cl.out.findIndex((c, j) => !used.has(j) && c.t === s.t);
@@ -93,10 +115,13 @@ for (const t of targets) {
       found++;
       dx += Math.abs(cl.out[i].left - s.left * k);
       dy += Math.abs(cl.out[i].top - s.top * k);
+      dys.push(Math.abs(cl.out[i].top - s.top * k));
     }
     row[`text@${w}`] = `${found}/${src.out.length}`;
     row[`dx@${w}`] = found ? Math.round(dx / found) : null;
     row[`dy@${w}`] = found ? Math.round(dy / found) : null;
+    // the median: robust to repeated texts ("Xem thêm"…) matched to the wrong occurrence
+    row[`dyMed@${w}`] = dys.length ? Math.round(dys.sort((a, b) => a - b)[Math.floor(dys.length / 2)]) : null;
     row[`h@${w}`] = Math.round((cl.height / (src.height * k)) * 100) / 100;
   }
   rows.push(row);

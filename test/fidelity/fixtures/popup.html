@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Popup</title>
+<style>
+ body{margin:0;font-family:Arial,sans-serif;color:#111}
+ nav{display:flex;gap:24px;justify-content:center;padding:20px;background:#111}
+ nav a{color:#fff;text-decoration:none}
+ .hero{padding:80px 20px;text-align:center;background:#fef3c7}
+ .btn{display:inline-block;background:#dc2626;color:#fff;border:0;border-radius:8px;padding:14px 28px;font-size:18px;cursor:pointer}
+ #features{padding:80px 20px;text-align:center}
+ .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5)}
+ .modal-content{width:420px;margin:120px auto;background:#fff;border-radius:16px;padding:28px}
+ .modal-content input{display:block;width:100%;box-sizing:border-box;margin:10px 0;padding:12px;border:1px solid #ccc;border-radius:8px}
+ .modal-content button{width:100%;padding:12px;border:0;border-radius:8px;background:#dc2626;color:#fff}
+</style></head><body>
+ <nav><a href="#features">Tính năng</a><a href="#top">Trang chủ</a></nav>
+ <section class="hero" id="top"><h1>Ưu đãi tháng 11</h1><button class="btn" data-bs-toggle="modal" data-bs-target="#signup">Nhận mã giảm giá</button></section>
+ <section id="features"><h2>Tính năng nổi bật</h2><p>Giao nhanh, đổi trả 30 ngày.</p></section>
+ <div class="modal" id="signup"><div class="modal-content"><h3>Đăng ký nhận mã</h3>
+  <form><input name="name" placeholder="Họ tên"><input name="phone" type="tel" placeholder="Số điện thoại"><button type="submit">Gửi</button></form></div></div>
+</body></html>

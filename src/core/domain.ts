@@ -68,6 +68,12 @@ export interface Domain {
    */
   autofixLayout?(input: unknown): string[];
   /**
+   * Optional: the evidence-based key reference of one element type (what get_element shows) —
+   * one line per key the published renderer reads, the keys stored with no effect, and the
+   * type's relations (where it must sit, what it holds on real pages).
+   */
+  elementKeys?(type: string): { keys?: unknown; relations?: unknown } | undefined;
+  /**
    * Optional: compute exact on-canvas coordinates (top/left/width/height for
    * BOTH breakpoints) for a layout pattern — the centering / row / grid / stack
    * math the guide prescribes — so the model gets perfect geometry instead of

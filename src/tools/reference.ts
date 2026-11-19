@@ -44,7 +44,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   // 3) Get element ------------------------------------------------------------
   server.tool(
     "get_element",
-    "Returns usage details for one element type, or for several via `types: [...]`: a summary, when it applies, key `specials` fields, a sparse skeleton node (the server fills omitted boilerplate), and for common types a filled example. `types` returns { elements: { [type]: details } }; `type` returns a single doc.",
+    "Returns usage details for one element type, or for several via `types: [...]`: a summary, when it applies, key `specials` fields, a sparse skeleton node (the server fills omitted boilerplate), for common types a filled example, `keys` (one line per specials/config/styles key the published renderer READS — meaning, value type, enum, default — plus `no_effect`: keys stored but never rendered) and `relations` (where it must sit, parents/children on real pages). `types` returns { elements: { [type]: details } }; `type` returns a single doc.",
     {
       type: z.string().optional().describe("Single element type."),
       types: z
@@ -75,6 +75,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
           keySpecials: doc.keySpecials,
           skeleton: sparseTemplate(domain.createElement(t)),
           example: doc.example ?? null,
+          ...(domain.elementKeys?.(t) ?? {}),
         };
       }
       // Single-`type` mode → return the doc directly (no map wrap), matches the old shape.

@@ -109,3 +109,44 @@ test("extra_css rules of deleted elements are dropped on save", () => {
   assert.equal(s.settings.extra_css, `#w-${t.id}:hover .text-block-css{color:red}`);
   assert.ok(fixed.some((f) => /dropped 1 rule/.test(f)));
 });
+
+test("popups, popup/anchor events, sliders → native popup + open_popup / scroll_to + carousel", () => {
+  const btn = el("btn", "button", { top: 100, left: 400, width: 200, height: 48 }, { text: "Nhận mã", style: { "background-color": "rgb(220, 38, 38)", color: "rgb(255,255,255)", "font-size": "18" }, target: { type: "popup", action: "POPUP1" } });
+  const nav = el("nav", "paragraph", { top: 10, left: 20, width: 100, height: 20 }, { text: "Tính năng", target: { type: "section", action: "SECTION2" } });
+  const slide = (n) => ({ key: `s${n}`, kind: "slide", box: { top: 0, left: 0, width: 300, height: 200 }, style: {}, children: [el(`t${n}`, "paragraph", { top: 20, left: 20, width: 200, height: 24 }, { text: `Slide ${n}` })] });
+  const slider = { key: "sl~slider", kind: "slider", box: { top: 40, left: 100, width: 900, height: 200 }, style: {}, nav: true, children: [1, 2, 3, 4].map(slide) };
+  const page = {
+    title: "P", description: "", width: 1200, truncated: false, headLinks: [],
+    sections: [
+      { key: "a", top: 0, height: 300, background: { "background-color": "rgb(255,255,255)" }, elements: [nav, btn] },
+      { key: "b", top: 300, height: 300, background: { "background-color": "rgb(255,255,255)" }, elements: [slider] },
+    ],
+    popups: [{ key: "POPUP1", top: 0, height: 300, width: 420, background: {}, style: { "background-color": "rgb(255,255,255)" }, elements: [el("ph", "headline", { top: 20, left: 20, width: 300, height: 30 }, { text: "Đăng ký" })] }],
+  };
+  const { source } = D.canvasToSource(mergeCaptures(page, null), { title: "P" });
+  const saved = D.expand(source);
+  D.autofixLayout(saved);
+  const v = D.validate(saved);
+  assert.ok(v.valid, v.errors.join("\n"));
+  assert.equal(saved.popup.length, 1);
+  const ev = saved.page[0].children.flatMap((c) => c.events ?? []);
+  assert.ok(ev.some((e) => e.action === "open_popup" && e.target === saved.popup[0].id));
+  assert.ok(ev.some((e) => e.action === "scroll_to" && e.target === saved.page[1].id));
+  const car = saved.page[1].children.find((c) => c.type === "carousel");
+  assert.equal(car.children.length, 4);
+  assert.deepEqual([car.responsive.desktop.config.slideWidth, car.responsive.desktop.config.slideToShow, car.responsive.desktop.styles.width], [240, 3, 720]);
+  assert.ok(car.children.every((s) => s.type === "slide" && s.children.some((k) => k.type === "text-block")));
+});
+
+test("measured text keeps its height (virtualHeight) and tight gaps; containers grow only by real spill", () => {
+  const lines = [0, 1, 2].map((i) => el(`l${i}`, "paragraph", { top: 10 + i * 22, left: 20, width: 300, height: 20 }, { text: `Dòng số ${i} của một đoạn văn bản dài` }));
+  const tilted = el("pic", "image", { top: 200, left: 400, width: 300, height: 400 }, { src: "https://x.test/a.jpg", style: { transform: "rotate(10deg)" } });
+  const page = { title: "M", description: "", width: 1200, truncated: false, headLinks: [], sections: [{ key: "a", top: 0, height: 375, background: {}, elements: [...lines, tilted] }] };
+  const { source } = D.canvasToSource(mergeCaptures(page, null), { title: "M" });
+  const saved = D.expand(source);
+  const fixed = D.autofixLayout(saved);
+  const texts = saved.page[0].children.filter((c) => c.type === "text-block");
+  assert.deepEqual(texts.map((t) => t.responsive.desktop.styles.top), [8, 26, 43]);
+  assert.ok(texts.every((t) => t.responsive.desktop.config.virtualHeight === t.responsive.desktop.styles.height));
+  assert.equal(saved.page[0].responsive.desktop.styles.height, 300, fixed.join("\n"));
+});

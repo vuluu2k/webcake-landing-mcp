@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slider</title>
+<style>
+ body{margin:0;font-family:Arial,sans-serif}
+ .wrap{max-width:960px;margin:40px auto;padding:0 20px}
+ h2{text-align:center}
+ .swiper{overflow:hidden;position:relative}
+ .swiper-wrapper{display:flex;gap:0}
+ .swiper-slide{flex:0 0 33.333%;box-sizing:border-box;padding:10px}
+ .card{background:#eef2ff;border-radius:12px;padding:20px;height:200px;box-sizing:border-box}
+ .card b{display:block;font-size:20px;margin-bottom:8px}
+ .swiper-button-next{position:absolute;right:0;top:45%;width:32px;height:32px;background:#4f46e5;border-radius:50%}
+ .carousel{position:relative;height:260px;margin-top:40px}
+ .carousel-item{display:none;height:260px;background:#fde68a;border-radius:16px}
+ .carousel-item.active{display:block}
+ .carousel-item h3{margin:0;padding:100px 40px 0;font-size:28px}
+ @media(max-width:767px){.swiper-slide{flex-basis:100%}}
+</style></head><body><div class="wrap">
+ <h2>Khách hàng nói gì</h2>
+ <div class="swiper"><div class="swiper-wrapper">
+  <div class="swiper-slide"><div class="card"><b>Lan</b>Giao nhanh, hàng đẹp.</div></div>
+  <div class="swiper-slide"><div class="card"><b>Minh</b>Đóng gói cẩn thận.</div></div>
+  <div class="swiper-slide"><div class="card"><b>Hà</b>Sẽ mua lại.</div></div>
+  <div class="swiper-slide"><div class="card"><b>Tuấn</b>Giá tốt.</div></div>
+  <div class="swiper-slide"><div class="card"><b>Mai</b>Tư vấn nhiệt tình.</div></div>
+ </div><div class="swiper-button-next"></div></div>
+ <div class="carousel"><div class="carousel-inner">
+  <div class="carousel-item active"><h3>Banner 1: Sale 50%</h3></div>
+  <div class="carousel-item"><h3>Banner 2: Freeship</h3></div>
+  <div class="carousel-item"><h3>Banner 3: Quà tặng</h3></div>
+ </div></div>
+</div></body></html>
