@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-11-19
+
+### Changed
+- A Webcake JWT the backend rejects is now marked dead in a shared store (Redis + Postgres) instead of a single process's memory, so every remote server instance behind a load balancer answers 401 for it and the OAuth token it is wrapped in is revoked everywhere.
+- When several IDE windows' stdio servers hit an expired token at the same time, they now share a single browser Connect via a lock file on the machine instead of each one opening its own tab; the others pick up the token the first one saves.
+
 ## [1.8.0] - 2026-11-19
 
 ### Added

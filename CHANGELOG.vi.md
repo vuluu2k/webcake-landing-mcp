@@ -6,6 +6,12 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-11-19
+
+### Changed
+- Một JWT Webcake bị backend từ chối nay được đánh dấu "chết" trong một store chung (Redis + Postgres) thay vì chỉ nằm trong bộ nhớ của một process, nên mọi instance server remote phía sau load balancer đều trả 401 cho nó, và OAuth token bọc quanh JWT đó bị revoke ở mọi nơi.
+- Khi nhiều cửa sổ IDE có server stdio cùng gặp token hết hạn tại một thời điểm, nay chúng dùng chung một lần mở Connect trên trình duyệt qua một file lock trên máy, thay vì mỗi cửa sổ tự mở một tab riêng; các cửa sổ còn lại sẽ lấy luôn token mà cửa sổ đầu tiên lưu được.
+
 ## [1.8.0] - 2026-11-19
 
 ### Added
