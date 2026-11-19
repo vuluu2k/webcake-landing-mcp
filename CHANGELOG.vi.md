@@ -6,6 +6,23 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-11-19
+
+### Added
+- Ba tool mới `api_find`, `api_get`, `api_call` cho phép gọi toàn bộ API của landing_page_backend mà token của tài khoản có quyền truy cập, vượt ra ngoài phạm vi các tool chuyên biệt (dataset, domain, form data, tag, UTM, campaign, thư viện media, tổ chức/nhóm, cài đặt trang…); `api_find` tìm kiếm và mô tả một operation, `api_get` chạy các GET chỉ đọc, `api_call` chạy mọi phương thức, các write mặc định `dry_run` và từ chối các route đã có tool chuyên biệt đảm nhiệm (`create_page`, `update_page`, `add_section`, `publish_page`, `upload_images`, `list_organizations`…) hoặc là thao tác không thể hoàn tác ở cấp tài khoản (xoá trang/domain, thành viên tổ chức, phân quyền, thanh toán, thông tin đăng nhập).
+- `clone_page` nay tái tạo nhiều hiệu ứng của trang bằng setting có sẵn thay vì custom code: gradient (kể cả chữ gradient), `filter`/`backdrop-filter` (blur), và animation xuất hiện kiểu AOS / animate.css / WOW được map vào `config.animation`.
+- `clone_page` nay chuyển header dính (sticky/fixed) thành sticky kiểu native của section, và hộp `overflow:hidden` có nội dung tràn ra ngoài mép thành một group cắt (`specials.custom_css: overflow:hidden`) thay vì kéo phần tràn vào lại bên trong.
+- `clone_page` nay lấy luôn các rule `:hover` và transition CSS của trang gốc thành `settings.extra_css` giới hạn theo `#w-<id>` của element, vì không có setting native nào xử lý trạng thái hover.
+- `clone_page` nay lấy stylesheet icon font vào `settings.bhet` và font `@font-face` tự host vào `settings.fontGroups` (file font được re-host khi lưu).
+- Văn bản trong `clone_page` nay đo theo content box (đã trừ padding và border) và giữ nguyên các đoạn inline có màu/đậm/nghiêng/gradient dưới dạng `<span style>` thay vì làm phẳng thành chữ thường.
+
+### Changed
+- `validate_page` và bước auto-fix layout nay coi một group cắt (`specials.custom_css` có `overflow:hidden`) là chủ ý: children tràn ra ngoài mép group không còn bị cảnh báo off-canvas hay bị kéo vào lại / không còn làm group tự phình ra để chứa con.
+- Mỗi lần lưu (`create_page`/`update_page`/`add_section`/`patch_page`) nay cũng xoá các rule trong `settings.extra_css` chỉ nhắm vào id của element không còn trên trang.
+
+### Fixed
+- `upload_images` và luồng tự re-host ảnh khi lưu không còn bị lỗi 406 từ host builder khi tra thư mục gốc bộ sưu tập của tổ chức hoặc khi upload vào đó.
+
 ## [1.10.0] - 2026-11-19
 
 ### Added

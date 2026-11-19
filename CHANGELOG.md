@@ -6,6 +6,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-11-19
+
+### Added
+- Three new tools, `api_find`, `api_get`, and `api_call`, expose the full landing_page_backend API surface the account's token can reach, beyond what the dedicated tools cover (datasets, domains, form data, tags, UTM, campaigns, media library, org/teams, page settings…); `api_find` searches and describes an operation, `api_get` runs read-only GETs, and `api_call` runs any method, defaulting writes to `dry_run` and refusing routes already owned by a dedicated tool (`create_page`, `update_page`, `add_section`, `publish_page`, `upload_images`, `list_organizations`…) or that are irreversible account-level operations (page/domain deletion, organization membership, permissions, billing, credentials).
+- `clone_page` now reproduces more page effects with native settings instead of custom code: gradients (including gradient text), CSS `filter`/`backdrop-filter` blur, and AOS / animate.css / WOW entrance animations mapped onto `config.animation`.
+- `clone_page` now turns a sticky or fixed header into the section's native sticky setting, and an `overflow:hidden` box whose content spills past its edge into a clipping group (`specials.custom_css: overflow:hidden`) instead of pulling the overflowing content back inside.
+- `clone_page` now captures the source page's own `:hover` rules and CSS transitions as `settings.extra_css` scoped to the element's `#w-<id>`, since no native setting covers hover state.
+- `clone_page` now captures icon-font stylesheets into `settings.bhet` and self-hosted `@font-face` fonts into `settings.fontGroups` (the font files are re-hosted on save).
+- `clone_page` text now measures by content box (padding and border subtracted) and preserves inline color/bold/italic/gradient-fill runs as inline `<span style>` instead of flattening them to plain text.
+
+### Changed
+- `validate_page` and the automatic layout autofix now treat a clipping group (`specials.custom_css` with `overflow:hidden`) as intentional: children hanging outside its edge no longer trigger off-canvas warnings or get pulled back inside / the group resized around them.
+- Every save (`create_page`/`update_page`/`add_section`/`patch_page`) now also drops `settings.extra_css` rules that only target an element id no longer present on the page.
+
+### Fixed
+- `upload_images` and the auto-host-on-save path no longer fail with a 406 against the builder host when looking up an organization's root collection folder or uploading into it.
+
 ## [1.10.0] - 2026-11-19
 
 ### Added
