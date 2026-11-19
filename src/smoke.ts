@@ -2893,9 +2893,9 @@ console.log("== auth: expired token → Connect again ==");
   const jwt = (dSec: number) => `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + dSec })).toString("base64url")}.s`;
   const OLD = jwt(-3600), NEW = jwt(3600);
   check("auth: jwtExpired reads exp; opaque tokens never expire", jwtExpired(OLD) && !jwtExpired(NEW) && !jwtExpired("opaque"));
-  check("auth: expired JWT is dead (OAuth refresh + resolve refuse it)", isDeadJwt(OLD) && !isDeadJwt(NEW));
-  markJwtDead("rejected-by-backend");
-  check("auth: backend-rejected JWT is dead", isDeadJwt("rejected-by-backend"));
+  check("auth: expired JWT is dead (OAuth refresh + resolve refuse it)", (await isDeadJwt(OLD)) && !(await isDeadJwt(NEW)));
+  await markJwtDead("rejected-by-backend");
+  check("auth: backend-rejected JWT is dead", await isDeadJwt("rejected-by-backend"));
   check("auth: isUnauthorized spots a backend 401 in a tool result", isUnauthorized({ content: [{ type: "text", text: '{"ok":false,"error":"Backend returned 401: Unauthorized"}' }] }) && !isUnauthorized({ content: [{ type: "text", text: '{"error":"Backend returned 403"}' }] }));
   const saveEnv = process.env.WEBCAKE_JWT;
   process.env.WEBCAKE_JWT = OLD;
@@ -2906,7 +2906,7 @@ console.log("== auth: expired token → Connect again ==");
   renewAuthOnExpiry(fake, false);
   fake.tool("t", async () => ({ content: [{ type: "text", text: "Backend returned 401: Unauthorized" }] }));
   await fake.h({}, { requestInfo: { headers: { "x-webcake-jwt": "remote-rejected", "x-webcake-env": "prod" } } });
-  check("auth: remote 401 marks the session JWT dead", isDeadJwt("remote-rejected"));
+  check("auth: remote 401 marks the session JWT dead", await isDeadJwt("remote-rejected"));
 }
 
 console.log("== server: MCP serverInfo.version follows package.json (no hardcoded constant) ==");

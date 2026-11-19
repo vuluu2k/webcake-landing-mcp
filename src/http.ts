@@ -523,7 +523,7 @@ export async function startHttpServer(port: number): Promise<void> {
     // enforced mode a raw JWT must use x-webcake-jwt / ?jwt=, since Bearer is reserved
     // for OAuth access tokens.
     const given = req.headers["x-webcake-jwt"];
-    const dead = isDeadJwt(Array.isArray(given) ? given[0] : given);
+    const dead = await isDeadJwt(Array.isArray(given) ? given[0] : given);
     if (OAUTH_ENFORCED && (given == null || dead)) {
       res.writeHead(401, {
         "www-authenticate": `Bearer error="invalid_token", resource_metadata="${publicBase(req)}${WELL_KNOWN_PR}"`,
