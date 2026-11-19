@@ -6,6 +6,25 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-11-19
+
+### Added
+- Tool mới `clone_page` clone bất kỳ trang web nào (kể cả trang render bằng JavaScript như React/Vue/Next) bằng cách đo trực tiếp trong trình duyệt Chrome headless ở cả độ rộng desktop (1200px) và mobile (420px), rồi dựng lại thành source landing page với layout mobile đo thực tế thay vì chỉ scale đơn giản từ desktop sang mobile; kết quả được lưu nháp dưới dạng `draft_id` để dùng với `create_page`.
+- `validate_page` nay chặn thêm nhiều dạng input làm sập renderer build trang thật: `specials.code` của `spin-wheel` không phải chuỗi, `specials.html` của `html-box`/`editor-blog` không phải chuỗi, `specials.text` của `text-block`/`button` không phải chuỗi, `grid` không có children, `carousel` có `children` không phải array, và `gallery` có `config.thumbnailPosition` khác `top`/`bottom`/`left`/`right`.
+- `validate_page` nay từ chối `specials.language` của `countdown` nếu không phải chuỗi, và cảnh báo khi một element đặt `events` trên loại mà publisher lặng lẽ bỏ qua events (`video`, `carousel`, `slide`, `popup`, `notify`, `spin-wheel`, `table`, `grid`, `grid-item`, `auto-number`, `random-number`, `list-product`, `search-list-product`, `group-select`, `group-select-item`).
+- Mỗi lần lưu (`create_page`/`update_page`/`add_section`/`patch_page`) nay chạy thêm một bước tự sửa lỗi (auto-repair) trước khi validate, tự âm thầm sửa các input mà renderer sẽ sập hoặc render sai: thiếu `settings.width_section`/`options`/`popup`, `settings.fontGeneral` bị bọc dấu nháy, mã locale (ví dụ `vi`/`en`) trong `specials.language` của `countdown`, thiếu `specials.field_placeholder` trên `select`/`country-select`/`group-select-item`, event không có `action`, style `borderRadius` là số, `animation.repeat` là chuỗi, và `grid` rỗng (tự thêm một `grid-item`).
+- `page-schema.json` nay nhận các giá trị do chính editor ghi ra: `config.animation.repeat` dạng `"infinite"` (hoặc bất kỳ chuỗi nào), `options.mobileOnly` dạng `null`, và key `colorBtn` trong config theo breakpoint của `list-product`.
+
+### Changed
+- `checkbox-group` và `radio` không còn được coi là element kiểu container (chúng không bao giờ render `children`; các lựa chọn nằm trong `specials.options`), nên `validate_page` nay báo lỗi nếu có children đặt dưới các element này.
+- Sửa lại nhiều mô tả element trả về từ `get_element`/`list_elements` cho đúng với hành vi renderer thật, gồm `text-block` với `styles.background` (renderer luôn tự ép clip phần chữ nên không còn cần `-webkitBackgroundClip`), các specials của `commerce` (cart-quantity/search-list-product/table), giá trị mặc định `showDay`/`showHour`/`showSecond` của `countdown`, specials của `notify`/`spin-wheel`/`survey`, và vị trí của `popup` (popup nằm trong mảng `popup` riêng ở cấp cao nhất).
+- Seed mặc định của các element `line`, `button`, `countdown`, `notify` nay khớp sát hơn với kích thước/style mặc định của chính editor (ví dụ `button` seed ở 139×40, `countdown` ở 232×52, `notify` nay có sẵn viền/bo góc mặc định và `notiPos` được ghim sẵn).
+- `defaultSettings()` nay seed `settings.fontGeneral` bằng tên font trần (ví dụ `"Roboto"`) thay vì giá trị CSS font-family có dấu nháy, đúng với cách renderer tự thêm dấu nháy lúc build.
+- `get_generation_guide` và instructions của server nay ghi rõ những loại element nào bị bỏ `events` lúc publish, và `fontSize`/`letterSpacing`/`margin*`/`padding*` phải là số px thuần (chuỗi có đơn vị như `"1.5rem"` sẽ bị cắt cụt lúc build).
+
+### Internal
+- Thêm `scripts/render-check`, `scripts/fuzz-render`, `scripts/mine-pages` để kiểm chứng model element và tài liệu so với renderer `landing_page_build` thật cùng một tập trang thật; thêm `scripts/clone-check` để chấm điểm kết quả `clone_page` so với renderer thật.
+
 ## [1.9.0] - 2026-11-19
 
 ### Changed

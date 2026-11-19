@@ -6,6 +6,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-11-19
+
+### Added
+- A new `clone_page` tool clones any web page (including JavaScript-rendered React/Vue/Next sites) by measuring it in a real headless-Chrome browser at desktop (1200px) and mobile (420px) widths, then rebuilds it as a landing page source with real measured mobile layouts instead of a simple desktop-to-mobile scale; the result is cached as a `draft_id` for `create_page`.
+- `validate_page` now blocks several input shapes that crash the real page-build renderer: a non-string `spin-wheel` `specials.code`, a non-string `html-box`/`editor-blog` `specials.html`, a non-string `text-block`/`button` `specials.text`, a `grid` with no children, a `carousel` with a non-array `children`, and a `gallery` `config.thumbnailPosition` outside `top`/`bottom`/`left`/`right`.
+- `validate_page` now rejects a non-string `countdown` `specials.language` and warns when an element's `events` are set on a type whose events the publisher silently drops (`video`, `carousel`, `slide`, `popup`, `notify`, `spin-wheel`, `table`, `grid`, `grid-item`, `auto-number`, `random-number`, `list-product`, `search-list-product`, `group-select`, `group-select-item`).
+- Every write (`create_page`/`update_page`/`add_section`/`patch_page`) now runs a new auto-repair pass before validation, silently fixing inputs the renderer would otherwise crash or misrender on: missing `settings.width_section`/`options`/`popup`, a quoted `settings.fontGeneral`, a locale code (e.g. `vi`/`en`) in `countdown` `specials.language`, a missing `specials.field_placeholder` on `select`/`country-select`/`group-select-item`, events with no `action`, a numeric `borderRadius` style, a string `animation.repeat`, and an empty `grid` (a `grid-item` is added automatically).
+- `page-schema.json` now accepts the editor's own values: `config.animation.repeat` as `"infinite"` (or any string), `options.mobileOnly` as `null`, and a `colorBtn` key on `list-product` per-breakpoint config.
+
+### Changed
+- `checkbox-group` and `radio` are no longer treated as container element types (they never render their `children`; their options live in `specials.options`), so `validate_page` now flags children placed under them.
+- Corrected several element docs returned by `get_element`/`list_elements` against the real renderer's behavior, including `text-block` `styles.background` (the renderer always forces the text-fill clip, so `-webkitBackgroundClip` is no longer required), `commerce` cart-quantity/search-list-product/table specials, `countdown` `showDay`/`showHour`/`showSecond` defaults, `notify`/`spin-wheel`/`survey` specials, and `popup` placement (popups live in the separate top-level `popup` array).
+- The `line`, `button`, `countdown`, and `notify` element seeds now match the editor's own default box size and style values more closely (e.g. `button` now seeds at 139×40, `countdown` at 232×52, and `notify` ships with a default border/corner-radius and a pinned `notiPos`).
+- `defaultSettings()` now seeds `settings.fontGeneral` as a bare font family name (e.g. `"Roboto"`) instead of a quoted CSS font-family value, matching how the renderer itself adds quotes at build time.
+- `get_generation_guide` and the server instructions now document which element types drop their `events` on publish and that `fontSize`/`letterSpacing`/`margin*`/`padding*` must be plain pixel numbers (unit strings like `"1.5rem"` are truncated at build time).
+
+### Internal
+- Added `scripts/render-check`, `scripts/fuzz-render`, and `scripts/mine-pages` to validate the element model and docs against the real `landing_page_build` renderer and a corpus of real pages; added `scripts/clone-check` to score a `clone_page` result against the real renderer.
+
 ## [1.9.0] - 2026-11-19
 
 ### Changed
