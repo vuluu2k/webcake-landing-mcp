@@ -29,6 +29,20 @@
  */
 import { randomBytes, createHash } from "node:crypto";
 import { getPg, ensureOAuthSchema, type PgPool } from "../persistence/postgres.js";
+import { jwtExpired } from "../persistence/config.js";
+
+// ---- Dead Webcake sessions -------------------------------------------------
+// The OAuth tokens outlive the Webcake JWT they wrap. Once that JWT is expired (or the
+// backend rejected it), refreshing would just re-issue the dead JWT; refusing it makes the
+// client restart the full flow, i.e. open the Connect page again.
+// ponytail: in-memory set, per process; move to Postgres/Redis if the server is scaled out.
+const deadJwts = new Set<string>();
+export function markJwtDead(jwt: string | undefined | null): void {
+  if (jwt) deadJwts.add(jwt);
+}
+export function isDeadJwt(jwt: string | undefined | null): boolean {
+  return !!jwt && (deadJwts.has(jwt) || jwtExpired(jwt));
+}
 
 // ---- TTLs (override via env where useful) ---------------------------------
 const TEN_MIN = 10 * 60 * 1000;
@@ -511,6 +525,9 @@ export async function exchangeToken(p: TokenParams): Promise<TokenResult> {
     if (!r) {
       return { ok: false, status: 400, error: "invalid_grant", error_description: "Unknown or expired refresh token." };
     }
+    if (isDeadJwt(r.ljwt)) {
+      return { ok: false, status: 400, error: "invalid_grant", error_description: "Webcake session expired — sign in again (Connect)." };
+    }
     return { ok: true, body: await issueTokens(store, r.ljwt, r.client_id, r.scope) };
   }
   return { ok: false, status: 400, error: "unsupported_grant_type", error_description: "grant_type must be authorization_code or refresh_token." };
@@ -521,7 +538,7 @@ export async function exchangeToken(p: TokenParams): Promise<TokenResult> {
 export async function resolveAccessToken(accessToken: string | undefined | null): Promise<string | undefined> {
   if (!accessToken) return undefined;
   const a = await (await getStore()).getAccess(accessToken);
-  return a?.ljwt;
+  return a && !isDeadJwt(a.ljwt) ? a.ljwt : undefined;
 }
 
 /** Revoke an access or refresh token (best-effort; for /revoke). */

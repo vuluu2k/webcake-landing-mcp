@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { landingDomain } from "./domains/landing/index.js";
 import { registerTools } from "./tools/index.js";
+import { renewAuthOnExpiry } from "./auth/renew.js";
 import { ICON_DATA_URI, ICON_MIME, BRAND } from "./branding.js";
 
 /**
@@ -49,6 +50,7 @@ export function createServer({ allowLocalFiles = true }: { allowLocalFiles?: boo
     },
     { instructions: landingDomain.instructions }
   );
+  renewAuthOnExpiry(server, allowLocalFiles); // allowLocalFiles ⇔ stdio (the user's own machine)
   registerTools(server, landingDomain, { allowLocalFiles });
   return server;
 }

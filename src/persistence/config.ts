@@ -46,6 +46,16 @@ export const ENVIRONMENTS = {
   prod: { apiBase: "https://api.webcake.io", appBase: "https://webcake.io", builderBase: "https://builder.webcake.io", previewBase: "https://www.webcake.me", buildBase: "https://build.webcake.io" },
 } as const;
 
+/** True when `token` is a JWT whose `exp` is past (with `skewSec` margin). Non-JWTs never count as expired. */
+export function jwtExpired(token: string | undefined | null, skewSec = 30): boolean {
+  try {
+    const exp = JSON.parse(Buffer.from(String(token).split(".")[1], "base64url").toString()).exp;
+    return typeof exp === "number" && exp * 1000 < Date.now() + skewSec * 1000;
+  } catch {
+    return false;
+  }
+}
+
 /** Strip trailing slashes from a base URL (undefined passes through). */
 export function stripTrailingSlash(s: string): string;
 export function stripTrailingSlash(s: string | undefined): string | undefined;
@@ -95,7 +105,10 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
   // A named environment supplies default base URLs; explicit values still win.
   const preset = resolveEnv(overrides.env ?? process.env.WEBCAKE_ENV);
   const base = overrides.base ?? process.env.WEBCAKE_API_BASE ?? preset?.apiBase ?? saved.base;
-  const jwt = overrides.jwt ?? process.env.WEBCAKE_JWT ?? saved.jwt;
+  // An expired env JWT (pinned in the IDE config) loses to a fresher one saved by a re-login.
+  const envJwt = process.env.WEBCAKE_JWT;
+  const renewed = !!envJwt && jwtExpired(envJwt) && !!saved.jwt && !jwtExpired(saved.jwt);
+  const jwt = overrides.jwt ?? (renewed ? saved.jwt : envJwt) ?? saved.jwt;
   const missing: string[] = [];
   if (!base) missing.push("WEBCAKE_API_BASE");
   if (!jwt) missing.push("WEBCAKE_JWT");

@@ -26,7 +26,9 @@ import { matchAccountDomain, normalizeDomain } from "./persistence/domain-match.
 import { normalizePhoto, resolvePexelsKey, pexelsKeyFromHeaders, resolvePexelsProxyBase, buildSearchQuery, PEXELS_PROXY_DEFAULT, variantPixels, annotateVariantSizes } from "./persistence/pexels-client.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "./persistence/draft-cache.js";
 import { buildConnectUrl, parseCallback } from "./auth/login.js";
-import { redirectMatches } from "./auth/oauth-server.js";
+import { redirectMatches, isDeadJwt, markJwtDead } from "./auth/oauth-server.js";
+import { isUnauthorized, renewAuthOnExpiry } from "./auth/renew.js";
+import { jwtExpired } from "./persistence/config.js";
 import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./tools/media.js";
 import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
 import { isPrivateHost, isAllowedScreenshotUrl, acquireSlot, releaseSlot, slotStats } from "./persistence/screenshot-playwright.js";
@@ -2884,6 +2886,27 @@ console.log("== publish_page: custom_domain matches the account's stored domain 
   check("domain: not in the account → no match, lists candidates", !m5.ok && m5.candidates.includes("www.shop.vn"), m5);
   check("domain: empty account list → no match", !matchAccountDomain("shop.vn", []).ok);
   check("domain: normalizeDomain drops port + trailing dot", normalizeDomain(" Shop.VN.:8080/a ") === "shop.vn", normalizeDomain(" Shop.VN.:8080/a "));
+}
+
+console.log("== auth: expired token → Connect again ==");
+{
+  const jwt = (dSec: number) => `h.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + dSec })).toString("base64url")}.s`;
+  const OLD = jwt(-3600), NEW = jwt(3600);
+  check("auth: jwtExpired reads exp; opaque tokens never expire", jwtExpired(OLD) && !jwtExpired(NEW) && !jwtExpired("opaque"));
+  check("auth: expired JWT is dead (OAuth refresh + resolve refuse it)", isDeadJwt(OLD) && !isDeadJwt(NEW));
+  markJwtDead("rejected-by-backend");
+  check("auth: backend-rejected JWT is dead", isDeadJwt("rejected-by-backend"));
+  check("auth: isUnauthorized spots a backend 401 in a tool result", isUnauthorized({ content: [{ type: "text", text: '{"ok":false,"error":"Backend returned 401: Unauthorized"}' }] }) && !isUnauthorized({ content: [{ type: "text", text: '{"error":"Backend returned 403"}' }] }));
+  const saveEnv = process.env.WEBCAKE_JWT;
+  process.env.WEBCAKE_JWT = OLD;
+  check("auth: expired env JWT loses to a fresh override", readConfig({ env: "prod", jwt: NEW }).config?.jwt === NEW);
+  if (saveEnv === undefined) delete process.env.WEBCAKE_JWT; else process.env.WEBCAKE_JWT = saveEnv;
+  // Remote wrapper: a 401 result marks the request's JWT dead so the next /mcp call 401s into Connect.
+  const fake: any = { tool: (...a: any[]) => (fake.h = a[a.length - 1]) };
+  renewAuthOnExpiry(fake, false);
+  fake.tool("t", async () => ({ content: [{ type: "text", text: "Backend returned 401: Unauthorized" }] }));
+  await fake.h({}, { requestInfo: { headers: { "x-webcake-jwt": "remote-rejected", "x-webcake-env": "prod" } } });
+  check("auth: remote 401 marks the session JWT dead", isDeadJwt("remote-rejected"));
 }
 
 console.log("== server: MCP serverInfo.version follows package.json (no hardcoded constant) ==");

@@ -30,6 +30,7 @@ import {
   completeAuthorize,
   exchangeToken,
   resolveAccessToken,
+  isDeadJwt,
   revokeToken,
   authServerMetadata,
   protectedResourceMetadata,
@@ -507,25 +508,29 @@ export async function startHttpServer(port: number): Promise<void> {
     applyQueryAuth(req);
 
     // OAuth access token → resolve to the user's landing JWT and inject it as the
-    // normal x-webcake-jwt header, so persistence/config.ts is unchanged. A legacy
-    // raw JWT sent via x-webcake-jwt / ?jwt= still wins and passes straight through.
+    // normal x-webcake-jwt header, so persistence/config.ts is unchanged. It WINS over a
+    // ?jwt= / x-webcake-jwt: a Bearer from our OAuth flow is what the last Connect issued,
+    // so it's the renewed credential when the URL still carries an old, expired JWT.
     const bearer = bearerFrom(req);
     const oauthLjwt = await resolveAccessToken(bearer);
-    if (oauthLjwt && req.headers["x-webcake-jwt"] == null) {
+    if (oauthLjwt) {
       req.headers["x-webcake-jwt"] = oauthLjwt;
       req.rawHeaders.push("x-webcake-jwt", oauthLjwt);
     }
 
-    // Enforcement (WEBCAKE_OAUTH=1): a request with NO recognized credential gets a
-    // 401 + WWW-Authenticate so Claude/ChatGPT kick off the OAuth flow. Legacy creds
-    // (x-webcake-jwt header or ?jwt= → mapped above) still pass; in enforced mode a
-    // raw JWT must use those, since Bearer is reserved for OAuth access tokens.
-    if (OAUTH_ENFORCED && !oauthLjwt && req.headers["x-webcake-jwt"] == null) {
+    // Enforcement: no credential, or an expired/rejected Webcake JWT, gets a 401 +
+    // WWW-Authenticate so Claude/ChatGPT (re)open the Connect page by themselves. In
+    // enforced mode a raw JWT must use x-webcake-jwt / ?jwt=, since Bearer is reserved
+    // for OAuth access tokens.
+    const given = req.headers["x-webcake-jwt"];
+    const dead = isDeadJwt(Array.isArray(given) ? given[0] : given);
+    if (OAUTH_ENFORCED && (given == null || dead)) {
       res.writeHead(401, {
-        "www-authenticate": `Bearer resource_metadata="${publicBase(req)}${WELL_KNOWN_PR}"`,
+        "www-authenticate": `Bearer error="invalid_token", resource_metadata="${publicBase(req)}${WELL_KNOWN_PR}"`,
         "content-type": "application/json",
       });
-      return res.end(JSON.stringify({ error: "invalid_token", error_description: "Authentication required — connect via OAuth." }));
+      const why = dead ? "Webcake session expired — reconnect (Connect) to renew it." : "Authentication required — connect via OAuth.";
+      return res.end(JSON.stringify({ error: "invalid_token", error_description: why }));
     }
 
     const sidHeader = req.headers["mcp-session-id"];
