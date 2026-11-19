@@ -27,7 +27,7 @@
       "description": "Editor options: { mobileOnly, versionID }. NOTE: currency lives in settings.currency, not here.",
       "additionalProperties": true,
       "properties": {
-        "mobileOnly": { "type": "boolean", "description": "true = page only renders the mobile breakpoint." },
+        "mobileOnly": { "type": ["boolean", "null"], "description": "true = page only renders the mobile breakpoint." },
         "versionID": { "type": ["string", "null"] }
       }
     },
@@ -80,7 +80,7 @@
     },
     "elementType": {
       "type": "string",
-      "description": "Element kind. Container types (have children): section, dynamic_page, group, grid, grid-item, carousel, slide, popup, form, gallery, checkbox-group, radio, group-select.",
+      "description": "Element kind. Container types (have children): section, dynamic_page, group, grid, grid-item, carousel, slide, popup, form, gallery, group-select.",
       "enum": [
         "section", "dynamic_page", "group", "grid", "grid-item", "carousel", "slide", "popup",
         "text-block", "list-paragraph", "image-block", "rectangle", "line", "button", "video",
@@ -142,7 +142,7 @@
             "name": { "type": "string", "description": "animate.css name, or \"none\"." },
             "delay": { "type": ["number", "string"] },
             "duration": { "type": ["number", "string"] },
-            "repeat": { "type": ["number", "null"] }
+            "repeat": { "type": ["number", "string", "null"], "description": "Iteration count: a number or \"infinite\" (the editor writes \"1\"/\"2\"/\"3\"/\"infinite\")." }
           }
         },
         "virtualHeight": { "type": ["number", "string", "null"] },
@@ -172,7 +172,8 @@
           "additionalProperties": false,
           "properties": {
             "config": { "$ref": "#/$defs/config" },
-            "styles": { "$ref": "#/$defs/styles" }
+            "styles": { "$ref": "#/$defs/styles" },
+            "colorBtn": { "description": "list-product button colour (written by the editor)." }
           }
         },
         "mobile": {
@@ -180,7 +181,8 @@
           "additionalProperties": false,
           "properties": {
             "config": { "$ref": "#/$defs/config" },
-            "styles": { "$ref": "#/$defs/styles" }
+            "styles": { "$ref": "#/$defs/styles" },
+            "colorBtn": { "description": "list-product button colour (written by the editor)." }
           }
         }
       }

@@ -53,6 +53,12 @@ const OPTION_NAME_FIELDS = new Set(["select", "radio", "checkbox-group"]);
 // and the whole page fails to render.
 const PLACEHOLDER_REQUIRED_FIELDS = new Set(["select", "country-select", "group-select-item"]);
 
+// Types whose events the publisher's runtime data drops (event-data.js:194-287; only the other structs copy `events`).
+const EVENTS_DROPPED_TYPES = new Set([
+  "video", "carousel", "slide", "popup", "notify", "spin-wheel", "table", "grid", "grid-item",
+  "auto-number", "random-number", "list-product", "search-list-product", "group-select", "group-select-item",
+]);
+
 // countdown's renderer indexes a fixed `lang` table by specials.language and then
 // destructures the result: `const [d,h,m,s] = lang[language]`. Any value outside
 // this set (e.g. a locale code like "vi"/"en") yields undefined → "is not iterable"
@@ -516,6 +522,9 @@ export function validatePage(input: unknown): ValidationResult {
     // "is not iterable" when it destructures lang[language].
     if (type === "countdown") {
       const lang = node.specials?.language;
+      if (lang !== undefined && typeof lang !== "string") {
+        errors.push(`${path} (countdown): specials.language must be a string (got ${JSON.stringify(lang)}) — the renderer destructures lang[language] and crashes. Use one of: ${[...COUNTDOWN_LANGUAGES].join(", ")}, or leave it out (english).`);
+      }
       if (typeof lang === "string" && !COUNTDOWN_LANGUAGES.has(lang)) {
         errors.push(`${path} (countdown): specials.language="${lang}" is not supported and crashes the renderer. Use one of: ${[...COUNTDOWN_LANGUAGES].join(", ")} (use "custom" + specials.customTranslation for other languages).`);
       }
@@ -545,22 +554,9 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
 
-    // text-block: styles.background activates gradient-text-fill mode
-    // (emits -webkit-text-fill-color:transparent); without -webkitBackgroundClip:'text'
-    // the glyphs go invisible on the live page. Warn when background is set but the
-    // clip key is absent.
+    // text-block: the base CSS forces -webkit-background-clip:text (wc/text-block.js:4), so a
+    // styles.background needs no extra key; it paints the glyphs (see the descriptor).
     if (type === "text-block") {
-      for (const bp of ["desktop", "mobile"] as const) {
-        const styles = node.responsive?.[bp]?.styles;
-        if (!styles || typeof styles !== "object") continue;
-        const hasBg = typeof styles.background === "string" && styles.background.trim() !== "";
-        const hasClip = typeof styles["-webkitBackgroundClip"] === "string";
-        if (hasBg && !hasClip) {
-          warnings.push(
-            `${path} (text-block) [${bp}]: styles.background is set (gradient text-fill mode) but styles['-webkitBackgroundClip'] is missing — the text glyphs will be invisible on the live page. Add styles['-webkitBackgroundClip']:'text', or use styles.backgroundTxt for a box background instead.`
-          );
-        }
-      }
       // Emoji-as-icon: a text-block whose visible content is ONLY emoji is a
       // standalone keyboard-emoji icon (🎯💼📱✅⭐) — the guide bans these on
       // cards. Emoji inline within a sentence does not trip this (the text has
@@ -760,14 +756,38 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
 
+    // Crash shapes found by scripts/fuzz-render.mjs against the real renderer (each throws for the WHOLE page).
+    if (type === "spin-wheel" && typeof node.specials?.code !== "string") {
+      errors.push(`${path} (spin-wheel): specials.code must be a string ("label|code|percent" lines, "" for none) — the renderer calls code.split() and the page build fails.`);
+    }
+    if ((type === "html-box" || type === "editor-blog") && node.specials?.html !== undefined && typeof node.specials.html !== "string") {
+      errors.push(`${path} (${type}): specials.html must be a string — the renderer unescapes it and the page build fails.`);
+    }
+    if ((type === "text-block" || type === "button") && node.specials?.text != null && typeof node.specials.text !== "string") {
+      errors.push(`${path} (${type}): specials.text must be a string — the renderer fails on ${Array.isArray(node.specials.text) ? "an array" : typeof node.specials.text}.`);
+    }
+    if (type === "grid" && (!Array.isArray(node.children) || node.children.length === 0)) {
+      errors.push(`${path} (grid): has no grid-item child — the renderer renders children[0] as the template and the page build fails. Add one grid-item.`);
+    }
+    if (type === "carousel" && !Array.isArray(node.children)) {
+      errors.push(`${path} (carousel): needs a children array of slide — the renderer reads children.length and the page build fails.`);
+    }
+    if (type === "gallery") {
+      for (const bp of ["desktop", "mobile"] as const) {
+        const tp = node.responsive?.[bp]?.config?.thumbnailPosition;
+        if (tp !== undefined && !["top", "bottom", "left", "right"].includes(tp)) {
+          errors.push(`${path} (gallery) [${bp}]: config.thumbnailPosition="${tp}" — must be top, bottom, left or right (anything else fails the page build).`);
+        }
+      }
+    }
+
     // spin-wheel: segment percents must sum to 100; also validate message when popup='default'.
     if (type === "spin-wheel") {
       const codeStr: unknown = node.specials?.code;
-      const codeDataStr: unknown = node.specials?.codeDataset;
       const hasCode = typeof codeStr === "string" && codeStr.trim() !== "";
-      const hasCodeDataset = typeof codeDataStr === "string" && codeDataStr.trim() !== "";
-      if (hasCode || hasCodeDataset) {
-        const source = hasCode ? (codeStr as string) : (codeDataStr as string);
+      // codeDataset is computed by the renderer from the dataset (event-data.js), never authored.
+      if (hasCode) {
+        const source = codeStr as string;
         const lines = source.split("\n").map((l: string) => l.trim()).filter(Boolean);
         const percents = lines.map((l: string) => {
           const parts = l.split("|");
@@ -811,6 +831,12 @@ export function validatePage(input: unknown): ValidationResult {
     // (div.cart_view) appended beside the cart icon, not by this element.
     if (type === "cart-items") {
       warnings.push(`${path} (cart-items): renders empty on the published page — the cart drawer is rendered by WCart beside the cart icon, not by this element. Remove it; configure cartConfigs.checkoutElements['CART-ITEM'] for drawer font sizes instead.`);
+    }
+
+    // The publisher's runtime data (event-data.js data_struct) copies `events` only for section, text-block,
+    // button, list-paragraph, group, form, input-file, gallery and the default-struct types; for these it drops them.
+    if (EVENTS_DROPPED_TYPES.has(type) && Array.isArray(node.events) && node.events.length > 0) {
+      warnings.push(`${path} (${type}): its events are DROPPED by the publisher (nothing fires on the live page). Put the click event on a wrapping group or a button instead.`);
     }
 
     // collect events

@@ -178,6 +178,10 @@ export type CanvasElement = {
   /** widget config from the event-data JSON (countdown_minute, thankyou_value, delay_popup_welcome_page, autoplay…). */
   config?: Record<string, unknown>;
   children?: CanvasElement[];
+  /** text: the source tag (h1…h6, p) when measured in a browser. */
+  tag?: string;
+  /** measured mobile layout (browser capture): box on the 420 canvas + typography; null = hidden on mobile; only = shown on mobile only. */
+  mobile?: { box: { top: number; left: number; width: number; height: number }; style?: Record<string, string>; only?: boolean } | null;
 };
 
 export type CanvasSection = {
@@ -187,10 +191,15 @@ export type CanvasSection = {
   /** background-* declarations of the band (background-image already a bare full-size URL). */
   background?: Record<string, string>;
   elements: CanvasElement[];
+  /** measured mobile band height (browser capture). */
+  mobile?: { height?: number };
 };
 
 export type IngestedCanvas = {
-  builder: "ladi";
+  /** ladi = parsed from a LadiPage-family export; browser = measured in Chrome at desktop + mobile width. */
+  builder: "ladi" | "browser";
+  /** every element carries its own measured mobile box (no 420/960 scaling). */
+  measured_mobile?: boolean;
   /** source canvas width: 420 (mobile) or 960 (desktop) — same as the Webcake canvas. */
   width: number;
   mobile_only?: boolean;

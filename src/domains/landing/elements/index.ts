@@ -63,7 +63,12 @@ export const FIELD_TYPES = deriveFieldTypes(ELEMENTS);
  */
 export function createElement(type: string, overrides: { name?: string } = {}): ElementNode {
   const d = BY_TYPE[type];
-  if (d) return createElementFrom(d, overrides);
+  if (d) {
+    const el = createElementFrom(d, overrides);
+    // The renderer renders a grid's children[0] as its template and crashes on an empty grid.
+    if (type === "grid") el.children = [createElement("grid-item")];
+    return el;
+  }
 
   const el = base();
   el.type = type;

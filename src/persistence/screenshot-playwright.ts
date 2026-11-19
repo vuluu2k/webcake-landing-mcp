@@ -51,7 +51,10 @@ async function getBrowser(): Promise<any | null> {
     const launchOpts: any = { headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] };
     const exe = process.env.PLAYWRIGHT_CHROMIUM_PATH || process.env.CHROME_BIN;
     if (exe) launchOpts.executablePath = exe;
-    browserPromise = pw.chromium.launch(launchOpts).catch((e: any) => {
+    // No bundled Chromium and no CHROME_BIN (a dev machine): fall back to the installed Chrome.
+    browserPromise = pw.chromium.launch(launchOpts).catch((e: any) =>
+      exe ? Promise.reject(e) : pw.chromium.launch({ ...launchOpts, channel: "chrome" })
+    ).catch((e: any) => {
       browserPromise = null; // allow a later retry
       throw e;
     });
@@ -96,7 +99,7 @@ function resolveBandHeight(): number {
  * Chrome that closed). Always closes the context. Never throws — the shared
  * lifecycle for both single-shot and tiled capture.
  */
-async function withContext<T>(
+export async function withContext<T>(
   width: number,
   scale: number,
   fn: (ctx: any) => Promise<T>

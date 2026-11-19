@@ -22,7 +22,7 @@ import type { IngestedCanvas, CanvasElement, CanvasSection } from "../../persist
 const MOBILE_W = CANVAS.mobileWidth;
 const DESKTOP_W = CANVAS.desktopWidth;
 
-type Ctx = { mobileOnly: boolean; notes: string[]; usedIds: Set<string> };
+type Ctx = { mobileOnly: boolean; notes: string[]; usedIds: Set<string>; mobileByBox: WeakMap<object, CanvasElement["mobile"]> };
 type StyleBag = Record<string, string> | undefined;
 type Styles = Record<string, string | number>;
 type Breakpoint = { styles: Styles; config?: Record<string, any> };
@@ -110,6 +110,7 @@ function mapStyles(bag: StyleBag, type: string): Styles {
   if (bag["text-shadow"]) out.textShadow = bag["text-shadow"];
   if (bag["border-radius"]) out.borderRadius = bag["border-radius"];
   if (bag["box-shadow"]) out.boxShadow = bag["box-shadow"];
+  if (bag["transform"] && /^rotate\(-?\d+(\.\d+)?deg\)$/.test(bag["transform"])) out.transform = bag["transform"];
   const op = bag["opacity"] !== undefined ? parseFloat(bag["opacity"]) : NaN;
   if (Number.isFinite(op) && op < 1) out.opacity = op;
   // Borders: shorthand or longhand.
@@ -161,6 +162,23 @@ function responsiveOf(ctx: Ctx, box: CanvasElement["box"], styles: Styles, secti
   }
   if (ctx.mobileOnly) {
     return { desktop: { styles: cloneJ(primary) }, mobile: { styles: cloneJ(primary) } };
+  }
+  // Measured in a browser (browser-capture.ts): the mobile layout as it really is, or hidden there.
+  const measured = box ? ctx.mobileByBox.get(box) : undefined;
+  if (measured === null) {
+    const m = cloneJ(primary);
+    for (const k of ["left", "width"]) if (typeof m[k] === "number") m[k] = Math.round((m[k] as number) * (MOBILE_W / DESKTOP_W));
+    return { desktop: { styles: primary }, mobile: { styles: m, config: { hide: true } } };
+  }
+  if (measured) {
+    const m = cloneJ(primary);
+    Object.assign(m, measured.box);
+    const ms = measured.style ?? {};
+    if (ms["font-size"]) m.fontSize = Number(ms["font-size"]);
+    if (ms["line-height"]) m.lineHeight = parseFloat(ms["line-height"]);
+    if (ms["letter-spacing"]) m.letterSpacing = ms["letter-spacing"];
+    if (ms["text-align"]) m.textAlign = ms["text-align"];
+    return { desktop: measured.only ? { styles: primary, config: { hide: true } } : { styles: primary }, mobile: { styles: m } };
   }
   // Desktop source: mobile gets a simple horizontal 420/960 scale as a start.
   const scale = MOBILE_W / DESKTOP_W;
@@ -285,7 +303,7 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       id: uniqueId(ctx, e.id),
       type: "text-block",
       responsive: responsiveOf(ctx, e.box, mapStyles(style, "text-block"), sectionH),
-      specials: { text: e.text ?? "", tag: t === "paragraph" ? "p" : "h3" },
+      specials: { text: e.text ?? "", tag: e.tag && /^(h[1-6]|p)$/.test(e.tag) ? e.tag : t === "paragraph" ? "p" : "h3" },
     };
     const ev = mapEvents(ctx, e);
     if (ev) node.events = ev;
@@ -594,10 +612,12 @@ function convertSection(ctx: Ctx, s: CanvasSection): SourceNode {
     if (u) styles.background = canonicalBg(u);
     else if (color) styles.background = color;
   }
+  const mStyles = cloneJ(styles);
+  if (s.mobile?.height) mStyles.height = s.mobile.height;
   return {
     id: uniqueId(ctx, s.id),
     type: "section",
-    responsive: { desktop: { styles: cloneJ(styles) }, mobile: { styles: cloneJ(styles) } },
+    responsive: { desktop: { styles: cloneJ(styles) }, mobile: { styles: mStyles } },
     children: s.elements.map((e) => convertElement(ctx, e, h)).filter(Boolean) as SourceNode[],
   };
 }
@@ -631,7 +651,13 @@ export type CanvasToSourceResult = { source: unknown; notes: string[] };
  * lossy approximation the caller should review/patch.
  */
 export function canvasToPageSource(canvas: IngestedCanvas, meta: CanvasToSourceMeta = {}): CanvasToSourceResult {
-  const ctx: Ctx = { mobileOnly: !!canvas.mobile_only, notes: [], usedIds: new Set() };
+  const ctx: Ctx = { mobileOnly: !!canvas.mobile_only, notes: [], usedIds: new Set(), mobileByBox: new WeakMap() };
+  const index = (e: CanvasElement) => {
+    if (e.box && e.mobile !== undefined) ctx.mobileByBox.set(e.box, e.mobile);
+    (e.children ?? []).forEach(index);
+  };
+  canvas.sections.forEach((s) => s.elements.forEach(index));
+  (canvas.popups ?? []).forEach(index);
   const source: any = createPageSource({
     mobileOnly: ctx.mobileOnly,
     settings: {
@@ -646,7 +672,7 @@ export function canvasToPageSource(canvas: IngestedCanvas, meta: CanvasToSourceM
       "the canvas payload was truncated (styles pruned) — for full typography re-ingest per section (sections:[id]) and patch the affected elements."
     );
   }
-  if (!ctx.mobileOnly) {
+  if (!ctx.mobileOnly && !canvas.measured_mobile) {
     ctx.notes.push("desktop source: the mobile breakpoint is a simple 420/960 horizontal scale — review and polish it.");
   }
   return { source, notes: ctx.notes };

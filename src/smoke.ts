@@ -86,7 +86,7 @@ console.log("== derived sets equal the known-good container/field lists (parity)
 {
   const EXPECTED_CONTAINERS = [
     "section", "dynamic_page", "group", "grid", "grid-item", "carousel", "slide", "popup",
-    "form", "checkbox-group", "radio", "group-select",
+    "form", "group-select",
   ];
   const EXPECTED_FIELDS = [
     "input", "textarea", "select", "checkbox", "checkbox-group", "radio",
@@ -2160,11 +2160,11 @@ console.log("== text-block styles.background warning (gradient-text-fill mode) =
     settings: { title: "t", description: "d", keywords: "k", lang: "vi" },
   });
 
-  // 1) background set, no clip → warning
+  // 1) background set, no clip → NO warning (renderer forces background-clip:text itself)
   const rNoBg = validatePage(mkTbBgPage("linear-gradient(90deg,rgba(255,0,0,1),rgba(0,0,255,1))", false));
   check(
-    "text-block: styles.background without -webkitBackgroundClip → warning",
-    rNoBg.warnings.some((w) => w.includes("text-block") && w.includes("gradient text-fill") && w.includes("backgroundTxt")),
+    "text-block: styles.background without -webkitBackgroundClip → no warning (wc/text-block.js:4 forces the clip)",
+    !rNoBg.warnings.some((w) => w.includes("text-block") && w.includes("gradient text-fill")),
     rNoBg.warnings
   );
 

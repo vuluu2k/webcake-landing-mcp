@@ -21,9 +21,9 @@ export const MARKETING: ElementDescriptor[] = [
       repeat: "boolean — restart the countdown when it reaches zero (only affects 'minute' mode).",
       customize: "string 'customize'|'nothing' (NOT a boolean) — 'customize' enables custom message display when countdown finishes.",
       customMessage: "string — message to display when countdown reaches zero (used when customize='customize').",
-      showDay: "boolean — show the days segment (default true).",
-      showHour: "boolean — show the hours segment (default true).",
-      showSecond: "boolean — show the seconds segment.",
+      showDay: "boolean — show the days segment. NO default: unset/false hides the day slot (display:none). Set true to show it.",
+      showHour: "boolean — show the hours segment. NO default: unset/false hides it. Set true to show it (minutes are always shown).",
+      showSecond: "boolean — show the seconds segment. NO default: unset/false hides it.",
       showText: "boolean — show unit labels (days/hours/minutes/seconds).",
       animateMode: "'none'|'timer' — 'timer' enables flip-card digit animation.",
       language: "unit-label locale — MUST be one of: vietnam | english | filipino | khmer | lao | indonesian | thai | malay | custom. NOT a code like 'vi'/'en' (that crashes the renderer). For any other language use 'custom' + customTranslation.",
@@ -32,10 +32,10 @@ export const MARKETING: ElementDescriptor[] = [
     },
     seed: (el) => {
       seedPosition(el);
-      setBox(el, 300, 80);
+      setBox(el, 232, 52); // editor factory.js:325
       setStyle(el, "color", "rgba(255, 255, 255, 1)");
       setStyle(el, "background", "rgba(0, 0, 0, 1)");
-      setStyle(el, "fontSize", 20);
+      setStyle(el, "fontSize", 14);
       el.specials = { type: "minute", duration: "60", language: "english", showDay: true, showHour: true, showSecond: true, showText: true, repeat: false, customize: "nothing", customMessage: "", dailyStart: "", dailyEnd: "" };
     },
   },
@@ -77,12 +77,12 @@ export const MARKETING: ElementDescriptor[] = [
   },
   {
     type: "random-number", category: "marketing", container: false, defaultName: "Random Number",
-    summary: "Per-visitor persisted incrementing counter (NOT a true random picker). Each page load reads a localStorage value keyed by element id, increments by random(0..jumpNumber) from startNumber, capped at endNumber. Missing startNumber/endNumber/jumpNumber renders literal 'NaN'. All three values are REQUIRED.",
-    useWhen: "Randomized social proof (e.g. 'X people viewed this'). All three numbers — startNumber, endNumber, jumpNumber — MUST be set or the element renders 'NaN'.",
+    summary: "Per-visitor persisted incrementing counter (NOT a true random picker). Each page load reads a localStorage value keyed by element id, increments by random(0..jumpNumber) from startNumber, capped at endNumber. The build prints startNumber (|| 0) as the initial text; a missing endNumber/jumpNumber breaks the counter at runtime (NaN). Set all three.",
+    useWhen: "Randomized social proof (e.g. 'X people viewed this'). All three numbers — startNumber, endNumber, jumpNumber — MUST be set or the counter breaks at runtime (NaN).",
     keySpecials: {
       startNumber: "REQUIRED number — initial value (first-visit floor).",
       endNumber: "REQUIRED number — maximum value (cap).",
-      jumpNumber: "REQUIRED number — each load adds random(0..jumpNumber) to the stored value. Missing → renders 'NaN'.",
+      jumpNumber: "REQUIRED number — each load adds random(0..jumpNumber) to the stored value. Missing → NaN at runtime.",
     },
     seed: (el) => {
       seedPosition(el);
@@ -106,14 +106,23 @@ export const MARKETING: ElementDescriptor[] = [
       random: "boolean — shuffle display order.",
       soundMode: "'none'|'default'|'link' (NOT a boolean) — 'link' plays notifySoundLink; 'default' plays the built-in sound.",
       notifySoundLink: "string — URL to a custom notification sound file (when soundMode='link').",
-      "config.notiPos": "(per-breakpoint config) 'default'|'t-l'|'t-c'|'t-r'|'b-l'|'b-c'|'b-r' — pins the toast fixed to a viewport corner. notiLeft/notiTop/notiRight/notiBottom (default 20) set the corner offset. Canvas top/left only apply with notiPos='default'.",
+      "config.notiPos": "(per-breakpoint config) 'default'|'t-l'|'t-c'|'t-r'|'b-l'|'b-c'|'b-r' — pins the toast fixed to a viewport corner. notiLeft/notiTop/notiRight/notiBottom (default 20) set the corner offset. Canvas top/left are real page offsets only with notiPos='default' (position:absolute); with notiPos UNSET the toast is position:fixed and top/left become VIEWPORT offsets — always set notiPos explicitly.",
       "config.title_font": "(per-breakpoint config) number — title font size (default 13).",
       "config.content_font": "(per-breakpoint config) number — content font size (default 12).",
       "config.time_font": "(per-breakpoint config) number — time font size (default 11).",
     },
     seed: (el) => {
       seedPosition(el);
-      setBox(el, 300, 62);
+      // editor factory.js:284: a fixed top-left toast. WITHOUT notiPos the element is position:fixed with
+      // canvas top/left as viewport offsets, so the seed always pins a corner explicitly.
+      setBox(el, 270, 56);
+      setStyle(el, "borderColor", "rgba(209, 209, 209, 1)");
+      setStyle(el, "borderWidth", "1");
+      setStyle(el, "borderStyle", "solid");
+      setStyle(el, "borderRadius", "50px");
+      setStyle(el, "background", "rgba(255, 255, 255, 1)");
+      for (const bp of ["desktop", "mobile"] as const) Object.assign(el.responsive[bp].config, { notiPos: "t-l", notiLeft: 20, notiTop: 20 });
+      Object.assign(el.specials, { random: true, duration: 3000, delay: 15000, autoHeight: false });
     },
   },
   {
@@ -124,13 +133,13 @@ export const MARKETING: ElementDescriptor[] = [
       background: "string (URL) — wheel face image (the spinning wheel graphic). Required for visible wheel.",
       backgroundBtn: "string (URL) — spin button image overlaid at the center. Required for functional button.",
       spin: "string number — number of turns per USER, persisted in localStorage (e.g. '10'). NOT a config object.",
-      rotate: "string number — initial rotation offset of the wheel in degrees (default '0').",
+      rotate: "NOT read from specials by the renderer — the wheel rotation is styles.rotate (per-breakpoint STYLE, default 0); the seed keeps specials.rotate only for editor parity.",
       rotateBackground: "number (degrees) — rotation offset of the background image (default 0).",
       code: "string (NOT an array) — the segments. ONE LINE PER SEGMENT, each line 'couponCode|Prize Name|percent', lines joined by \\n. Percents MUST sum to 100 or winner selection throws TypeError on click. e.g. 'SALE10|Giảm 10%|40\\nSALE50|Giảm 50%|10\\nMISS|Chúc may mắn|50'.",
       message: "REQUIRED string — result-popup message template shown after a spin (NOT segment labels). REQUIRED when popup='default'; missing → TypeError on win. Supports placeholders {{coupon_text}}, {{coupon_code}}, {{spin_turn_left}}, {{coupon_codes}}.",
       dataType: "0 (static codes, DEFAULT) | 2 (dataset-driven codes via codeDataset column).",
       datasetId: "string — webcake dataset ID for coupon codes (when dataType=2).",
-      codeDataset: "string — dataset column key for the coupon code (same code|name|percent format, when dataType=2).",
+      codeDataset: "COMPUTED by the renderer when dataType=2 + datasetId: it fetches the dataset and writes '_coupon_code|_coupon_text|_percent%' lines itself (event-data.js). Do NOT author it; the dataset needs those three columns.",
       popup: "string — 'default' for the built-in result popup (REQUIRED with message); or an element id of a custom popup to open.",
       popupTurnOver: "string — 'default' or element id of popup to open when the user has no turns left.",
       showCoupon: "'yes'|'no' — toggles segment-label visibility on the wheel face.",
@@ -165,10 +174,10 @@ export const MARKETING: ElementDescriptor[] = [
   },
   {
     type: "survey", category: "marketing", container: false, defaultName: "Survey",
-    summary: "Survey / image-choice question; each option submits a field. option.title is REQUIRED unless type=='image' — missing title causes a TypeError DURING PAGE BUILD (not at runtime). type enum: 'text' (titles only, no images) | 'image' (images only, no titles) | 'text-image' (both). Empty option.image under text-image renders a stock placeholder — use type:'text' unless real images are supplied.",
+    summary: "Survey / image-choice question; each option submits a field. option.title is REQUIRED unless type=='image' — missing title causes a TypeError DURING PAGE BUILD (not at runtime). type enum (set it explicitly; UNSET renders image + title like 'text-image'): 'text' (titles only, no images) | 'image' (images only, no titles) | 'text-image' (both). Empty option.image under text-image renders a stock placeholder — use type:'text' unless real images are supplied.",
     useWhen: "Quizzes, preference capture, image pickers. required works only inside a form. option.value is what connectedForm joins with ', '.",
     keySpecials: {
-      type: "'text'(default, titles only) | 'image'(images only, no titles required) | 'text-image'(both). option.title REQUIRED unless type=='image'.",
+      type: "'text' | UNSET renders BOTH the image and the title (behaves as 'text-image' with a placeholder image) — always set it explicitly. 'text' (titles only) | 'image'(images only, no titles required) | 'text-image'(both). option.title REQUIRED unless type=='image'.",
       multiOption: "boolean — allow selecting multiple options at once.",
       limitOption: "number — max selectable options when multiOption=true (oldest is ejected past the limit).",
       defaultOption: "array of option id strings to pre-select on load.",

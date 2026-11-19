@@ -58,7 +58,7 @@ export const COMMERCE: ElementDescriptor[] = [
       iconCart: "url string — custom cart icon for the button.",
       btn_width: "number (px, default 182) — button width.",
       btn_height: "number (px) — button height.",
-      btn_border: "string — button border shorthand.",
+      btn_border: "boolean — only `btn_border === false` is read (→ border-style:none); any other value falls through to border_type_btn / solid. NOT a border shorthand string.",
       border_type_btn: "string — button border type.",
       border_width_btn: "number — button border width.",
       // --- SKU / extras ---
@@ -95,7 +95,7 @@ export const COMMERCE: ElementDescriptor[] = [
       "Search box + product results overlay. Requires a co-existing list-product element on the page — openProduct() delegates to a list-product vm, so without one nothing opens.",
       "CRASH: clicking search hard-crashes when product sync is absent (window.sync.products.findIndex, search-list-product.js:51) — page must have synced products.",
       "Placeholder text and button label are NOT settable — they are locale-fixed by currency.",
-      "background + color style the SEARCH BUTTON only; borderRadius splits input-left / button-right.",
+      "background + color style the search button, but they ALSO pass through to the outer .-search-list-product wrapper (every non-position style does); borderRadius splits input-left / button-right.",
       "A single search hit skips the results popup and opens the checkout overlay directly.",
     ].join(" "),
     useWhen: "Searchable catalog (pair it with a list-product element and ensure product sync is active).",
@@ -135,11 +135,11 @@ export const COMMERCE: ElementDescriptor[] = [
     ].join(" "),
     useWhen: "Per-variation quantity inside a WCart group.",
     keySpecials: {
-      field_name: "REQUIRED for the renderer. WCart group path: any unique value (seed's cart_quantity_<id> is fine). Form quantity-LINK path: must be exactly 'quantity' + field_type='number' + linkType/prodId/variationId.",
+      field_name: "NOT read by the build (the cart-quantity HTML has no name attribute); kept so WCart/the form-link path can find it. WCart group path: any unique value (seed's cart_quantity_<id> is fine). Form quantity-LINK path: must be exactly 'quantity' + field_type='number' + linkType/prodId/variationId.",
       ignoreOnHidden: "boolean — DEAD CODE on live (dispatcher does not handle cart-quantity). Has no effect on quantity contribution when hidden.",
     },
-    // NOT a FIELD_TYPE (field flag omitted) but the renderer still requires a
-    // field_name, so the seed sets one explicitly.
+    // NOT a FIELD_TYPE (field flag omitted); the build never reads field_name, but the seed
+    // sets one for WCart / the form-link path.
     seed: (el) => {
       seedPosition(el);
       setBox(el, 150, 36);
@@ -169,9 +169,9 @@ export const COMMERCE: ElementDescriptor[] = [
     keySpecials: {
       // --- content (primary) ---
       sourceTable: "PRIMARY CONTENT — escaped HTML string of the full rendered table. The SSR publisher outputs unescapeHTML(sourceTable) directly. Without this the published table is blank. Author this first; the editor will update it from its dataset on re-save.",
-      dataType: "0 | 1 — set to 1 to enable the client-side Table renderer; 0 = no client-side render. Does not affect SSR (sourceTable is always used server-side).",
-      source: "string — data source label (metadata only; not rendered).",
-      sheetID: "string — Google Sheet document id (metadata only; not rendered on publish).",
+      dataType: "0 | 1 — 1 = the publisher fetches the Google Sheet (source + sheetID) into google_sheet_data for the client-side renderer; 0 = no fetch. Does not affect SSR (sourceTable is always used server-side).",
+      source: "string — Google spreadsheet ID. With dataType=1 the publisher fetches sheets/{source}/values/{sheetID} (event-data.js:631) into google_sheet_data for the client-side renderer; the SSR HTML still comes only from sourceTable.",
+      sheetID: "string — the sheet TAB NAME/range inside `source` (used with dataType=1, see source).",
       google_sheet_data: "string[][] — 2D table data for the client-side renderer (render_v4); row 0 = headers as 'Title|type' (type ∈ image|video|link|time; absent = plain text); rows 1+ are data cells. BLANK on SSR/no-JS — always pair with sourceTable.",
       // --- styling specials (all consumed by exportCss.js:2047-2106 / cssTable) ---
       // These are specials, NOT styles. Values are CSS strings.

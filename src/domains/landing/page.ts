@@ -17,7 +17,8 @@ export function defaultSettings(overrides: Record<string, any> = {}) {
     canonical: "",
     favicon: "",
     thumbnail: "",
-    fontGeneral: "'Roboto', sans-serif",
+    // A bare family name: the renderer wraps it in quotes itself (render/build/index.js:52).
+    fontGeneral: "Roboto",
     width_section: { desktop: 960, mobile: 420 },
     country: "84",
     // currency lives in settings (the editor's canonical home), NOT in options.

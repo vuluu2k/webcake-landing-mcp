@@ -75,12 +75,12 @@ export const FORM: ElementDescriptor[] = [
       phone_validator: "string regex — custom phone validation pattern.",
       isLimited: "boolean — enable maxlength restriction.",
       limit: "number — maxlength value (when isLimited=true).",
-      isMinimumLimited: "boolean — enable minlength restriction AND forces required=true.",
+      isMinimumLimited: "boolean — enable minlength restriction (needs minimumLimit). On input it also emits `required`.",
       minimumLimit: "number — minlength value (when isMinimumLimited=true).",
       useInputPattern: "boolean — enable custom input validation pattern.",
       inputPattern: "string regex — custom validation pattern (when useInputPattern=true).",
       hideContent: "boolean — render as a password input (characters masked).",
-      defaultVal: "string — pre-filled default value.",
+      defaultVal: "string — default value, but the build emits value= ONLY when field_name=='quantity' (or defaultVariationQuantity is set); on any other input it is not pre-filled.",
       minValue: "boolean — enable minimum numeric value.",
       minValueNumber: "number — minimum numeric value (when minValue=true; number inputs default min=0, blocking negatives).",
       maxValue: "boolean — enable maximum numeric value.",
@@ -119,7 +119,7 @@ export const FORM: ElementDescriptor[] = [
       required: "boolean.",
       isLimited: "boolean — enable maxlength restriction.",
       limit: "number — maxlength value (when isLimited=true).",
-      isMinimumLimited: "boolean — enable minlength restriction AND forces required=true.",
+      isMinimumLimited: "boolean — enable minlength restriction (needs minimumLimit). textarea adds ONLY minlength, NOT required — set required separately.",
       minimumLimit: "number — minlength value (when isMinimumLimited=true).",
       isFormula: "boolean — formula/computed mode (same {{field_name}} expression system as input).",
       formula: "string — formula expression when isFormula=true.",
@@ -136,7 +136,7 @@ export const FORM: ElementDescriptor[] = [
     useWhen: "Pick one from a list. Must be a DIRECT child of the form to submit.",
     keySpecials: {
       field_name: "REQUIRED unique data key.",
-      field_placeholder: "REQUIRED — the disabled first-option label (the placeholder/prompt). The key is `field_placeholder`, NOT `placeholder`. The select renderer renders value='undefined' if this is missing.",
+      field_placeholder: "REQUIRED — the disabled first-option label (the placeholder/prompt). The key is `field_placeholder`, NOT `placeholder`. A missing field_placeholder THROWS in the build (unescapeHTML(undefined)) and fails the whole page publish.",
       default_value: "string (option id) to pre-select; 'default-none' = no pre-selection.",
       defaultVariationId: "string — default product variation id registered on the parent form regardless of selection.",
       defaultVariationQuantity: "number — quantity registered with defaultVariationId.",
@@ -185,8 +185,8 @@ export const FORM: ElementDescriptor[] = [
     },
   },
   {
-    type: "checkbox-group", category: "form", container: true, field: true, defaultName: "Checkbox Group",
-    summary: "Multiple checkboxes. Choices live in specials.options. Submitted values are the checked option NAMES (NFKC-normalized), not ids. Runtime splits DOM id '<elementId>-<optionId>' on '-' — element ids and option ids must contain NO hyphens or event/variation handling silently breaks.",
+    type: "checkbox-group", category: "form", container: false, field: true, defaultName: "Checkbox Group",
+    summary: "Multiple checkboxes (NOT a container: the renderer draws options from specials.options and never renders children). Choices live in specials.options. Submitted values are the checked option NAMES (NFKC-normalized), not ids. Runtime splits DOM id '<elementId>-<optionId>' on '-' — element ids and option ids must contain NO hyphens or event/variation handling silently breaks.",
     useWhen: "Multi-select options. Also use with a single option as a replacement for type 'checkbox'. Must be a DIRECT child of the form to submit.",
     keySpecials: {
       field_name: "REQUIRED unique data key (submitted as formData.checkbox[field_name], array of checked option NAMES, NFKC-normalized).",
@@ -205,8 +205,8 @@ export const FORM: ElementDescriptor[] = [
     },
   },
   {
-    type: "radio", category: "form", container: true, field: true, defaultName: "Radio",
-    summary: "Single-choice radio options. Choices live in specials.options. Submitted value = selected option.name. Runtime splits DOM id '<elementId>-<optionId>' on '-' — element ids and option ids must contain NO hyphens.",
+    type: "radio", category: "form", container: false, field: true, defaultName: "Radio",
+    summary: "Single-choice radio options (NOT a container: the renderer draws options from specials.options and never renders children). Choices live in specials.options. Submitted value = selected option.name. Runtime splits DOM id '<elementId>-<optionId>' on '-' — element ids and option ids must contain NO hyphens.",
     useWhen: "Pick exactly one of a few. Common for payment-method selection. Must be a DIRECT child of the form to submit.",
     keySpecials: {
       field_name: "REQUIRED unique data key (submitted as formData.radio[field_name], the selected option.name).",
@@ -286,7 +286,7 @@ export const FORM: ElementDescriptor[] = [
       minValueNumber: "number — minimum value (default 0; blocks negatives).",
       maxValue: "boolean — enable maximum value.",
       maxValueNumber: "number — maximum value (default cap 200).",
-      hideSpinBtn: "boolean — hide the +/- buttons.",
+      hideSpinBtn: "boolean — only adds class hide-spin to the <input> (hides the native spinner); the +/- buttons are always rendered.",
       ignoreOnHidden: "boolean — when hidden at mount, add field_name to the parent form's ignore list and publish quantity 0.",
     },
     seed: (el) => {

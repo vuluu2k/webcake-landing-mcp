@@ -9,7 +9,7 @@ export const CONTENT: ElementDescriptor[] = [
   {
     type: "text-block", category: "content", container: false, defaultName: "Text",
     summary: "Text. specials.text holds the content (may contain inline HTML); specials.tag sets the semantic tag. Supports template variables ({{key}}), formula mode, URL-param injection, and date formatting.",
-    useWhen: "Any headline, paragraph, label. Use tag h1/h2 for headings, p for body. Style via responsive.styles (fontSize, color, fontWeight, textAlign). ALWAYS set color to CONTRAST the band it sits on: near-black (e.g. rgba(26,32,44,1)) on light bands, near-white ONLY on a dark/image band — white text on a light band renders invisible. styles.background on a text-block = a GRADIENT TEXT FILL (emits -webkit-text-fill-color:transparent); you must also set styles['-webkitBackgroundClip']:'text' or the glyphs go invisible. The box background key is styles.backgroundTxt — use that for a colored box behind the text. NEVER set styles.background expecting a box fill. text-block does NOT emit border-radius — for a rounded pill/badge, put a rectangle (borderRadius '13px', pill bg color) BEHIND the text-block (zIndex 2 on the text-block); the rounded shape comes from the rectangle, never from the text-block itself.",
+    useWhen: "Any headline, paragraph, label. Use tag h1/h2 for headings, p for body. Style via responsive.styles (fontSize, color, fontWeight, textAlign). ALWAYS set color to CONTRAST the band it sits on: near-black (e.g. rgba(26,32,44,1)) on light bands, near-white ONLY on a dark/image band — white text on a light band renders invisible. ANY styles.background on a text-block paints the TEXT FILL (the renderer emits -webkit-text-fill-color:transparent and forces background-clip:text itself, so no extra key is needed) — a flat color there colors the glyphs, not a box. The box background key is styles.backgroundTxt — use that for a colored box behind the text. NEVER set styles.background expecting a box fill. borderRadius IS emitted, but on the inner text tag while backgroundTxt paints the outer box, so a rounded pill/badge does not round the backgroundTxt fill — put a rectangle (borderRadius '13px', pill bg color) BEHIND the text-block (zIndex 2 on the text-block) and let the rectangle carry the shape.",
     keySpecials: {
       text: "string — the visible text; may include inline HTML (<b>, <br>, <span style>…). Also supports template variables: {{today}}, {{yesterday}}, {{tomorrow}} (formatted dates), {{coupon_text}}, {{coupon_code}}, {{coupon_codes}}, {{spin_turn_left}}, {{cart_total_price}}, {{cart_subtotal}}, {{cart_shipping_fee}}, {{cart_discount_code}}, {{voucher_price_cart}}, {{cart_item}}, {{cart_bonus_item}}, {{form_error_log}}, {{total_cart}}. Dynamic form field binding: {{formId__fieldName}} substitutes a field value from a sibling form.",
       tag: "p | h1 | h2 | h3 | h4 | h5 | h6 | span | div.",
@@ -21,8 +21,8 @@ export const CONTENT: ElementDescriptor[] = [
       isFormat: "boolean — apply a date format to template date variables.",
       format: "string — dayjs format string (e.g. 'D/MM/YYYY') used when isFormat=true.",
       formParamSeparator: "string — separator between items when rendering {{formId__form_items}} lists.",
-      backgroundTxt: "(styles key) box background color rgba(...) — use this for a colored box behind the text. Do NOT use styles.background for a box fill; that key activates gradient text-fill mode.",
-      "-webkitBackgroundClip": "(styles key) set to 'text' when styles.background is a gradient — without it the gradient text-fill makes glyphs invisible.",
+      backgroundTxt: "(styles key) box background color rgba(...) — use this for a colored box behind the text. Do NOT use styles.background for a box fill; that key becomes the text fill.",
+      "-webkitBackgroundClip": "(styles key) optional — the renderer forces background-clip:text already (wc/text-block.js:4); only styles.background (the text fill) matters.",
       virtualHeight: "(config, per breakpoint, px) — live overrides height:auto with this value. If set it must be ≥ the rendered text height or live clips the text. Optional.",
     },
     seed: (el) => {
@@ -142,6 +142,7 @@ export const CONTENT: ElementDescriptor[] = [
     keySpecials: {},
     seed: (el) => {
       setBox(el, 236);
+      el.specials.type = "horizontal"; // editor LinePicker.vue:76-81 (the build ignores it; orientation is editor-side)
       el.responsive.desktop.styles.borderWidth = 1;
       el.responsive.desktop.styles.borderStyle = "solid";
       el.responsive.desktop.styles.borderColor = "rgba(208,213,221,1)";
@@ -167,7 +168,7 @@ export const CONTENT: ElementDescriptor[] = [
     },
     seed: (el) => {
       seedPosition(el);
-      setBox(el, 150, 36);
+      setBox(el, 139, 40); // editor ButtonPicker.vue:49-60
       el.specials.text = "Button";
     },
     example: {

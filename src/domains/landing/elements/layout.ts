@@ -22,7 +22,7 @@ export const LAYOUT: ElementDescriptor[] = [
       video_background: "string (URL) — muted/autoplay/loop background video URL. Renders a <video> element as the section background.",
       show_control_volume: "boolean — show a mute/unmute toggle on the video background.",
       video_background_thumbnail: "string (URL) — editor-only thumbnail for the video background (deleted at build; does NOT render on the published page).",
-      pageLoadEvent: "enum 'none'|'auto-hide'|'auto-show' — controls section visibility on page load. 'auto-show': section is pre-hidden on build; after pageLoadEventDelay × loadDelayMultiplier ms it becomes visible. Any other non-'none' value hides the section. 'none' = normal visible.",
+      pageLoadEvent: "enum 'none'|'auto-hide'|'auto-show' — controls section visibility on page load. 'auto-show': section is pre-hidden on build; after pageLoadEventDelay × loadDelayMultiplier ms it becomes visible. The build pre-hides only for 'auto-show' (d-none); other values are handled by the page runtime, not the build. 'none' = normal visible.",
       pageLoadEventDelay: "number — delay value combined with loadDelayMultiplier (delay × multiplier ms) before applying pageLoadEvent.",
       loadDelayMultiplier: "number — unit for pageLoadEventDelay: 1=ms, 1000=s, 60000=min.",
       afterPageLoadEvent: "enum 'none'|'hide'|'show' — action taken after pageLoadEvent resolves.",
@@ -56,7 +56,7 @@ export const LAYOUT: ElementDescriptor[] = [
     useWhen: "Bundling an icon+text card, a badge cluster, or any reusable mini-layout you want to move as one. Also used in cart forms to bind a group of children to a specific product variant. For horizontal-scroll mobile strips set specials.scrollAuto:'yes'.",
     keySpecials: {
       sprod: "object {id: string} — product reference for variation selector mode. Lives on the GROUP itself.",
-      ctype: "'field' | 'atc' — context type read from DESCENDANT elements inside the group (not on the group itself): 'field' = form field selector, 'atc' = add-to-cart trigger.",
+      ctype: "context type, emitted as a ctype attribute ONLY for 'vimg' | 'price' | 'original_price' | 'fake_sold' | 'selected_attrs' (product-binding groups); any other value ('field', 'atc') is never emitted.",
       sprod_attr: "string — product attribute name read from DESCENDANT elements inside the group (e.g. 'Color', 'Size').",
       sprod_val: "string — attribute value read from DESCENDANT elements inside the group.",
       squantity: "number — quantity to add to cart (emitted only when svariant is also set).",
@@ -101,7 +101,7 @@ export const LAYOUT: ElementDescriptor[] = [
   },
   {
     type: "carousel", category: "layout", container: true, defaultName: "Carousel",
-    summary: "Horizontal slider; children are slide. Visible box on publish = slideToShow × slideWidth px (the carousel's own styles.width is overridden by the renderer). Keep styles.width == slideToShow × slideWidth. Supports autoplay, center mode, dataset binding.",
+    summary: "Horizontal slider; children are slide. Visible box on publish = slideToShow × slideWidth px (only the inner .carousel-wrapper is sized slideToShow × slideWidth; the outer element still gets styles.width, so the two must agree). Keep styles.width == slideToShow × slideWidth. Supports autoplay, center mode, dataset binding.",
     useWhen: "Testimonials, screenshots, or any swipeable set of slides. Use datasetId to drive slides from a dataset.",
     keySpecials: {
       slideWidth: "(config) width of each slide in px. Visible carousel width = slideToShow × slideWidth.",
@@ -138,7 +138,7 @@ export const LAYOUT: ElementDescriptor[] = [
   {
     type: "popup", category: "layout", container: true, defaultName: "Popup",
     summary: "Overlay popup (position:fixed). Hidden by default; opened/closed by events targeting its id. IMPORTANT: specials.src is DEAD on publish — use styles.background instead. video_background + config.overlay work like section.",
-    useWhen: "Thank-you dialog, lead form modal, promo. Place popups at the top level of `page` (NOT nested inside sections) and trigger via a button's open_popup event. Backdrop click always closes the popup (not configurable). Opening a popup closes others unless the triggering element has specials.closePopupOther:false.",
+    useWhen: "Thank-you dialog, lead form modal, promo. Put popups in the SEPARATE top-level `popup` array (NOT in `page`, NOT nested inside sections) and trigger via a button's open_popup event. Backdrop click always closes the popup (not configurable). Opening a popup closes others unless the triggering element has specials.closePopupOther:false.",
     keySpecials: {
       position: "enum 'center'(default)|'top-left'|'top-center'|'top-right'|'center-left'|'center-right'|'bottom-left'|'bottom-center'|'bottom-right'|'custom'. 'custom' uses customTop/customLeft px offsets from the viewport (position:fixed).",
       customTop: "number (px) — top offset from viewport when position='custom'.",

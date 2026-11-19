@@ -1,0 +1,28 @@
+<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Landing</title>
+<style>
+body{margin:0;font-family:Arial,sans-serif;color:#111}
+header{display:flex;justify-content:space-between;align-items:center;padding:16px 64px;border-bottom:1px solid #eee}
+nav a{margin-left:24px;color:#333;text-decoration:none}
+.hero{background:#0f172a url(https://content.pancake.vn/web_content/12/e4/30/cd/ba33b39d856bc6455665b2a75f2abbc89d150ea162b775185ef4c3b0-w:1600-h:1046-l:194257-t:image/jpeg.jpeg) center/cover;color:#fff;padding:120px 64px;text-align:center}
+.hero h1{font-size:56px;margin:0 0 16px}.hero p{font-size:20px;margin:0 0 32px}
+.btn{display:inline-block;background:#f97316;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;padding:96px 64px;max-width:1100px;margin:auto}
+.card{background:#f8fafc;border-radius:16px;padding:24px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.card img{width:100%;height:180px;object-fit:cover;border-radius:12px}
+.split{display:flex;gap:48px;padding:80px 64px;align-items:center}.split>*{flex:1}
+form{display:flex;flex-direction:column;gap:12px}input,textarea{padding:12px;border:1px solid #ccc;border-radius:6px}
+form button{background:#111;color:#fff;padding:14px;border:0;border-radius:6px}
+footer{background:#111;color:#aaa;padding:40px 64px;display:flex;justify-content:space-between}
+@media (max-width:800px){header,.hero,.features,.split,footer{padding-left:16px;padding-right:16px}.features{grid-template-columns:1fr}.split{flex-direction:column}.hero h1{font-size:36px}}
+</style></head><body>
+<header><strong style="font-size:22px">Brand</strong><nav><a href="/a">Giới thiệu</a><a href="/b">Cửa hàng</a><a href="tel:0900">Gọi</a></nav></header>
+<section class="hero"><h1>Tiêu đề lớn <b>ở đây</b></h1><p>Đoạn mô tả ngắn cho phần hero.</p><a class="btn" href="https://example.com/buy">Mua ngay</a></section>
+<section class="features">
+ <div class="card"><img src="https://content.pancake.vn/web_content/12/e4/30/cd/ba33b39d856bc6455665b2a75f2abbc89d150ea162b775185ef4c3b0-w:1600-h:1046-l:194257-t:image/jpeg.jpeg" alt="một"><h3>Nhanh</h3><p>Giao trong một ngày.</p></div>
+ <div class="card"><img src="https://content.pancake.vn/web_content/e8/b1/cd/a6/fd11784a8da105055b4f5ba2aaa3c0e053955eec460692bbdc384ac9-w:800-h:533-l:85697-t:image/jpeg.jpeg" alt="hai"><h3>An toàn</h3><p>Thanh toán bảo mật.</p></div>
+ <div class="card"><img src="https://content.pancake.vn/web_content/50/b0/03/87/ae7844c1a5d85a3b61ce264cab977c42e8f5de161b7a624e35e7cca1-w:800-h:616-l:27146-t:image/jpeg.jpeg" alt="ba"><h3>Tận tâm</h3><p>Hỗ trợ thật sự.</p></div>
+</section>
+<section class="split"><div><h2>Liên hệ</h2><p>Chúng tôi trả lời trong một giờ.</p></div>
+<form><input name="name" placeholder="Họ tên" required><input type="email" name="email" placeholder="Email"><textarea name="msg" placeholder="Lời nhắn"></textarea><button type="submit">Gửi</button></form></section>
+<footer><span>© 2026 Brand</span><span>Hà Nội</span></footer>
+</body></html>

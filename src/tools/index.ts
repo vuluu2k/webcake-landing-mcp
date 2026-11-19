@@ -13,11 +13,13 @@ import { registerGenerationTools } from "./generation.js";
 import { registerMediaTools } from "./media.js";
 import { registerIngestTools } from "./ingest.js";
 import { registerPersistenceTools } from "./persistence.js";
+import { registerCloneTools } from "./clone.js";
 
 export function registerTools(server: McpServer, domain: Domain, { allowLocalFiles = true }: { allowLocalFiles?: boolean } = {}) {
   registerReferenceTools(server, domain);
   registerGenerationTools(server, domain);
   registerMediaTools(server, allowLocalFiles);
   registerIngestTools(server, domain);
+  registerCloneTools(server, domain);
   registerPersistenceTools(server, domain);
 }
