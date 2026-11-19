@@ -6,6 +6,20 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-11-19
+
+### Added
+- Server stdio nay tự phát hiện `WEBCAKE_JWT` đã hết hạn hoặc bị backend từ chối, tự mở lại trang Connect trên trình duyệt, rồi thử lại tool bị lỗi một lần với token mới.
+- Server HTTP remote nay trả về 401 kèm `WWW-Authenticate` khi JWT Webcake phía sau session OAuth đã hết hạn hoặc bị backend từ chối, để Claude/ChatGPT tự mở lại trang Connect.
+
+### Changed
+- Token JWT Webcake mới hơn được lưu từ lần đăng nhập sau nay thắng một `WEBCAKE_JWT` đã hết hạn được ghim trong config MCP của IDE.
+- Access token OAuth nay thắng một giá trị `?jwt=`/`x-webcake-jwt` cũ còn mang JWT đã hết hạn.
+- Việc refresh token OAuth và resolve access token nay từ chối một JWT Webcake đã "chết" thay vì cấp lại nó vô hạn.
+
+### Fixed
+- 3D scene trên trang web guide không còn nhấp nháy các label dồn ở góc trên-trái khi three.js đang tải; canvas và label nay chỉ hiện dần sau khi khung hình đầu tiên được vẽ, và chỗ cho nút tạm dừng/phát được giữ sẵn từ đầu để panel không bị giãn cao khi nút xuất hiện.
+
 ## [1.7.0] - 2026-11-05
 
 ### Added

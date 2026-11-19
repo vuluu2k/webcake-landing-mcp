@@ -6,6 +6,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-11-19
+
+### Added
+- The stdio server now detects an expired or backend-rejected `WEBCAKE_JWT` and automatically reopens the browser Connect page, then retries the failing tool call once with the renewed token.
+- The remote HTTP server now answers 401 with `WWW-Authenticate` when the Webcake JWT behind an OAuth session has expired or was rejected by the backend, so Claude/ChatGPT reopen the Connect page on their own.
+
+### Changed
+- A fresher Webcake JWT saved by a later login now wins over an expired `WEBCAKE_JWT` pinned in an IDE's MCP config.
+- An OAuth access token now wins over a stale `?jwt=`/`x-webcake-jwt` value that still carries an old, expired JWT.
+- OAuth token refresh and access-token resolution now refuse a dead Webcake JWT instead of reissuing it indefinitely.
+
+### Fixed
+- The web guide's 3D scene no longer flashes its labels stacked at the top-left corner while three.js loads; the canvas and labels now fade in only after the first frame renders, and the play/pause button's space is reserved up front so the panel doesn't grow when it appears.
+
 ## [1.7.0] - 2026-11-05
 
 ### Added
