@@ -6,6 +6,13 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.3] - 2026-11-20
+
+### Fixed
+- `settings.thumbnail`/`settings.favicon` không còn bị thành URL resize `sNaN` lỗi 404 sau khi lưu qua MCP rồi publish lại từ editor: bước rehost nay bỏ qua `content.pancake.vn` (CDN resize của chính editor) thay vì thay một URL đang hoạt động của editor bằng bản sao thiếu thông tin kích thước.
+- `publish_page` nay tự sửa URL thumbnail/favicon `sNaN` đã lỗi sẵn trong trang trước khi build và publish, thay vì publish lại nguyên bản lỗi đó.
+- `update_page` và `add_section` nay file ảnh được rehost vào đúng organization của trang khi không có organization nào khác được xác định, nhờ vậy route upload vào collection trả về URL mang đủ thông tin kích thước mà bước publish của editor cần.
+
 ## [1.13.2] - 2026-11-20
 
 ### Added

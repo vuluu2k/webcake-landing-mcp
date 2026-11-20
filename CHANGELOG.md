@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.3] - 2026-11-20
+
+### Fixed
+- `settings.thumbnail`/`settings.favicon` no longer end up as a 404 `sNaN` resize URL after an MCP save followed by an editor publish: rehosting now skips `content.pancake.vn` (the editor's own resize CDN) instead of swapping a working editor URL for an info-less copy.
+- `publish_page` now heals an already-stored broken `sNaN` thumbnail/favicon URL before building and publishing, instead of republishing it as-is.
+- `update_page` and `add_section` now file re-hosted images into the target page's own organization when no organization otherwise resolves, so the collection upload route returns URLs carrying the size info the editor's publish needs.
+
 ## [1.13.2] - 2026-11-20
 
 ### Added
