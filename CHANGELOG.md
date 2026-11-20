@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.6] - 2026-11-20
+
+### Fixed
+- `update_page`/`patch_page` no longer compute a sections-only diff against a page that has two elements sharing the same id (something the Webcake editor itself allows) — since the backend's own patcher would edit whichever of the two it meets first, the write now falls back to a whole-tree save instead of risking landing on the wrong node.
+- `patch_page`'s locally-applied ops now walk the tree in the same order the backend's patcher does (depth-first, `page` before `popup`) and reject the same malformed ops the backend would (a top-level insert that isn't a `section`/`popup`, or a `set` that changes a section's/popup's own `type`), so the locally cached result of a patch can no longer diverge from what the backend actually stored.
+- `patch_page` against a live page no longer reports `patched:true` with nothing actually written when its cached copy of the page is stale and happens to diff empty against the new version — it now confirms the page's current version with the backend before treating an empty diff as proof nothing changed.
+- `publish_page` and `create_page`'s auto-publish step now only advance the cached/served version of a page to the one the publish itself just wrote after confirming that is really the backend's current version, clearing the cache instead when an editor save landed in between — closing a race that could previously let a following `update_page` silently drop an edit made in the Webcake editor during a publish.
+- `update_page` with no explicit `base_version` and no prior whole-tree `get_page`/`patch_page`/`create_page` read of the page in the current session is now refused with `reason:"unverified_overwrite"` instead of proceeding whenever the write happened not to delete any element ids, since nothing locally ties the tree being sent to a known version of the live page.
+- `get_page({ outline: true })` and `get_page({ element_id })` (a partial view of the page) no longer get remembered as the baseline a later whole-tree `update_page` is checked against; only a full `get_page` read of the whole source now counts.
+- A locally cached copy of a page's source is now only trusted without re-checking the backend when its version token is the exact `source_hash` (an md5); the 1-second-precision `updated_at` token is no longer treated as exact, closing a window where a save made in the same second as a cached read could go undetected.
+- A save that times out or fails over the network during `update_page`/`patch_page` now keeps the retry draft as the exact tree that would have been stored (images already re-hosted, font CSS links already applied) instead of the pre-save tree, so retrying after a save that actually landed is correctly recognized as already done.
+
 ## [1.13.5] - 2026-11-20
 
 ### Fixed

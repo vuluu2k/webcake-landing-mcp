@@ -6,6 +6,18 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.6] - 2026-11-20
+
+### Fixed
+- `update_page`/`patch_page` nay không còn tính diff theo từng section với một trang có hai element dùng chung id (điều mà chính editor Webcake vẫn cho phép) — vì bộ patch của backend sẽ sửa node nào gặp trước trong hai node đó, nên lượt lưu nay chuyển sang ghi cả cây thay vì có rủi ro sửa nhầm node.
+- Các op patch áp dụng cục bộ của `patch_page` nay duyệt cây theo đúng thứ tự bộ patch của backend dùng (tiền thứ tự theo chiều sâu, `page` trước `popup`) và từ chối đúng các op sai dạng mà backend cũng từ chối (chèn ở cấp cao nhất một node không phải `section`/`popup`, hoặc `set` làm đổi `type` của chính một section/popup), nên kết quả patch được cache cục bộ không còn lệch khỏi những gì backend thực sự đã lưu.
+- `patch_page` trên một trang đang chạy nay không còn báo `patched:true` mà thực chất không ghi gì khi bản cache của trang đã cũ và vô tình cho diff rỗng so với bản mới — nay nó xác nhận version hiện tại của trang với backend trước khi coi diff rỗng là bằng chứng không có gì thay đổi.
+- Bước auto-publish của `publish_page` và `create_page` nay chỉ chuyển version được cache/served của trang sang version mà chính lượt publish đó vừa ghi sau khi xác nhận đó đúng là version hiện tại của backend, và xoá cache nếu có một lượt lưu từ editor chen vào giữa — khép lại một race trước đây có thể khiến một `update_page` sau đó âm thầm làm mất một thay đổi vừa lưu từ editor Webcake trong lúc publish.
+- `update_page` không có `base_version` rõ ràng và không có lượt đọc cả cây qua `get_page`/`patch_page`/`create_page` nào trước đó trong phiên hiện tại nay bị từ chối với `reason:"unverified_overwrite"` thay vì cứ chạy khi lượt ghi vô tình không xoá id element nào, vì không có gì cục bộ gắn cây đang gửi với một version đã biết của trang đang chạy.
+- `get_page({ outline: true })` và `get_page({ element_id })` (một phần của trang) nay không còn được ghi nhớ làm mốc để một `update_page` ghi cả cây sau đó so sánh; chỉ một lượt `get_page` đọc cả nguồn đầy đủ mới được tính là mốc.
+- Một bản cache cục bộ của nguồn trang nay chỉ được tin dùng mà không hỏi lại backend khi mốc version của nó là đúng `source_hash` (md5); mốc `updated_at` có độ chính xác tới giây không còn được coi là chính xác tuyệt đối, khép lại một khoảng hở mà một lượt lưu xảy ra trong cùng giây với một lượt đọc đã cache có thể không bị phát hiện.
+- Một lượt lưu bị timeout hoặc lỗi mạng trong `update_page`/`patch_page` nay giữ draft để thử lại đúng bằng cây sẽ được lưu (ảnh đã được rehost, link CSS font đã được áp) thay vì cây trước khi lưu, nên việc thử lại sau một lượt lưu thực ra đã thành công được nhận diện đúng là đã xong.
+
 ## [1.13.5] - 2026-11-20
 
 ### Fixed
