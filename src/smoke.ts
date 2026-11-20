@@ -33,7 +33,7 @@ import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./to
 import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
 import { isPrivateHost, isAllowedScreenshotUrl, acquireSlot, releaseSlot, slotStats } from "./persistence/screenshot-playwright.js";
 import { iconifyCandidates } from "./persistence/icon-client.js";
-import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl, isInlineBase64Image, parseInlineBase64Image } from "./persistence/rehost.js";
+import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl, isInlineBase64Image, parseInlineBase64Image, healBrokenResizeUrls } from "./persistence/rehost.js";
 import { key as rehostCacheKey } from "./persistence/rehost-cache.js";
 import {
   sourceFingerprint,
@@ -2413,6 +2413,14 @@ console.log("== rehost: external-image URL collect + rewrite (pure, offline) =="
   check("rehost: data: URI not rehostable", !isRehostableImageUrl("data:image/svg+xml;utf8,<svg>"));
   check("rehost: extension-less URL not rehostable as a plain field", !isRehostableImageUrl("https://w.ladicdn.com/x/noext"));
   check("rehost: .jpg URL rehostable", isRehostableImageUrl("https://w.ladicdn.com/x/p.jpg"));
+  // #5: the editor's resize CDN is ours — never re-host it; heal its NaN-width (404) links.
+  check("rehost: content.pancake.vn (editor resize CDN) not rehostable", !isRehostableImageUrl("https://content.pancake.vn/web-media-264/s1200x650/fwebp90/1a/67/x-w:1200-h:630.png"));
+  {
+    const ok = "https://content.pancake.vn/web-media-264/s50x50/fwebp/1a/67/x.png";
+    const healed = healBrokenResizeUrls({ settings: { favicon: "https://content.pancake.vn/web-media-264/sNaNx50/fwebp/1a/67/x.png", thumbnail: "https://content.pancake.vn/web-media-264/sNaNx650/1a/67/y.png", ok } });
+    check("heal: sNaN favicon/thumbnail → original image, valid resize URL untouched",
+      healed.settings.favicon === "https://content.pancake.vn/web-media-264/1a/67/x.png" && healed.settings.thumbnail === "https://content.pancake.vn/web-media-264/1a/67/y.png" && healed.settings.ok === ok, healed);
+  }
   check("rehost: ?query after ext still rehostable", isRehostableImageUrl("https://cdn.x/p.png?v=2"));
   // Stitch ↔ webcake bridge: Google Stitch images live on googleusercontent with
   // NO extension — host-recognized so a Stitch clone's specials.src auto-hosts.

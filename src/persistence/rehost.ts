@@ -25,6 +25,10 @@
 /** Hosts we never re-host: our own CDN + deliberate placeholders. */
 const SKIP_HOSTS = [
   "statics.pancake.vn",
+  // The editor's resize CDN (its publish writes settings.thumbnail/favicon as
+  // content.pancake.vn/<bucket>/s1200x650/…). Re-hosting it swapped a working
+  // editor URL for one without the -w:/-h: info the next editor publish needs (#5).
+  "content.pancake.vn",
   "placehold.co",
   "placeholder.com",
   "via.placeholder.com",
@@ -176,6 +180,19 @@ export function rewriteImageUrls<T>(source: T, map: Map<string, string>): T {
     return v;
   };
   return recur(source) as T;
+}
+
+/**
+ * Repair `content.pancake.vn/<bucket>/sNaNx<h>[/fwebp<q>]/…` URLs (always 404).
+ * The editor's publish resizes settings.thumbnail/favicon from the `-w:…-h:…`
+ * info in the file name; a URL without it (the public upload route mints those)
+ * gets width NaN, and the editor stores that broken link in the source (#5).
+ * Dropping the size segment leaves the original image, which the CDN serves.
+ */
+const NAN_RESIZE_RE = /(https:\/\/content\.pancake\.vn\/[^/"\s]+)\/sNaNx\d+(?:\/fwebp\d*)?\//g;
+export function healBrokenResizeUrls<T>(source: T): T {
+  const json = JSON.stringify(source);
+  return json?.includes("/sNaNx") ? JSON.parse(json.replace(NAN_RESIZE_RE, "$1/")) : source;
 }
 
 /** Hard cap on uploads per save — a runaway-safety backstop, far above a real page's image count.
