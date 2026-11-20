@@ -78,13 +78,19 @@ function saveExtras(o: { rehost?: unknown; fonts?: unknown; font_weights_notice?
 /** Errors of `after` the `before` tree did not already have (matched by message with array indices
  *  removed, so a moved/reordered element's unchanged problem is not "new"). No before → all. */
 function addedErrors(domain: Domain, before: any, after: string[]): string[] {
-  if (!before) return after;
-  let prior: string[] = [];
+  const prior = priorErrors(domain, before);
+  return prior ? addedAgainst(prior, after) : after;
+}
+/** The errors a stored tree already has (undefined when there is none / it can't be judged). */
+function priorErrors(domain: Domain, before: any): string[] | undefined {
+  if (!before) return undefined;
   try {
-    prior = domain.validate(domain.expand(before)).errors;
+    return domain.validate(domain.expand(before)).errors;
   } catch {
-    return after;
+    return undefined;
   }
+}
+function addedAgainst(prior: string[], after: string[]): string[] {
   const norm = (e: string) => e.replace(/\[\d+\]/g, "[]").replace(/\/\d+\//g, "/");
   const seen = new Map<string, number>();
   for (const e of prior) seen.set(norm(e), (seen.get(norm(e)) ?? 0) + 1);
@@ -698,6 +704,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // The version of the live page this source was built from. Explicit wins;
       // a draft carries the one captured when it was first cached.
       let resolvedBaseVersion: string | undefined = base_version;
+      let draftPrior: string[] | undefined;
 
       if (draft_id) {
         const cached = await getDraft(draft_id);
@@ -716,6 +723,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           });
         }
         expanded = cached.source;
+        draftPrior = cached.prior_errors;
         resolvedPageId = page_id ?? cached.page_id;
         resolvedBaseVersion = base_version ?? cached.base_version;
       } else {
@@ -750,12 +758,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       }
       dropStaleAgainst(liveSrc, expanded);
       const result = domain.validate(expanded);
-      const added = result.valid ? [] : liveSrc ? addedErrors(domain, liveSrc, result.errors) : result.errors;
+      const prior = liveSrc ? priorErrors(domain, liveSrc) : draftPrior;
+      const added = result.valid ? [] : prior ? addedAgainst(prior, result.errors) : result.errors;
       if (!result.valid && added.length) {
         if (existingDraftId) {
           await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion });
+          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion, prior_errors: prior });
         }
         return text({
           updated: false,
@@ -776,7 +785,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         if (existingDraftId) {
           await updateDraft(existingDraftId, expanded);
         } else {
-          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion });
+          existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion, prior_errors: prior });
         }
         return text({
           dry_run: true,
@@ -797,7 +806,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       if (existingDraftId) {
         await updateDraft(existingDraftId, expanded);
       } else {
-        existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion });
+        existingDraftId = await putDraft({ source: expanded, kind: "update", page_id: resolvedPageId, base_version: resolvedBaseVersion, prior_errors: prior });
       }
 
       const guard = await guardOverwrite(config, resolvedPageId, parsed, {
@@ -1074,11 +1083,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const counts = { before: existing.length, after: existing.length + newSections.length };
 
       const mergedResult = domain.validate(merged);
-      if (!mergedResult.valid) {
+      // only errors the new sections ADD (the stored page may already carry some)
+      const mergedAdded = mergedResult.valid ? [] : addedErrors(domain, base, mergedResult.errors);
+      if (mergedAdded.length) {
         return text({
           added: false,
           reason: "validation_failed",
-          errors: mergedResult.errors,
+          errors: mergedAdded,
           ...warningsField(mergedResult.warnings),
           page_section_count: counts,
           hint: "Fix the section(s) — duplicate ids vs existing sections are a common cause — then retry.",
@@ -1405,12 +1416,15 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       //   'sections'            → APPEND to the live page
       //   'update'              → UPDATE the existing page (updatePageSource)
       if (draft_id && draft) {
-        if (!result.valid) {
+        // an update draft refuses only errors beyond what the live page already had
+        const blocking = result.valid ? [] : draft.kind === "update" && draft.prior_errors ? addedAgainst(draft.prior_errors, result.errors) : result.errors;
+        if (blocking.length) {
           await updateDraft(draft_id, base); // persist partial fixes for the next patch round
           return text({
             patched: false,
             reason: "validation_failed",
-            errors: result.errors,
+            errors: blocking,
+            ...(blocking.length < result.errors.length ? { pre_existing_errors: result.errors.length - blocking.length } : {}),
             ...warningsField(result.warnings),
             patches_applied: applied, ...integrity,
             draft_id,
@@ -1614,6 +1628,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         source: expanded,
         kind: "update",
         page_id: page_id!,
+        prior_errors: priorErrors(domain, before),
         base_version: lastKnownPageVersion(page_id!)?.fp,
       });
 

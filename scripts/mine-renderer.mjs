@@ -408,16 +408,17 @@ const clientFiles = [];
 const mined = JSON.parse(fs.readFileSync("src/domains/landing/element-keys.generated.json", "utf8"));
 const universe = new Set();
 for (const t of Object.values(mined)) for (const b of BUCKETS) for (const k of Object.keys(t[b] || {})) universe.add(k);
-// + every key the editor itself writes on a dropped element (scripts/mine-presets.mjs): a key the
-// runtime reads but no sampled page happens to use (timegroup currentTime / typeTimeGroup) is real.
+// Keys the editor itself writes on a dropped element (scripts/mine-presets.mjs), per type: a key the
+// runtime reads but no sampled page happens to use (timegroup currentTime / typeTimeGroup) is real —
+// for THAT type only, when its own render_v4/src/elements/<type>.js mentions it.
+const presetKeys = {};
 try {
-  const walkKeys = (n) => {
+  const walkKeys = (n, set) => {
     if (!n || typeof n !== "object") return;
-    for (const k of Object.keys(n.specials || {})) universe.add(k);
-    for (const bp of ["desktop", "mobile"]) for (const b of ["config", "styles"]) for (const k of Object.keys(n.responsive?.[bp]?.[b] || {})) universe.add(k);
-    for (const c of n.children || []) walkKeys(c);
+    for (const k of Object.keys(n.specials || {})) set.add(k);
+    for (const bp of ["desktop", "mobile"]) for (const b of ["config", "styles"]) for (const k of Object.keys(n.responsive?.[bp]?.[b] || {})) set.add(k);
   };
-  for (const p of Object.values(JSON.parse(fs.readFileSync("src/domains/landing/element-presets.json", "utf8")))) walkKeys(p.default);
+  for (const [t, p] of Object.entries(JSON.parse(fs.readFileSync("src/domains/landing/element-presets.json", "utf8")))) walkKeys(p.default, (presetKeys[t] = new Set()));
 } catch {}
 const tokensOf = (files) => {
   const s = new Set();
@@ -425,6 +426,14 @@ const tokensOf = (files) => {
   return s;
 };
 const client = tokensOf(clientFiles);
+const clientByType = {};
+for (const [t, keys] of Object.entries(presetKeys)) {
+  const f = path.join(BACKEND, "assets/render_v4/src/elements", `${t}.js`);
+  if (!fs.existsSync(f)) continue;
+  const src = fs.readFileSync(f, "utf8");
+  const hits = [...keys].filter((k) => !client.has(k) && new RegExp(`\\b${k.replace(/[$]/g, "\\$")}\\b`).test(src));
+  if (hits.length) clientByType[t] = hits.sort();
+}
 // Also any string literal / identifier on the server side (keys read through a key list or variable).
 const server = tokensOf(FILES.map((f) => path.join(DIR, f)));
 
@@ -454,6 +463,7 @@ const out = {
   dispatched_data: Object.keys(data.out).sort(),
   shared: ser(shared),
   client_mentioned: [...client].sort(),
+  client_by_type: clientByType,
   server_mentioned: [...server].sort(),
   types: ser(types),
 };

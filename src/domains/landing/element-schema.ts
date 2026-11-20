@@ -31,6 +31,8 @@ const EDITOR: any = load("./editor-keys.generated.json");
 const RTYPES: Record<string, any> = RENDERER.types || {};
 const SHARED: Record<string, Record<string, any>> = RENDERER.shared || {};
 const CLIENT = new Set<string>(RENDERER.client_mentioned || []);
+/** Keys only one type's own runtime file reads (render_v4/src/elements/<type>.js). */
+const CLIENT_BY_TYPE: Record<string, Set<string>> = Object.fromEntries(Object.entries(RENDERER.client_by_type || {}).map(([t, ks]) => [t, new Set(ks as string[])]));
 /** Types the HTML builder has a case for (anything else renders an empty wrapper). */
 export const RENDERED_TYPES = new Set<string>(RENDERER.dispatched_html || []);
 
@@ -89,7 +91,7 @@ export function renderedVia(type: string, bucket: Bucket, key: string): string |
   if (own) return /exportCss/.test(own.at) ? "css" : /event-data/.test(own.at) ? "data" : "html";
   if (SHARED[bucket]?.[key]) return "shared";
   if (bucket === "styles" && r.styles_open && !(r.styles_dropped || []).includes(key)) return "css-loop";
-  if (bucket === "specials" && r.client_specials && CLIENT.has(key)) return "client";
+  if (bucket === "specials" && r.client_specials && (CLIENT.has(key) || CLIENT_BY_TYPE[type]?.has(key))) return "client";
   return undefined;
 }
 

@@ -57,6 +57,9 @@ export interface PageDraft {
    * page and refuses when this no longer matches, instead of reverting their work.
    */
   base_version?: string;
+  /** For kind='update': the errors the live page ALREADY had when the draft was taken — finishing
+   *  the draft refuses only errors beyond these (same rule as a direct update_page / patch_page). */
+  prior_errors?: string[];
   created: number; // ms; refreshed on EVERY touch (get/update) — sliding TTL, so a draft never expires mid-workflow
 }
 

@@ -27,7 +27,7 @@ export const FORM: ElementDescriptor[] = [
       botcake_dynamic_ref: "string — ref appended to the m.me URL when app_target='botcake_dynamic'.",
       others_link_params: "array of {key: elementId, name: string} — field→URL-param mappings when app_target='others'.",
       partnerServiceId: "string — sent as partner_service_id (partner/affiliate tracking).",
-      fb_event_type: "Facebook pixel standard event fired on submit (e.g. Lead, Purchase, none). Use 'none' to disable pixel firing.",
+      fb_event_type: "Facebook pixel standard event fired on submit (e.g. Lead, Purchase, none). Use 'none' to disable pixel firing. A form from new_element / get_element carries the editor's default 'CompleteRegistration' (also tiktok_event_type, conversion value 10000 VND) — it only fires when the page has a Facebook pixel (window.fbq); set the event the user's ads optimise for, or 'none'.",
       fb_conversion_value: "string — FB pixel conversion value.",
       fb_tracking_currency: "string — currency for the FB conversion value (VND…).",
       fb_custom_tracking: "string — extra custom FB pixel event name to fire on submit.",
