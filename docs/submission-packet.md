@@ -1,7 +1,9 @@
-# Hồ sơ submit connector — Claude Directory & ChatGPT App Directory
+# Hồ sơ submission — Webcake Landing
 
-> Mọi field copy-paste sẵn. Phần [HƯỚNG DẪN NỘP](#hướng-dẫn-nộp) ở cuối.
-> Cập nhật: 2026-06-15.
+> Cập nhật cho OpenAI Plugins: 2026-10-15. Gói hiện là **bản chuẩn bị**, chưa đủ điều kiện gửi duyệt.
+> Nguồn: `plugins/webcake-landing/`; tạo ZIP bằng `npm run pack:plugin`.
+> Xem [bằng chứng và các phần còn thiếu](plugin-review.md), [hướng dẫn quay demo](plugin-demo.md).
+> Phần Claude bên dưới được giữ lại làm tham khảo riêng, không phải luồng nộp OpenAI.
 
 ## URL công khai (đã host sẵn trên connector)
 | Mục | URL |
@@ -10,13 +12,17 @@
 | Privacy policy | `https://mcp.toolvn.io.vn/privacy` |
 | Terms of service | `https://mcp.toolvn.io.vn/terms` |
 | Website | `https://webcake.io` (hoặc `https://mcp.toolvn.io.vn`) |
+| Support (OpenAI) | `https://github.com/vuluu2k/webcake-landing-mcp/issues` |
 | Icon (SVG) | `https://mcp.toolvn.io.vn/icon.svg` |
 | OAuth metadata | `https://mcp.toolvn.io.vn/.well-known/oauth-protected-resource` |
 
 ## Định danh
 - **Name (ChatGPT ≤30 ký tự):** `Webcake Landing` (15 ký tự)
-- **Tagline / short description (≤ ~80 ký tự):**
-  `Build & edit Webcake landing pages with AI.`
+- **Tagline / short description (OpenAI ≤30 ký tự):**
+  `Build Webcake landing pages` (27 ký tự)
+- **Publisher đã được người dùng xác nhận:** `Vũ Lưu`, cá nhân. Chưa xác minh trạng thái identity verification trên OpenAI.
+- **Phạm vi quốc gia:** tất cả quốc gia khả dụng (`publication.countries: []`), người dùng xác nhận.
+- **Commerce:** không có thanh toán/mua hàng trong plugin (`review.commerce: false`), người dùng xác nhận. Không suy ra Webcake là dịch vụ miễn phí.
 - **Long description:**
   > Webcake Landing lets your AI assistant design, validate, and publish complete
   > landing pages straight into your Webcake account. Describe the page you want —
@@ -39,10 +45,10 @@
 - **Claude redirect URI** (auto via DCR): `https://claude.ai/api/mcp/auth_callback`.
 - Scopes: `landing:read`, `landing:write`.
 
-## Tools (22) — tên + annotation an toàn
+## Tools (23) — tên + annotation
 **Read-only (`readOnlyHint`)** — no writes:
 `get_generation_guide`, `list_elements`, `get_element`, `get_page_schema`,
-`new_element`, `new_page_skeleton`, `validate_page`, `search_images`, `get_icon_svg`,
+`new_element`, `new_page_skeleton`, `validate_page`, `layout`, `search_images`, `get_icon_svg`,
 `render_preview`, `ingest_html`, `ingest_url`, `list_organizations`, `list_pages`,
 `find_pages`, `get_page`.
 
@@ -51,22 +57,26 @@
 `create_page`, `add_section` (append-only, destructive: false);
 `upload_images` (re-host images).
 
-> Mọi tool ghi đều mặc định `dry_run=true` (validate + trả preview đã che JWT); chỉ ghi thật khi `dry_run=false`.
+> Các tool ghi trang mặc định `dry_run=true`; chỉ ghi thật khi `dry_run=false` sau khi xác nhận.
+> `upload_images` ghi ngay vào CDN/media collection, không có tham số dry run; cần được phép upload trước khi gọi.
+> Source hiện khai báo đủ boolean `readOnlyHint`, `destructiveHint`, `openWorldHint` cho mọi tool; cần deploy và scan để portal thấy bản mới.
 
 ## Test account cho reviewer
 - [ ] Tạo tài khoản Webcake demo + 1 organization có sẵn vài trang mẫu.
 - [ ] Ghi user/pass vào ô "test credentials" của form (KHÔNG để trong repo).
 - [ ] Kịch bản gợi ý cho reviewer: "Tạo một landing page bán hàng đơn giản" → connector hỏi intake → tạo → trả link preview.
 
-## Screenshots cần chuẩn bị (3–5 ảnh)
-- [ ] Màn hình OAuth consent (đăng nhập Webcake).
-- [ ] Assistant đang hỏi intake + dựng trang.
-- [ ] Trang landing thành phẩm (preview Webcake).
-- [ ] Danh sách tool trong client.
+## Video và bằng chứng OpenAI
+- [ ] Quay tương tác thật trong ChatGPT với tài khoản demo; xem [walkthrough](plugin-demo.md).
+- [ ] Host video cho reviewer xem được, kiểm tra playback và ghi URL thật vào manifest.
+- [ ] Chạy 5 positive + 3 negative cases trong manifest, ghi kết quả và bằng chứng.
+- Plugin hiện không có UI nhúng riêng; không khai báo screenshot UI giả. Video có thể quay chat và preview Webcake thực tế.
 
 ## Icon
 - SVG công khai: `/icon.svg`.
-- **PNG 64×64 (2.9KB <5KB) đã tạo sẵn:** [assets/icon-64.png](../assets/icon-64.png) — dùng cho ChatGPT.
+- **Listing:** [PNG 512×512](../assets/icon-512.png), đóng gói tại `assets/icon-512.png`.
+- **Composer:** [PNG 64×64](../assets/icon-64.png), đóng gói tại `assets/icon-64.png`.
+- Dùng icon sẵn có; người dùng không yêu cầu thêm icon nền tối hay màu thương hiệu.
 
 ---
 
@@ -86,14 +96,26 @@
    privacy `…/privacy`, terms `…/terms`, tool list, icon, mô tả, support email, test account.
 4. Submit → theo dõi email review. Nếu kẹt, escalate qua support email trong form.
 
-### B. ChatGPT App Directory
-1. Bật **Developer mode** trong ChatGPT (Settings → Connectors) và test connector của bạn trước
-   (add custom connector bằng URL `https://mcp.toolvn.io.vn/mcp`).
-2. Đọc guidelines: https://developers.openai.com/apps-sdk/app-submission-guidelines
-   và quy trình: https://developers.openai.com/apps-sdk/deploy/submission
-3. Vào platform.openai.com → mục **Apps** → submit: name `Webcake Landing` (≤30),
-   PNG icon 64×64, mô tả, privacy/terms URL, OAuth config, screenshots, test account.
-4. Submit → review. (Apps SDK đang beta — có thể cần thêm UI component, nhưng MCP tools thuần vẫn nộp được.)
+### B. OpenAI Plugin Directory — ChatGPT và Codex
+
+Chuẩn bị theo thứ tự: listing → demo/tài khoản reviewer → ZIP cuối → portal.
+
+1. Kiểm tra [gói nguồn](../plugins/webcake-landing/plugin.json): tên `Webcake Landing`, publisher `Vũ Lưu`, subtitle 27/30, đủ 4 URL, logo PNG, 5 positive + 3 negative cases, commerce false, tất cả quốc gia khả dụng. Chọn category `Productivity` tương ứng trong portal.
+2. Hoàn tất [các phần còn thiếu](plugin-review.md), nhất là video thực, tài khoản demo và kiểm thử OAuth bằng tài khoản thật. Không đưa credentials vào ZIP, commit, hay chat.
+3. Ghi URL video đã kiểm tra vào `extensions.com.openai.review.demo_recording_url`, tăng version nếu đã từng upload, chạy `npm run pack:plugin`. Kiểm tra lại ZIP cuối, không chỉ thư mục nguồn.
+4. Mở [OpenAI Plugins](https://platform.openai.com/plugins) bằng organization/project đúng. Hoàn tất individual verification cho danh tính `Vũ Lưu`; cần owner hoặc quyền Apps Management Write.
+5. Chọn upload plugin ZIP có MCP. Đây là bản nháp, chưa gửi duyệt. Không tạo bản private bằng Plugin Creator để thay cho public submission.
+6. Trong MCPs: dùng HTTPS endpoint có sẵn trong `mcp.json`, auth OAuth, client registration DCR, scopes `landing:read landing:write`. Không dùng `?jwt=` hoặc custom token headers trong public package. OAuth discovery cung cấp các endpoint.
+7. Hoàn tất domain verification bằng đúng token/URL challenge portal cấp. Không tự tạo token hoặc thay token của plugin khác. Kết nối tài khoản demo, scan server và xử lý findings.
+8. Kiểm tra metadata đã import: publisher, 4 URL, icons, 5/3 cases, video, release notes, countries, commerce. Điền reviewer credentials và login/workspace instructions chỉ vào trường bảo mật trong portal.
+9. Chạy lại cases trên phiên bản đã lưu. Người có thẩm quyền tự hoàn tất policy/legal attestations và chọn **Submit for review** khi mọi điều kiện đã đủ.
+10. Sau khi được duyệt, chọn **Publish plugin**. Upload, submit, approval và publish là các trạng thái khác nhau; chưa có trạng thái nào được thực hiện bởi gói local này.
+
+Tài liệu chính thức:
+- [Package format](https://developers.openai.com/plugins/build/plugins)
+- [Submission và field reference](https://developers.openai.com/plugins/deploy/submission)
+- [Authentication](https://developers.openai.com/plugins/build/auth)
+- [Plugin guidelines](https://developers.openai.com/plugins/plugin-guidelines)
 
 ### Sau khi được duyệt
 - Cập nhật README + skill `connector-directory` đánh dấu đã lên directory.

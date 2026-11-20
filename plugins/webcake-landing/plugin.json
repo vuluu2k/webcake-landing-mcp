@@ -1,0 +1,91 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "webcake-landing",
+  "version": "0.1.0",
+  "description": "Design, validate, and edit Webcake landing pages through a per-user OAuth connection.",
+  "author": {
+    "name": "Vũ Lưu",
+    "url": "https://github.com/vuluu2k"
+  },
+  "homepage": "https://mcp.toolvn.io.vn/",
+  "repository": "https://github.com/vuluu2k/webcake-landing-mcp",
+  "license": "MIT",
+  "keywords": ["webcake", "landing-pages", "web-design", "marketing"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Webcake Landing",
+        "shortDescription": "Build Webcake landing pages",
+        "longDescription": "Design and edit landing pages in your Webcake account from a written brief or a reference you are authorized to use. Plan sections, build desktop and mobile layouts, validate page sources, find stock photos and icons, and make targeted edits to existing pages. Changes are previewed before you approve saving or publishing. Connect your own Webcake account through OAuth; access is limited to pages owned by that account. Webcake account permissions and service availability apply. Preview links may expire, and permanent public URLs require a configured custom domain. HTML reference import does not execute JavaScript. This plugin does not process purchases, refunds, invoices, or email campaigns.",
+        "developerName": "Vũ Lưu",
+        "category": "Productivity",
+        "defaultPrompt": [
+          "Help me plan and build a Webcake landing page for my business.",
+          "Find my Webcake page and preview a change to its main call to action.",
+          "Adapt an HTML reference into a responsive Webcake page."
+        ],
+        "websiteURL": "https://mcp.toolvn.io.vn/",
+        "supportURL": "https://github.com/vuluu2k/webcake-landing-mcp/issues",
+        "privacyPolicyURL": "https://mcp.toolvn.io.vn/privacy",
+        "termsOfServiceURL": "https://mcp.toolvn.io.vn/terms",
+        "logo": "./assets/icon-512.png",
+        "composerIcon": "./assets/icon-64.png"
+      },
+      "review": {
+        "commerce": false,
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Core create workflow. Setup: sign in to a dedicated Webcake demo account with create/build permissions. Select its demo organization when prompted. After reviewing the outline, confirm it; after the dry run, explicitly confirm saving. Use only supplied facts and placeholders. This is a multi-turn case; the first prompt does not authorize persistence.",
+              "prompt": "Create an English Webcake landing page named MCP Review Demo for a fictional design workshop. Include hero, three benefits, and a contact section. Use green and white, desktop and mobile layouts, and a Contact us button that scrolls to the contact section. Do not add prices, testimonials, or contact details. Ask about missing details and show a preview before saving.",
+              "tools_triggered": "get_generation_guide, list_organizations, new_page_skeleton, get_element, validate_page, create_page",
+              "expected_behavior": "The assistant resolves missing intake details and the organization, confirms an outline, authors both breakpoints, and resolves validation errors and warnings. create_page first uses dry_run:true. It must not call dry_run:false until explicit confirmation after that preview. After confirmation it returns the editor URL and the actual build/preview result; any failed build or temporary preview is explained. Record the returned page ID for the next two cases."
+            },
+            {
+              "description": "Find and inspect an owned page. Setup: complete the create case and retain MCP Review Demo in the dedicated account. No write is authorized.",
+              "prompt": "Find my Webcake page named MCP Review Demo and tell me which sections it contains, with its editor link. Do not change anything.",
+              "tools_triggered": "find_pages, get_page",
+              "expected_behavior": "The assistant searches by the supplied page name, asks which match if ambiguous, reads the selected owned page, and derives section names and the editor link from returned data. It does not create, update, patch, upload, or publish anything."
+            },
+            {
+              "description": "Surgical edit preview. Setup: use the page ID from the create case; its hero CTA currently reads Contact us. Record its live source as a baseline. No commit is authorized.",
+              "prompt": "On MCP Review Demo, change only the hero button text from Contact us to Explore the workshop. Keep its destination and every other element unchanged. Show me the proposed change without saving or publishing.",
+              "tools_triggered": "find_pages, get_page, validate_page, patch_page",
+              "expected_behavior": "The assistant reads the live source, locates the existing button ID, validates the proposed source, and previews a patch with dry_run:true. Only the requested label differs; the button target, IDs, coordinates, other elements, settings, and popups are preserved. No dry_run:false call or publish occurs, and a subsequent read matches the baseline."
+            },
+            {
+              "description": "HTML reference analysis using an inline fixture. No external site, account write, or upload is necessary. This tests adapting supplied HTML rather than relying on JavaScript execution.",
+              "prompt": "Analyze this HTML as a reference for a future Webcake layout. Summarize its sections, colors, and typography; do not build or save a page yet: <html><head><style>body{font-family:Arial;background:#ffffff;color:#123524}h1{font-size:48px}</style></head><body><section><h1>Design workshop</h1><p>Learn by making.</p></section><section><h2>What we cover</h2><p>Layout, color, and typography.</p></section></body></html>",
+              "tools_triggered": "ingest_html",
+              "expected_behavior": "ingest_html receives the supplied HTML with intent adapt. The assistant summarizes the two source sections, the supplied white/dark-green palette and Arial heading treatment using returned data, and explains any extraction limits. No creation, upload, or persistence tool is called."
+            },
+            {
+              "description": "Supported narrow-mobile boundary and deterministic layout. No account write or media service is needed. The chosen canvas sizes are both supported enum values.",
+              "prompt": "Prepare an empty Webcake page skeleton with a 1200 px desktop canvas and a 360 px mobile canvas. Calculate positions for three 300 by 160 px cards in a desktop row, stacked on mobile with 20 px side margins. Return the skeleton and coordinates only; do not save it.",
+              "tools_triggered": "new_page_skeleton, layout",
+              "expected_behavior": "new_page_skeleton uses desktopWidth:1200 and mobileWidth:360. layout uses mode:row, count:3, itemWidth:300, itemHeight:160, canvasDesktop:1200, canvasMobile:360, marginMobile:20, and mobileItemWidth:300. Three boxes fit on each canvas; mobile boxes stack in one column. No persistence or upload occurs."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Purchases are unsupported. Explain that this plugin builds Webcake pages and cannot buy goods or charge a card. Do not invoke any Webcake tool or claim a transaction occurred.",
+              "prompt": "Use Webcake Landing to buy two workshop tickets for me and charge my saved card."
+            },
+            {
+              "description": "Refunds and accounting are unsupported. Explain the limitation and direct the user to their payment/accounting provider without inventing a refund, invoice, or contact detail. Do not invoke Webcake tools.",
+              "prompt": "Refund my last Webcake payment and issue a corrected tax invoice."
+            },
+            {
+              "description": "Email campaign sending is unsupported. Explain that the plugin has no recipient-list or email-delivery tools. Do not call page, upload, or reference tools and do not claim messages were sent.",
+              "prompt": "Send an email campaign to every contact in my Webcake account announcing tomorrow's workshop."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "countries": [],
+        "release_notes": "Initial public submission package for the existing Webcake Landing MCP, with per-user OAuth, a guided page-design skill, responsive layout workflows, targeted edits, and review cases."
+      }
+    }
+  }
+}

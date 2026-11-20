@@ -1,0 +1,19 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "webcake-landing": {
+      "type": "streamable-http",
+      "url": "https://mcp.toolvn.io.vn/mcp",
+      "extensions": {
+        "com.openai": {
+          "auth": {
+            "type": "oauth",
+            "client": { "mode": "dcr" },
+            "baseScopes": ["landing:read", "landing:write"],
+            "defaultScopes": ["landing:read", "landing:write"]
+          }
+        }
+      }
+    }
+  }
+}
