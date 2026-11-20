@@ -89,7 +89,7 @@ const patchMissing = new Set<string>();
 /** A write made against a version of the stored source: the backend refuses it (page_changed) when
  *  the page moved on, under the same row lock as the save. `before` = that version's tree, which lets
  *  updatePageSource send only the changed sections. */
-export type WriteBase = { base?: string; before?: any };
+export type WriteBase = { base?: string; before?: any; verified?: boolean };
 
 /** The version token a backend response carries: md5 of the stored string, else updated_at. */
 const versionOf = (d: any): string | undefined => (d?.source_hash ? String(d.source_hash) : d?.updated_at != null ? String(d.updated_at) : undefined);
@@ -111,6 +111,8 @@ const TOP_KEYS = ["settings", "options", "cartConfigs"];
  */
 export function sourceOps(before: any, after: any): any[] | undefined {
   if (!isPlainObj(before) || !isPlainObj(after)) return undefined;
+  // an id held by two nodes: the backend edits the FIRST one it meets, which may not be the one meant
+  if (hasDuplicateIds(before) || hasDuplicateIds(after)) return undefined;
   const acc = { removes: [] as any[], sets: [] as any[], inserts: [] as any[] };
   for (const root of ["page", "popup"])
     if (!listOps(Array.isArray(before[root]) ? before[root] : [], Array.isArray(after[root]) ? after[root] : [], { root }, acc)) return undefined;
@@ -121,6 +123,13 @@ export function sourceOps(before: any, after: any): any[] | undefined {
     tops.push({ op: "top", key: k, value: after[k] });
   }
   return [...acc.removes, ...acc.sets, ...acc.inserts, ...tops];
+}
+
+function hasDuplicateIds(src: any): boolean {
+  const seen = new Set<string>();
+  const walk = (list: any): boolean =>
+    Array.isArray(list) && list.some((n) => isPlainObj(n) && ((typeof n.id === "string" && (seen.has(n.id) || !seen.add(n.id))) || walk(n.children)));
+  return ["page", "popup", "dynamic_pages"].some((r) => walk(src[r]));
 }
 
 type OpAcc = { removes: any[]; sets: any[]; inserts: any[] };
@@ -160,29 +169,40 @@ function nodeOps(old: any, n: any, acc: OpAcc) {
  *  so the tree a patch leaves behind can be cached without downloading it again. Throws on an op it cannot apply. */
 export function applyOps(source: any, ops: any[]): any {
   const out = structuredClone(source);
+  // depth-first pre-order, page then popup — the order LandingPage.Ai.SourcePatch walks
   const find = (id: string): { list: any[]; i: number } | undefined => {
-    for (const root of ["page", "popup"]) {
-      const stack: any[][] = [Array.isArray(out[root]) ? out[root] : []];
-      while (stack.length) {
-        const list = stack.pop()!;
-        for (let i = 0; i < list.length; i++) {
-          if (list[i]?.id === id) return { list, i };
-          if (Array.isArray(list[i]?.children)) stack.push(list[i].children);
-        }
+    const walk = (list: any): { list: any[]; i: number } | undefined => {
+      if (!Array.isArray(list)) return undefined;
+      for (let i = 0; i < list.length; i++) {
+        if (!isPlainObj(list[i])) continue;
+        if (list[i].id === id) return { list, i };
+        const hit = walk(list[i].children);
+        if (hit) return hit;
       }
-    }
-    return undefined;
+      return undefined;
+    };
+    return walk(out.page) ?? walk(out.popup);
   };
   const at = (list: any[], index: number | undefined, node: any) => (index == null ? list.push(node) : list.splice(index, 0, node));
+  const ROOT_TYPE: Record<string, string> = { page: "section", popup: "popup" };
   for (const op of ops) {
     if (op.op === "top") out[op.key] = structuredClone(op.value);
-    else if (op.op === "insert" && !op.parent_id) at((out[op.root ?? "page"] ??= []), op.index, structuredClone(op.node));
-    else {
+    else if (op.op === "insert" && !op.parent_id) {
+      const root = op.root ?? "page";
+      if (op.node?.type !== ROOT_TYPE[root]) throw new Error(`applyOps: a top-level ${root} node must be a ${ROOT_TYPE[root]}`);
+      at((out[root] ??= []), op.index, structuredClone(op.node));
+    } else {
       const hit = find(op.op === "insert" ? op.parent_id : op.id);
       if (!hit) throw new Error(`applyOps: ${op.op} ${op.id ?? op.parent_id} not found`);
+      const node = hit.list[hit.i];
       if (op.op === "remove") hit.list.splice(hit.i, 1);
-      else if (op.op === "set") hit.list[hit.i] = { ...structuredClone(op.node), id: op.id };
-      else if (op.op === "insert") at((hit.list[hit.i].children ??= []), op.index, structuredClone(op.node));
+      else if (op.op === "set") {
+        if ((node.type === "section" || node.type === "popup") && op.node?.type !== node.type) throw new Error(`applyOps: cannot turn ${node.type} ${op.id} into ${op.node?.type}`);
+        hit.list[hit.i] = { ...structuredClone(op.node), id: op.id };
+      } else if (op.op === "insert") {
+        if (!Array.isArray(node.children)) throw new Error(`applyOps: ${op.parent_id} has no children list`);
+        at(node.children, op.index, structuredClone(op.node));
+      }
     }
   }
   return out;
@@ -655,7 +675,14 @@ export async function updatePageSource(
   let via: "patch" | "update" = "update";
   let nOps = 0;
   const ops = opts.base && opts.before != null ? sourceOps(opts.before, hostedSource) : undefined;
-  // the tree equals the version it was read at: nothing to write (fonts still synced — a sync can fail and be retried)
+  // the tree equals the version it was read at: nothing to write (fonts still synced — a sync can fail and be retried).
+  // `before` taken from the cache without asking (verified:false) may be stale: then confirm the
+  // version first — an empty diff never reaches the backend's own check.
+  if (ops && ops.length === 0 && opts.verified === false) {
+    const v = await getPageVersion(config, pageId);
+    if (v.ok && v.version !== opts.base)
+      return { ok: false, status: 409, page_changed: true, live_version: v.version, error: "page_changed: the cached copy is older than the stored page — nothing was written" };
+  }
   if (ops && ops.length === 0)
     return {
       ok: true, status: 200, page_id: pageId, version: opts.base, via: "patch", patch_ops: 0, unchanged: true, raw: { unchanged: true },
