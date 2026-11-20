@@ -82,6 +82,55 @@ const PAGE_VERSION_ENDPOINT = "/api/v1/ai/page_version";
 const DOMAINS_ENDPOINT = "/api/v1/domains/all";
 const UPDATE_ENDPOINT = "/api/v1/ai/update_page_source";
 const APPEND_ENDPOINT = "/api/v1/ai/append_section";
+const PATCH_ENDPOINT = "/api/v1/ai/patch_page_source";
+/** Backends (by base URL) answering 404 for patch_page_source — skip it there from then on. */
+const patchMissing = new Set<string>();
+
+/** A write made against a version of the stored source: the backend refuses it (page_changed) when
+ *  the page moved on, under the same row lock as the save. `before` = that version's tree, which lets
+ *  updatePageSource send only the changed sections. */
+export type WriteBase = { base?: string; before?: any };
+
+/** The version token a backend response carries: md5 of the stored string, else updated_at. */
+const versionOf = (d: any): string | undefined => (d?.source_hash ? String(d.source_hash) : d?.updated_at != null ? String(d.updated_at) : undefined);
+const baseField = (base?: string) => (!base ? {} : /^[0-9a-f]{32}$/.test(base) ? { base_source_hash: base } : { base_updated_at: base });
+const pageChanged = (json: any) => json?.reason?.code === "page_changed";
+
+const isPlainObj = (v: unknown): v is Record<string, any> => v != null && typeof v === "object" && !Array.isArray(v);
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const TOP_KEYS = ["settings", "options", "cartConfigs"];
+
+/**
+ * The patch_page_source ops that turn `before` into `after`, at section / popup granularity: a
+ * changed section is re-sent whole (`set`), a new one is inserted at its index, a gone one removed,
+ * and settings / options / cartConfigs replaced when they differ. undefined = not expressible
+ * (sections reordered, a node without an id, another top-level key changed) → write the whole tree.
+ */
+export function sourceOps(before: any, after: any): any[] | undefined {
+  if (!isPlainObj(before) || !isPlainObj(after)) return undefined;
+  const ops: any[] = [];
+  for (const root of ["page", "popup"]) {
+    const a: any[] = Array.isArray(before[root]) ? before[root] : [];
+    const b: any[] = Array.isArray(after[root]) ? after[root] : [];
+    if ([...a, ...b].some((n) => !isPlainObj(n) || typeof n.id !== "string")) return undefined;
+    const aIds = a.map((n) => n.id);
+    const bIds = new Set(b.map((n) => n.id));
+    const kept = b.map((n) => n.id).filter((id) => aIds.includes(id));
+    if (kept.join("\u0000") !== aIds.filter((id) => bIds.has(id)).join("\u0000")) return undefined; // reordered
+    for (const id of aIds) if (!bIds.has(id)) ops.push({ op: "remove", id });
+    b.forEach((n, i) => {
+      const old = a.find((x) => x.id === n.id);
+      if (!old) ops.push({ op: "insert", root, index: i, node: n });
+      else if (!sameJson(old, n)) ops.push({ op: "set", id: n.id, node: n });
+    });
+  }
+  for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (k === "page" || k === "popup" || sameJson(before[k], after[k])) continue;
+    if (!TOP_KEYS.includes(k) || !isPlainObj(after[k])) return undefined;
+    ops.push({ op: "top", key: k, value: after[k] });
+  }
+  return ops;
+}
 // The editor's own publish routes (NOT under /api/v1/ai). Both scopes are
 // host-constrained to the BUILDER host (router scope `host: "builder."`), so
 // requests go to config.builderBase, not the API base.
@@ -399,14 +448,14 @@ export async function getPageVersion(
   const r = await getJson(url, config);
   if (!r.ok) return { ok: false, status: r.status, endpoint_missing: r.status === 404, error: r.error };
   const d = r.json?.data ?? r.json ?? {};
-  const version = d.updated_at == null ? undefined : String(d.updated_at);
+  const version = versionOf(d);
   return { ok: version !== undefined, status: r.status, version };
 }
 
 export async function getPageSource(
   config: WebcakeConfig,
   pageId: string
-): Promise<{ ok: boolean; status: number; page_id?: string; name?: string; organization_id?: number | string | null; custom_domain?: string | null; custom_path?: string | null; updated_at?: string; source?: any; error?: string }> {
+): Promise<{ ok: boolean; status: number; page_id?: string; name?: string; organization_id?: number | string | null; custom_domain?: string | null; custom_path?: string | null; updated_at?: string; version?: string; source?: any; error?: string }> {
   const url = `${config.base}${PAGE_SOURCE_ENDPOINT}?page_id=${encodeURIComponent(pageId)}`;
   const r = await getJson(url, config);
   if (!r.ok) return { ok: false, status: r.status, error: r.error };
@@ -423,6 +472,8 @@ export async function getPageSource(
     custom_path: d.custom_path ?? null,
     // The same token GET /page_version returns — absent on a backend that predates it.
     updated_at: d.updated_at == null ? undefined : String(d.updated_at),
+    // what GET /page_version returns and what update / append / patch take back as their base
+    version: versionOf(d),
     source: d.source,
   };
 }
@@ -449,6 +500,21 @@ export function buildAppendRequestRedacted(config: WebcakeConfig, pageId: string
   };
 }
 
+function writeFailure(status: number, json: any, text: string): CreateOutcome {
+  if (pageChanged(json))
+    return {
+      ok: false,
+      status,
+      page_changed: true,
+      live_version: versionOf(json.reason),
+      raw: json,
+      error: "page_changed: the page was saved by someone else (the editor, another agent) after it was read — nothing was written",
+    };
+  const reason = typeof json?.reason === "string" ? json.reason : undefined;
+  const backendMsg = json?.message ?? reason ?? (json ? undefined : text.slice(0, 200));
+  return { ok: false, status, raw: json ?? text.slice(0, 600), error: `Backend returned ${status}${backendMsg ? `: ${backendMsg}` : ""}` };
+}
+
 /**
  * Append section(s) to a page server-side via the dedicated append endpoint —
  * ships ONLY the new section(s) (no whole-source get+put). The backend reads the
@@ -459,7 +525,8 @@ export function buildAppendRequestRedacted(config: WebcakeConfig, pageId: string
 export async function appendSection(
   config: WebcakeConfig,
   pageId: string,
-  sections: unknown
+  sections: unknown,
+  opts: WriteBase = {}
 ): Promise<CreateOutcome & { endpoint_missing?: boolean; section_count?: number; sections_added?: number }> {
   const url = `${config.base}${APPEND_ENDPOINT}`;
   const { source: hostedSections, report: rehost } = await rehostSourceImages(config, sections);
@@ -468,7 +535,7 @@ export async function appendSection(
     res = await fetch(url, {
       method: "POST",
       headers: authHeaders(config),
-      body: JSON.stringify({ page_id: pageId, sections: hostedSections }),
+      body: JSON.stringify({ page_id: pageId, sections: hostedSections, ...baseField(opts.base) }),
       signal: timeoutSignal(HTTP_TIMEOUT_MS),
     });
   } catch (e: any) {
@@ -487,15 +554,7 @@ export async function appendSection(
   }
   const data = json?.data ?? json;
   const pageIdOut = data?.page_id;
-  if (!res.ok || !pageIdOut) {
-    const backendMsg = json?.message ?? json?.reason ?? (json ? undefined : text.slice(0, 200));
-    return {
-      ok: false,
-      status: res.status,
-      raw: json ?? text.slice(0, 600),
-      error: `Backend returned ${res.status}${backendMsg ? `: ${backendMsg}` : ""}`,
-    };
-  }
+  if (!res.ok || !pageIdOut) return writeFailure(res.status, json, text);
   return {
     ok: true,
     status: res.status,
@@ -505,6 +564,7 @@ export async function appendSection(
     organization_id: data?.organization_id ?? null,
     section_count: data?.section_count,
     sections_added: data?.sections_added,
+    version: versionOf(data),
     raw: data,
     ...(rehost ? { rehost, rehosted_source: hostedSections } : {}),
     ...fontWeightNotice(sections),
@@ -529,18 +589,38 @@ function fontWeightNotice(sections: unknown): { font_weights_notice?: string } {
 export async function updatePageSource(
   config: WebcakeConfig,
   pageId: string,
-  source: unknown
+  source: unknown,
+  opts: WriteBase = {}
 ): Promise<CreateOutcome> {
-  const url = `${config.base}${UPDATE_ENDPOINT}`;
+  let url = `${config.base}${UPDATE_ENDPOINT}`;
   const { source: hostedSource, report: rehost } = await rehostSourceImages(config, withGoogleWeightLinks(source));
+  // Against a known version: send only the changed sections (patch_page_source) when that is smaller.
+  let body = JSON.stringify({ page_id: pageId, source: hostedSource, ...baseField(opts.base) });
+  let via: "patch" | "update" = "update";
+  let nOps = 0;
+  const ops = opts.base && opts.before != null ? sourceOps(opts.before, hostedSource) : undefined;
+  if (ops && ops.length === 0)
+    return { ok: true, status: 200, page_id: pageId, version: opts.base, via: "patch", patch_ops: 0, raw: { unchanged: true }, ...(rehost ? { rehost } : {}), ...(hostedSource !== source ? { rehosted_source: hostedSource } : {}) };
+  if (ops && !patchMissing.has(config.base)) {
+    const patchBody = JSON.stringify({ page_id: pageId, ops, ...baseField(opts.base) });
+    if (patchBody.length < body.length) {
+      [url, body, via, nOps] = [`${config.base}${PATCH_ENDPOINT}`, patchBody, "patch", ops.length];
+    }
+  }
   let res: Response;
   try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: authHeaders(config),
-      body: JSON.stringify({ page_id: pageId, source: hostedSource }),
-      signal: timeoutSignal(HTTP_TIMEOUT_MS),
-    });
+    res = await fetch(url, { method: "POST", headers: authHeaders(config), body, signal: timeoutSignal(HTTP_TIMEOUT_MS) });
+    // an older backend without the route: remember it and send the whole tree
+    if (via === "patch" && res.status === 404) {
+      patchMissing.add(config.base);
+      [url, via, nOps] = [`${config.base}${UPDATE_ENDPOINT}`, "update", 0];
+      res = await fetch(url, {
+        method: "POST",
+        headers: authHeaders(config),
+        body: JSON.stringify({ page_id: pageId, source: hostedSource, ...baseField(opts.base) }),
+        signal: timeoutSignal(HTTP_TIMEOUT_MS),
+      });
+    }
   } catch (e: any) {
     return timeoutOrNetworkError(url, e);
   }
@@ -553,15 +633,7 @@ export async function updatePageSource(
   }
   const data = json?.data ?? json;
   const pageIdOut = data?.page_id;
-  if (!res.ok || !pageIdOut) {
-    const backendMsg = json?.message ?? json?.reason ?? (json ? undefined : text.slice(0, 200));
-    return {
-      ok: false,
-      status: res.status,
-      raw: json ?? text.slice(0, 600),
-      error: `Backend returned ${res.status}${backendMsg ? `: ${backendMsg}` : ""}`,
-    };
-  }
+  if (!res.ok || !pageIdOut) return writeFailure(res.status, json, text);
   return {
     ok: true,
     status: res.status,
@@ -569,6 +641,9 @@ export async function updatePageSource(
     editor_url: toEditorLoginUrl(config, data?.editor_url),
     preview_url: toPreviewUrl(config, data?.preview_url),
     organization_id: data?.organization_id ?? null,
+    version: versionOf(data),
+    via,
+    ...(via === "patch" ? { patch_ops: nOps } : {}),
     raw: data,
     ...(rehost ? { rehost } : {}),
     // Also when only the Google weight links changed it — publish must build what was stored.

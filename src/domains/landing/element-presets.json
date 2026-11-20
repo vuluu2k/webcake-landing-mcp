@@ -1,4 +1,5 @@
 {
+ "$source": "export@65885f7fb",
  "text-block": {
   "picker": "TextPicker",
   "variants": 22,
@@ -434,7 +435,7 @@
     "name": "Carousel"
    },
    "specials": {
-    "editingSlide": "oi3ehtip"
+    "editingSlide": "8yooo2kr"
    },
    "events": [],
    "children": [
@@ -600,25 +601,25 @@
       "image": "https://content.pancake.vn/web-media-262/fe/c2/79/28/f56c30934df76aa336aaa17de0cfa1ad4693965bef0e98cefe60663e-w:1080-h:1080-l:1230867-t:image/png.png",
       "title": "Option 1",
       "value": "value1",
-      "field_name": "sv_d1e2dbst_1"
+      "field_name": "sv_c11r6v0p_1"
      },
      {
       "image": "https://content.pancake.vn/web-media-262/cf/28/bf/69/063983e9398aef530d2434471e0fa3cacf58f70c3e5802a681d99144-w:1200-h:1200-l:1141607-t:image/png.png",
       "title": "Option 2",
       "value": "value2",
-      "field_name": "sv_d1e2dbst_2"
+      "field_name": "sv_c11r6v0p_2"
      },
      {
       "image": "https://content.pancake.vn/web-media-262/ce/7b/b7/3d/cc8d8acb37b56d356e84e8734ecc901a18a096820b91a123657d9b2a-w:743-h:743-l:399203-t:image/png.png",
       "title": "Option 3",
       "value": "value3",
-      "field_name": "sv_d1e2dbst_3"
+      "field_name": "sv_c11r6v0p_3"
      },
      {
       "image": "https://content.pancake.vn/web-media-262/84/5c/74/51/076d60ec6a22a67edb7802b92c1e2eb2a11c152cf80de4df40472efc-w:736-h:490-l:206707-t:image/png.png",
       "title": "Option 4",
       "value": "value4",
-      "field_name": "sv_d1e2dbst_4"
+      "field_name": "sv_c11r6v0p_4"
      }
     ],
     "type": "text-image",

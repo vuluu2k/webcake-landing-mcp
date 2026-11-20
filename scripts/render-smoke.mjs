@@ -16,6 +16,7 @@ import { pathToFileURL } from "node:url";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const BUILD_DIR = path.resolve(process.env.LANDING_BUILD_DIR || path.join(ROOT, "../landing_page_build"));
+console.error(`renderer: ${(await import("./source-rev.mjs")).sourceRev(BUILD_DIR, "landing_page_build")}`);
 const verbose = process.argv.includes("--verbose");
 const { landingDomain: D } = await import(pathToFileURL(path.join(ROOT, "dist/domains/landing/index.js")).href);
 const { PARENTS } = await import(pathToFileURL(path.join(ROOT, "dist/domains/landing/element-schema.js")).href);

@@ -17,6 +17,7 @@ const arg = (n, d) => {
 const OUT = path.resolve(arg("out", "scratch/fuzz.json"));
 const ONLY = arg("types") ? new Set(arg("types").split(",")) : null;
 const BUILD_DIR = path.resolve(process.env.LANDING_BUILD_DIR || "../landing_page_build");
+console.error(`renderer: ${(await import("./source-rev.mjs")).sourceRev(BUILD_DIR, "landing_page_build")}`);
 const { landingDomain: D } = await import(new URL("../dist/domains/landing/index.js", import.meta.url).href);
 process.chdir(BUILD_DIR);
 const { default: build } = await import(pathToFileURL(path.join(BUILD_DIR, "render/build/index.js")).href);

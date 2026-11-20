@@ -86,3 +86,88 @@ test("NOT_RENDERED: a catalog type with no renderer case is refused; EMPTY_RENDE
 test("random-number from the seed is valid (no NaN)", () => {
   assert.equal(pageWith(D.createElement("random-number")).errors.length, 0);
 });
+
+test("live-comment: the seed renders; a missing background array is repaired on save, refused unrepaired", () => {
+  const lc = D.createElement("live-comment");
+  assert.deepEqual(pageWith(lc).errors, []);
+  const w = pageWith(lc).warnings.filter((x) => /live-comment/.test(x));
+  assert.ok(w.some((x) => /\[EMPTY_RENDER\].*no specials\.datasetId/.test(x)), w.join("\n"));
+  // stored without the arrays: validate alone refuses (crash shape) …
+  const bad = D.createElement("live-comment");
+  // (a key left out is filled by expand from the seed; null / a bare colour string is what reaches repair)
+  bad.responsive.mobile.config.commentItemBackground = null;
+  bad.responsive.desktop.config.commentInputBackground = "rgba(0, 0, 0, 0.5)";
+  bad.specials.inputPlaceholder = null;
+  const src = D.createPageSource({});
+  const sec = D.createElement("section");
+  sec.children = [bad];
+  src.page = [sec];
+  assert.ok(D.validate(structuredClone(src)).errors.some((e) => /commentItemBackground is missing/.test(e)));
+  // … a save (expand + autofix/repair) fills the editor default
+  const saved = D.expand(src);
+  const fixed = D.autofixLayout(saved);
+  assert.ok(fixed.some((f) => /commentItemBackground/.test(f)), fixed.join("\n"));
+  assert.deepEqual(saved.page[0].children[0].responsive.desktop.config.commentInputBackground, ["rgba(0, 0, 0, 0.5)"]);
+  assert.deepEqual(D.validate(saved).errors, []);
+  assert.equal(saved.page[0].children[0].specials.inputPlaceholder, "Comment...");
+});
+
+test("live-comment: data_form needs a form of this page; popupId must resolve", () => {
+  const lc = D.createElement("live-comment");
+  Object.assign(lc.specials, { dataSourceType: "data_form", formId: "nope1234", popupId: "gone1234", nameField: "full_name", textCommentField: "comment" });
+  const w = pageWith(lc).warnings.filter((x) => /live-comment/.test(x));
+  assert.ok(w.some((x) => /formId "nope1234" is not a form/.test(x)));
+  assert.ok(w.some((x) => /popupId "gone1234" matches no element/.test(x)));
+  const form = D.presetElement("form");
+  lc.specials.formId = form.id;
+  delete lc.specials.popupId;
+  assert.deepEqual(pageWith(form, lc).warnings.filter((x) => /live-comment/.test(x)), []);
+});
+
+test("live-comment review cases: editor 'none', legacy content, non-popup target, shapes that don't crash", () => {
+  const lc = D.createElement("live-comment");
+  Object.assign(lc.specials, { dataSourceType: "data_form", formId: "none" });
+  const w = (...els) => pageWith(...els).warnings.filter((x) => /live-comment/.test(x));
+  assert.ok(!w(lc).some((x) => /"none" is not a form/.test(x)), "the editor's None choice is not a dangling id");
+  assert.ok(w(lc).some((x) => /\[EMPTY_RENDER\].*without specials\.formId/.test(x)));
+  const form = D.presetElement("form");
+  Object.assign(lc.specials, { formId: form.id, content: "{{full_name}}: {{phone_number}}" });
+  assert.deepEqual(w(form, lc), [], "legacy {{a}} {{b}} content is the runtime's fallback for empty fields");
+  const btn = D.createElement("button");
+  lc.specials.popupId = btn.id;
+  assert.ok(w(form, lc, btn).some((x) => /is not a popup/.test(x)));
+  // a bare colour string builds (wrong CSS) — a warning; null crashes — an error
+  const s = D.createElement("live-comment");
+  s.responsive.desktop.config.commentItemBackground = "red";
+  const src = D.createPageSource({});
+  const sec = D.createElement("section");
+  sec.children = [s];
+  src.page = [sec];
+  const v = D.validate(structuredClone(src));
+  assert.equal(v.errors.length, 0, v.errors.join("\n"));
+  assert.ok(v.warnings.some((x) => /must be an array/.test(x)));
+  s.responsive.mobile.config.commentInputBackground = null;
+  src.options.mobileOnly = true;
+  s.responsive.desktop.config.commentItemBackground = null;
+  const v2 = D.validate(structuredClone(src));
+  assert.equal(v2.errors.filter((e) => /\[desktop\]/.test(e)).length, 0, "a mobile-only page never builds desktop CSS");
+  assert.equal(v2.errors.filter((e) => /\[mobile\].*commentInputBackground is missing/.test(e)).length, 1);
+});
+
+test("live-comment repair keeps the user's value; get_element documents the config arrays", () => {
+  const lc = D.createElement("live-comment");
+  lc.responsive.desktop.config.commentItemBackground = { 0: "rgba(1, 2, 3, 1)", 1: "hidden" };
+  lc.specials.inputPlaceholder = 123;
+  const src = D.createPageSource({});
+  const sec = D.createElement("section");
+  sec.children = [lc];
+  src.page = [sec];
+  const s = D.expand(src);
+  D.autofixLayout(s);
+  const n = s.page[0].children[0];
+  assert.deepEqual(n.responsive.desktop.config.commentItemBackground, ["rgba(1, 2, 3, 1)", "hidden"]);
+  assert.equal(n.specials.inputPlaceholder, "123");
+  const k = D.elementKeys("live-comment").keys;
+  assert.ok(k.config.some((l) => /^commentItemBackground: .*REQUIRED/.test(l)), JSON.stringify(k.config).slice(0, 300));
+  assert.ok(!k.specials.some((l) => l.startsWith("config.")));
+});

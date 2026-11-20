@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { createRequire } from "node:module";
+import { sourceRev } from "./source-rev.mjs";
 
 const BACKEND = path.resolve(process.env.LANDING_BACKEND_DIR || "../landing_page_backend");
 const ASSETS = path.join(BACKEND, "assets");
@@ -172,7 +173,7 @@ for (const t of new Set([...fs.readFileSync(FACTORY, "utf8").matchAll(/case\s+["
       console.error(`factory ${t}: ${e.message}`);
     }
   }
-fs.writeFileSync(OUT, JSON.stringify(byType, null, 1) + "\n");
+fs.writeFileSync(OUT, JSON.stringify({ $source: sourceRev(BACKEND, "landing_page_backend"), ...byType }, null, 1) + "\n");
 console.log(`${Object.keys(byType).length} types from ${pickers.length} pickers → ${path.relative(process.cwd(), OUT)}`);
 for (const [t, v] of Object.entries(byType)) console.log(`  ${t.padEnd(22)} ${String(v.variants).padStart(3)}  (${v.picker})`);
 fs.rmSync(tmp, { recursive: true, force: true });

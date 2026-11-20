@@ -15,6 +15,7 @@ const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const OUT = path.join(ROOT, "test/fidelity/out");
 fs.mkdirSync(OUT, { recursive: true });
 const BUILD_DIR = path.resolve(process.env.LANDING_BUILD_DIR || path.join(ROOT, "../landing_page_build"));
+console.error(`renderer: ${(await import("./source-rev.mjs")).sourceRev(BUILD_DIR, "landing_page_build")}`);
 const { captureLayout } = await import(pathToFileURL(path.join(ROOT, "dist/persistence/ingest/browser-capture.js")).href);
 const { landingDomain: D } = await import(pathToFileURL(path.join(ROOT, "dist/domains/landing/index.js")).href);
 const { chromium } = await import("playwright-core");

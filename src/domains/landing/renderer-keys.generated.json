@@ -1,8 +1,8 @@
 {
  "meta": {
   "source": "landing_page_build/render/build (index.js, exportCss.js, event-data.js, animate.js, common.js) + landing_page_backend/assets/render_v4",
-  "branch": "master",
-  "types": 43,
+  "branch": "build export@3bb2aed1 · render_v4 export@65885f7fb",
+  "types": 44,
   "note": "at = file:line of the first read. styles_open: the CSS builder emits every styles key (minus styles_dropped). client_specials: all specials are shipped to window.event_data for the client runtime."
  },
  "dispatched_html": [
@@ -30,6 +30,7 @@
   "line",
   "list-paragraph",
   "list-product",
+  "live-comment",
   "notify",
   "popup",
   "quantity_input",
@@ -71,6 +72,7 @@
   "line",
   "list-paragraph",
   "list-product",
+  "live-comment",
   "notify",
   "popup",
   "quantity_input",
@@ -122,13 +124,13 @@
     "at": "animate.js:8"
    },
    "hide": {
-    "at": "exportCss.js:196"
+    "at": "exportCss.js:200"
    },
    "isFullHeightScreen": {
-    "at": "exportCss.js:189"
+    "at": "exportCss.js:193"
    },
    "pagination": {
-    "at": "exportCss.js:235",
+    "at": "exportCss.js:239",
     "values": [
      2
     ]
@@ -140,22 +142,22 @@
     ]
    },
    "sticky": {
-    "at": "index.js:101"
+    "at": "index.js:171"
    },
    "stickyBottom": {
-    "at": "exportCss.js:279"
+    "at": "exportCss.js:283"
    },
    "stickyFlex": {
-    "at": "event-data.js:348"
+    "at": "event-data.js:351"
    },
    "stickyHeight": {
-    "at": "event-data.js:348"
+    "at": "event-data.js:351"
    },
    "stickyLR": {
-    "at": "event-data.js:348"
+    "at": "event-data.js:351"
    },
    "stickyLeft": {
-    "at": "exportCss.js:276"
+    "at": "exportCss.js:280"
    },
    "stickyPosition": {
     "at": "exportCss.js:167",
@@ -174,30 +176,30 @@
     ]
    },
    "stickyRight": {
-    "at": "exportCss.js:277"
+    "at": "exportCss.js:281"
    },
    "stickyTop": {
-    "at": "exportCss.js:278"
+    "at": "exportCss.js:282"
    },
    "stickyUnpinAtSection": {
-    "at": "event-data.js:348"
+    "at": "event-data.js:351"
    },
    "stickyUnpinAtSections": {
-    "at": "event-data.js:348"
+    "at": "event-data.js:351"
    },
    "stickyWidth": {
-    "at": "event-data.js:348"
+    "at": "event-data.js:351"
    },
    "virtualHeight": {
-    "at": "exportCss.js:193"
+    "at": "exportCss.js:197"
    }
   },
   "specials": {
    "animationText": {
-    "at": "event-data.js:333"
+    "at": "event-data.js:336"
    },
    "ctype": {
-    "at": "index.js:93",
+    "at": "index.js:161",
     "values": [
      "fake_sold",
      "original_price",
@@ -207,75 +209,75 @@
     ]
    },
    "customAdvance": {
-    "at": "exportCss.js:239"
+    "at": "exportCss.js:243"
    },
    "customLeft": {
-    "at": "exportCss.js:202",
+    "at": "exportCss.js:206",
     "default": 0
    },
    "customTop": {
-    "at": "exportCss.js:202",
+    "at": "exportCss.js:206",
     "default": 0
    },
    "customTracking": {
-    "at": "index.js:202"
+    "at": "index.js:272"
    },
    "custom_class": {
-    "at": "index.js:206",
+    "at": "index.js:276",
     "default": ""
    },
    "custom_css": {
-    "at": "exportCss.js:239"
+    "at": "exportCss.js:243"
    },
    "direction": {
-    "at": "exportCss.js:202",
+    "at": "exportCss.js:206",
     "default": "row",
     "values": [
      "column"
     ]
    },
    "except": {
-    "at": "index.js:2115"
+    "at": "index.js:2198"
    },
    "exceptCategory": {
-    "at": "index.js:2120"
+    "at": "index.js:2203"
    },
    "exceptTags": {
-    "at": "index.js:2121"
+    "at": "index.js:2204"
    },
    "expect": {
-    "at": "index.js:2116"
+    "at": "index.js:2199"
    },
    "expectCategory": {
-    "at": "index.js:2119"
+    "at": "index.js:2202"
    },
    "expectTags": {
-    "at": "index.js:2122"
+    "at": "index.js:2205"
    },
    "isCustomTracking": {
-    "at": "index.js:202"
+    "at": "index.js:272"
    },
    "pageLoadEvent": {
-    "at": "index.js:209",
+    "at": "index.js:279",
     "values": [
      "auto-show"
     ]
    },
    "position": {
-    "at": "exportCss.js:202",
+    "at": "exportCss.js:206",
     "default": "center",
     "values": [
      "custom"
     ]
    },
    "scrollAuto": {
-    "at": "exportCss.js:257",
+    "at": "exportCss.js:261",
     "values": [
      "yes"
     ]
    },
    "select": {
-    "at": "index.js:2123",
+    "at": "index.js:2206",
     "default": "product",
     "values": [
      "category",
@@ -283,67 +285,67 @@
     ]
    },
    "sprod": {
-    "at": "index.js:94"
+    "at": "index.js:162"
    },
    "sprod_attr": {
-    "at": "index.js:91"
+    "at": "index.js:159"
    },
    "sprod_id": {
-    "at": "index.js:90"
+    "at": "index.js:158"
    },
    "sprod_val": {
-    "at": "index.js:92"
+    "at": "index.js:160"
    },
    "squantity": {
-    "at": "index.js:96"
+    "at": "index.js:164"
    },
    "svariant": {
-    "at": "index.js:95"
+    "at": "index.js:163"
    },
    "text": {
-    "at": "index.js:97"
+    "at": "index.js:165"
    },
    "type": {
-    "at": "index.js:2117",
+    "at": "index.js:2200",
     "default": "except",
     "values": [
      "except"
     ]
    },
    "video_background": {
-    "at": "event-data.js:329"
+    "at": "event-data.js:332"
    },
    "video_background_thumbnail": {
-    "at": "event-data.js:330"
+    "at": "event-data.js:333"
    }
   },
   "styles": {
    "fontSize": {
-    "at": "event-data.js:355"
+    "at": "event-data.js:358"
    },
    "height": {
-    "at": "exportCss.js:190"
+    "at": "exportCss.js:194"
    },
    "left": {
     "at": "exportCss.js:173",
     "default": 0
    },
    "mixBlendMode": {
-    "at": "exportCss.js:198"
+    "at": "exportCss.js:202"
    },
    "top": {
     "at": "exportCss.js:172",
     "default": 0
    },
    "transform": {
-    "at": "exportCss.js:204",
+    "at": "exportCss.js:208",
     "default": "",
     "values": [
      "rotate(0deg)"
     ]
    },
    "width": {
-    "at": "exportCss.js:185"
+    "at": "exportCss.js:189"
    },
    "zIndex": {
     "at": "exportCss.js:179",
@@ -547,12 +549,144 @@
   "zIndex"
  ],
  "client_by_type": {
+  "address": [
+   "hidden_commune_list",
+   "hidden_district_list",
+   "hidden_province_list",
+   "hide_postal_code"
+  ],
+  "auto-number": [
+   "autoNumberMode",
+   "syncTarget",
+   "timeDelay"
+  ],
+  "button": [
+   "formParamSeparator",
+   "format"
+  ],
+  "cart-quantity": [
+   "ignoreOnHidden"
+  ],
+  "checkbox-group": [
+   "defaultVariationQuantity",
+   "ignoreOnHidden"
+  ],
+  "country-select": [
+   "autofill_phone",
+   "countries"
+  ],
+  "form": [
+   "app_target",
+   "botcake_dynamic_ref",
+   "chatgpt_event_type",
+   "event_name_custom",
+   "ggc_c",
+   "ggc_id",
+   "ggc_label",
+   "ggc_list",
+   "ggc_v",
+   "google_conversion_mode",
+   "merge_sub_form_data",
+   "open_link_with_params",
+   "others_link_params",
+   "sheetOrder",
+   "wa_custom_text",
+   "zalo_OA_id"
+  ],
+  "input-datetime": [
+   "after_day",
+   "before_day",
+   "datetime_type",
+   "limit_option_type"
+  ],
+  "input": [
+   "isConnectSurvey",
+   "prodId",
+   "variationId"
+  ],
+  "list-product": [
+   "direction",
+   "except",
+   "exceptTags",
+   "expect",
+   "expectCategory",
+   "expectTags",
+   "format_price",
+   "remain_quantity_text",
+   "select"
+  ],
+  "live-comment": [
+   "avatarField",
+   "content",
+   "dataSourceType",
+   "formId",
+   "nameField",
+   "popupId",
+   "textCommentField"
+  ],
+  "notify": [
+   "dataSetData",
+   "notifySoundLink"
+  ],
+  "quantity_input": [
+   "ignoreOnHidden"
+  ],
+  "radio": [
+   "color_highlight",
+   "defaultVariationQuantity",
+   "highlight",
+   "ignoreOnHidden"
+  ],
+  "section": [
+   "afterLoadDelayMultiplier",
+   "afterPageLoadEvent",
+   "afterPageLoadEventDelay",
+   "loadDelayMultiplier",
+   "pageLoadEvent",
+   "pageLoadEventDelay"
+  ],
+  "select": [
+   "defaultVariationQuantity",
+   "ignoreOnHidden"
+  ],
+  "spin-wheel": [
+   "codeDataset",
+   "widthText"
+  ],
   "survey": [
-   "multiOption"
+   "connectedForm",
+   "defaultOption",
+   "limitOption",
+   "multiOption",
+   "showInputQuantity",
+   "sprod_vals"
+  ],
+  "table": [
+   "google_sheet_data"
+  ],
+  "text-block": [
+   "formParamSeparator",
+   "format"
   ],
   "timegroup": [
    "currentTime",
+   "customDateJump",
+   "customTime",
+   "formatType",
    "typeTimeGroup"
+  ],
+  "input-file": [
+   "maxFile"
+  ],
+  "verify-code": [
+   "condition",
+   "length_otp",
+   "partner_id",
+   "pattern"
+  ],
+  "video": [
+   "muteOnPlay",
+   "video_cdn"
   ]
  },
  "server_mentioned": [
@@ -584,6 +718,13 @@
   "colorTextBtn",
   "colorTitle",
   "column",
+  "commentInputBackground",
+  "commentItemBackground",
+  "commentItemBorderRadius",
+  "commentItemFontSize",
+  "commentItemGap",
+  "commentItemHeight",
+  "commentItemTextPadding",
   "compressible",
   "country",
   "ctype",
@@ -637,14 +778,22 @@
   "imageCompression",
   "img",
   "infinity",
+  "inputBorderRadius",
+  "inputFontSize",
   "inputHeight",
+  "inputIconPadding",
+  "inputIconSize",
+  "inputIconSvg",
   "inputPattern",
+  "inputPlaceholder",
+  "inputTextPadding",
   "isCustomTracking",
   "isFullHeightScreen",
   "isLimited",
   "isMinimumLimited",
   "isTransparent",
   "items",
+  "justifyContent",
   "keep_solution",
   "language",
   "left",
@@ -669,10 +818,12 @@
   "notiTop",
   "numerical_order",
   "opacity",
+  "openInPage",
   "options",
   "overflow",
   "overlay",
   "padding",
+  "paddingBottom",
   "padding_content",
   "phone_validator",
   "placeholder",
@@ -680,6 +831,8 @@
   "placeholderDistrict",
   "placeholderProvince",
   "popup",
+  "popupTurnOver",
+  "popup_target",
   "position",
   "promotion",
   "random",
@@ -725,6 +878,7 @@
   "stickyUnpinAtSections",
   "stickyWidth",
   "submit",
+  "submit_success",
   "svariant",
   "svgMask",
   "tag",
@@ -769,62 +923,62 @@
    ],
    "specials": {
     "country": {
-     "at": "index.js:677"
+     "at": "index.js:750"
     },
     "field_name": {
-     "at": "index.js:678",
+     "at": "index.js:751",
      "default": "province_id/district_id/commune_id"
     },
     "hidden_commune": {
-     "at": "index.js:680"
+     "at": "index.js:753"
     },
     "hide_postal_code": {
-     "at": "index.js:681",
+     "at": "index.js:754",
      "default": true
     },
     "layout_column": {
-     "at": "index.js:679"
+     "at": "index.js:752"
     },
     "placeholderCommune": {
-     "at": "index.js:688"
+     "at": "index.js:761"
     },
     "placeholderDistrict": {
-     "at": "index.js:687"
+     "at": "index.js:760"
     },
     "placeholderPostalCode": {
-     "at": "index.js:689",
+     "at": "index.js:762",
      "default": "Postal"
     },
     "placeholderProvince": {
-     "at": "index.js:686"
+     "at": "index.js:759"
     },
     "range_field_address": {
-     "at": "index.js:696",
+     "at": "index.js:769",
      "default": 1
     },
     "required_commune": {
-     "at": "index.js:683"
+     "at": "index.js:756"
     },
     "required_districts": {
-     "at": "index.js:684"
+     "at": "index.js:757"
     },
     "required_postal_code": {
-     "at": "index.js:682"
+     "at": "index.js:755"
     },
     "required_province": {
-     "at": "index.js:685"
+     "at": "index.js:758"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:1081"
+     "at": "exportCss.js:1124"
     },
     "borderWidth": {
-     "at": "index.js:695",
+     "at": "index.js:768",
      "default": 1
     },
     "color": {
-     "at": "exportCss.js:1082"
+     "at": "exportCss.js:1125"
     }
    },
    "styles_dropped": [
@@ -850,13 +1004,13 @@
    ],
    "specials": {
     "startNumber": {
-     "at": "index.js:1030",
+     "at": "index.js:1106",
      "default": 0
     }
    },
    "styles": {
     "fontSize": {
-     "at": "event-data.js:657"
+     "at": "event-data.js:660"
     }
    },
    "styles_dropped": [
@@ -873,10 +1027,10 @@
    "client_specials": true,
    "config": {
     "keep_solution": {
-     "at": "exportCss.js:759"
+     "at": "exportCss.js:775"
     },
     "overlay": {
-     "at": "exportCss.js:767"
+     "at": "exportCss.js:793"
     }
    },
    "css": [
@@ -890,26 +1044,45 @@
    ],
    "specials": {
     "keep_solution": {
-     "at": "exportCss.js:759"
+     "at": "exportCss.js:775"
     },
     "text": {
-     "at": "index.js:370",
+     "at": "index.js:441",
      "default": ""
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:742"
+     "at": "exportCss.js:750"
+    },
+    "backgroundTxt": {
+     "at": "exportCss.js:783"
+    },
+    "borderColor": {
+     "at": "exportCss.js:752"
+    },
+    "borderStyle": {
+     "at": "exportCss.js:759"
+    },
+    "borderWidth": {
+     "at": "exportCss.js:758",
+     "default": 1
+    },
+    "filterBackgroundTxt": {
+     "at": "exportCss.js:784"
     },
     "height": {
-     "at": "exportCss.js:741"
+     "at": "exportCss.js:749"
     },
     "width": {
-     "at": "exportCss.js:740"
+     "at": "exportCss.js:748"
     }
    },
    "styles_dropped": [
     "background",
+    "borderColor",
+    "borderStyle",
+    "borderWidth",
     "height",
     "left",
     "mixBlendMode",
@@ -923,22 +1096,22 @@
    "client_specials": true,
    "config": {
     "animation": {
-     "at": "event-data.js:500"
+     "at": "event-data.js:503"
     },
     "arrowHeight": {
-     "at": "exportCss.js:1588",
-     "default": 25
+     "at": "exportCss.js:1633",
+     "default": 20
     },
     "arrowLeftToLeft": {
-     "at": "exportCss.js:1578",
+     "at": "exportCss.js:1623",
      "default": 0
     },
     "arrowLeftToTop": {
-     "at": "exportCss.js:1579",
+     "at": "exportCss.js:1624",
      "default": 0
     },
     "arrowPosition": {
-     "at": "exportCss.js:1577",
+     "at": "exportCss.js:1622",
      "default": "mid",
      "values": [
       "bottom",
@@ -948,89 +1121,89 @@
      ]
     },
     "arrowRightToRight": {
-     "at": "exportCss.js:1580",
+     "at": "exportCss.js:1625",
      "default": 0
     },
     "arrowRightToTop": {
-     "at": "exportCss.js:1581",
+     "at": "exportCss.js:1626",
      "default": 0
     },
     "arrowWidth": {
-     "at": "exportCss.js:1587",
-     "default": 25
+     "at": "exportCss.js:1632",
+     "default": 20
     },
     "autoSlide": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "autoplayMode": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "centerMode": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "colorArrow": {
-     "at": "exportCss.js:1582",
+     "at": "exportCss.js:1627",
      "default": "rgba(0, 0, 0, 1)"
     },
     "delayTime": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "delayTimeMs": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "iconArrow": {
-     "at": "exportCss.js:1583",
+     "at": "exportCss.js:1628",
      "default": "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 1280 1896.0833'> <path d='M1107 877l-742 742q-19 19-45 19t-45-19l-166-166q-19-19-19-45t19-45l531-531-531-531q-19-19-19-45t19-45L275 45q19-19 45-19t45 19l742 742q19 19 19 45t-19 45z'></path> </svg>"
     },
     "infinity": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "selectIcon": {
-     "at": "exportCss.js:1586",
+     "at": "exportCss.js:1631",
      "default": "default",
      "values": [
       "default"
      ]
     },
     "showNavigation": {
-     "at": "exportCss.js:1585"
+     "at": "exportCss.js:1630"
     },
     "slideToShow": {
-     "at": "exportCss.js:1575",
+     "at": "exportCss.js:1620",
      "default": 1
     },
     "slideWidth": {
-     "at": "exportCss.js:1576"
+     "at": "exportCss.js:1621"
     },
     "sticky": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyBottom": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyFlex": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyHeight": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyLR": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyPosition": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyTop": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyUnpinAtSection": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyUnpinAtSections": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     },
     "stickyWidth": {
-     "at": "event-data.js:510"
+     "at": "event-data.js:513"
     }
    },
    "css": [
@@ -1044,12 +1217,12 @@
    ],
    "specials": {
     "datasetId": {
-     "at": "event-data.js:494"
+     "at": "event-data.js:497"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:1595"
+     "at": "exportCss.js:1640"
     }
    },
    "styles_dropped": [
@@ -1076,7 +1249,7 @@
    ],
    "styles": {
     "height": {
-     "at": "exportCss.js:2151"
+     "at": "exportCss.js:2209"
     }
    },
    "styles_dropped": [
@@ -1093,14 +1266,14 @@
    "client_specials": true,
    "config": {
     "checkboxSize": {
-     "at": "exportCss.js:1177"
+     "at": "exportCss.js:1220"
     },
     "columns": {
-     "at": "exportCss.js:1168",
+     "at": "exportCss.js:1211",
      "default": 1
     },
     "distance": {
-     "at": "exportCss.js:1167",
+     "at": "exportCss.js:1210",
      "default": 0
     }
    },
@@ -1115,10 +1288,10 @@
    ],
    "specials": {
     "options": {
-     "at": "index.js:755"
+     "at": "index.js:828"
     },
     "required": {
-     "at": "index.js:755"
+     "at": "index.js:828"
     }
    },
    "styles_dropped": [
@@ -1134,8 +1307,11 @@
   "countdown": {
    "client_specials": true,
    "config": {
+    "language": {
+     "at": "index.js:1007"
+    },
     "layout": {
-     "at": "exportCss.js:1856",
+     "at": "exportCss.js:1907",
      "values": [
       "1"
      ]
@@ -1152,22 +1328,21 @@
    ],
    "specials": {
     "animateMode": {
-     "at": "index.js:940",
+     "at": "index.js:1013",
      "default": "none",
      "values": [
       "timer"
      ]
     },
     "customTranslation": {
-     "at": "index.js:939"
+     "at": "index.js:1012"
     },
     "gap": {
-     "at": "exportCss.js:1851",
+     "at": "exportCss.js:1902",
      "default": 5
     },
     "language": {
-     "at": "index.js:934",
-     "default": "english",
+     "at": "index.js:1007",
      "values": [
       "custom",
       "english",
@@ -1181,17 +1356,17 @@
      ]
     },
     "showDay": {
-     "at": "index.js:936"
+     "at": "index.js:1009"
     },
     "showHour": {
-     "at": "index.js:938",
+     "at": "index.js:1011",
      "default": true
     },
     "showSecond": {
-     "at": "index.js:937"
+     "at": "index.js:1010"
     },
     "showText": {
-     "at": "index.js:935"
+     "at": "index.js:1008"
     }
    },
    "styles_dropped": [
@@ -1217,35 +1392,35 @@
    ],
    "specials": {
     "countries": {
-     "at": "index.js:625"
+     "at": "index.js:698"
     },
     "default_country": {
-     "at": "index.js:626",
+     "at": "index.js:699",
      "default": "none",
      "values": [
       "none"
      ]
     },
     "display_format": {
-     "at": "index.js:630",
+     "at": "index.js:703",
      "default": "default"
     },
     "field_name": {
-     "at": "index.js:627"
+     "at": "index.js:700"
     },
     "field_placeholder": {
-     "at": "index.js:628"
+     "at": "index.js:701"
     },
     "required": {
-     "at": "index.js:629"
+     "at": "index.js:702"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:1043"
+     "at": "exportCss.js:1086"
     },
     "color": {
-     "at": "exportCss.js:1044"
+     "at": "exportCss.js:1087"
     }
    },
    "styles_dropped": [
@@ -1270,7 +1445,7 @@
    ],
    "specials": {
     "html": {
-     "at": "index.js:1270"
+     "at": "index.js:1346"
     }
    }
   },
@@ -1278,40 +1453,40 @@
    "client_specials": true,
    "config": {
     "marginText": {
-     "at": "exportCss.js:809"
+     "at": "exportCss.js:852"
     },
     "placeholder": {
-     "at": "exportCss.js:818"
+     "at": "exportCss.js:861"
     },
     "sticky": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyBottom": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyFlex": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyHeight": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyLR": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyPosition": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyTop": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyUnpinAtSection": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyUnpinAtSections": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     },
     "stickyWidth": {
-     "at": "event-data.js:685"
+     "at": "event-data.js:688"
     }
    },
    "css": [
@@ -1325,13 +1500,13 @@
    ],
    "styles": {
     "fontSize": {
-     "at": "event-data.js:692"
+     "at": "event-data.js:695"
     },
     "textDecoration": {
-     "at": "exportCss.js:798"
+     "at": "exportCss.js:841"
     },
     "textTransform": {
-     "at": "exportCss.js:797"
+     "at": "exportCss.js:840"
     }
    },
    "styles_dropped": [
@@ -1352,25 +1527,25 @@
    "client_specials": true,
    "config": {
     "allowZoom": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "animation": {
-     "at": "event-data.js:432"
+     "at": "event-data.js:435"
     },
     "arrowHeight": {
-     "at": "exportCss.js:1201",
-     "default": 20
+     "at": "exportCss.js:1244",
+     "default": 25
     },
     "arrowLeftToLeft": {
-     "at": "exportCss.js:1191",
+     "at": "exportCss.js:1234",
      "default": 0
     },
     "arrowLeftToTop": {
-     "at": "exportCss.js:1192",
+     "at": "exportCss.js:1235",
      "default": 0
     },
     "arrowPosition": {
-     "at": "exportCss.js:1190",
+     "at": "exportCss.js:1233",
      "default": "mid",
      "values": [
       "bottom",
@@ -1380,88 +1555,88 @@
      ]
     },
     "arrowRightToRight": {
-     "at": "exportCss.js:1193",
+     "at": "exportCss.js:1236",
      "default": 0
     },
     "arrowRightToTop": {
-     "at": "exportCss.js:1194",
+     "at": "exportCss.js:1237",
      "default": 0
     },
     "arrowWidth": {
-     "at": "exportCss.js:1200",
-     "default": 20
+     "at": "exportCss.js:1243",
+     "default": 25
     },
     "colorArrow": {
-     "at": "exportCss.js:1195",
-     "default": "rgba(255, 255, 255, 1)"
+     "at": "exportCss.js:1238",
+     "default": "rgba(0, 0, 0, 1)"
     },
     "distanceAmong": {
-     "at": "exportCss.js:1331",
+     "at": "exportCss.js:1376",
      "default": 10
     },
     "distanceToGallery": {
-     "at": "exportCss.js:1202",
+     "at": "exportCss.js:1245",
      "default": 10
     },
     "iconArrow": {
-     "at": "exportCss.js:1196",
+     "at": "exportCss.js:1239",
      "default": "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 1280 1896.0833'> <path d='M1107 877l-742 742q-19 19-45 19t-45-19l-166-166q-19-19-19-45t19-45l531-531-531-531q-19-19-19-45t19-45L275 45q19-19 45-19t45 19l742 742q19 19 19 45t-19 45z'></path> </svg>"
     },
     "selectIcon": {
-     "at": "exportCss.js:1199",
+     "at": "exportCss.js:1242",
      "default": "default",
      "values": [
       "default"
      ]
     },
     "showNavigation": {
-     "at": "exportCss.js:1198"
+     "at": "exportCss.js:1241"
     },
     "showThumbnail": {
-     "at": "exportCss.js:1204"
+     "at": "exportCss.js:1247"
     },
     "sticky": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyBottom": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyFlex": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyHeight": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyLR": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyPosition": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyTop": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyUnpinAtSection": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyUnpinAtSections": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "stickyWidth": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "thumbnailAutoplay": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "thumbnailAutoplayRepeat": {
-     "at": "event-data.js:443"
+     "at": "event-data.js:446"
     },
     "thumbnailHeight": {
-     "at": "exportCss.js:1338",
+     "at": "exportCss.js:1383",
      "default": 80
     },
     "thumbnailPosition": {
-     "at": "exportCss.js:1189",
+     "at": "exportCss.js:1232",
      "default": "bottom",
      "values": [
       "bottom",
@@ -1471,7 +1646,7 @@
      ]
     },
     "thumbnailWidth": {
-     "at": "exportCss.js:1337",
+     "at": "exportCss.js:1382",
      "default": 80
     }
    },
@@ -1486,19 +1661,19 @@
    ],
    "specials": {
     "media": {
-     "at": "index.js:778"
+     "at": "index.js:851"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:1203",
+     "at": "exportCss.js:1246",
      "default": ""
     },
     "height": {
-     "at": "exportCss.js:1360"
+     "at": "exportCss.js:1405"
     },
     "width": {
-     "at": "exportCss.js:1359"
+     "at": "exportCss.js:1404"
     }
    }
   },
@@ -1506,22 +1681,22 @@
    "client_specials": true,
    "config": {
     "column": {
-     "at": "exportCss.js:2303",
+     "at": "exportCss.js:2361",
      "default": 1
     },
     "pagination": {
-     "at": "exportCss.js:2302",
+     "at": "exportCss.js:2360",
      "values": [
       1,
       2
      ]
     },
     "row": {
-     "at": "exportCss.js:2304",
+     "at": "exportCss.js:2362",
      "default": 1
     },
     "timeSlide": {
-     "at": "event-data.js:793"
+     "at": "event-data.js:796"
     }
    },
    "css": [
@@ -1535,10 +1710,10 @@
    ],
    "styles": {
     "left": {
-     "at": "event-data.js:801"
+     "at": "event-data.js:804"
     },
     "top": {
-     "at": "event-data.js:800"
+     "at": "event-data.js:803"
     }
    }
   },
@@ -1555,37 +1730,37 @@
    "client_specials": true,
    "config": {
     "animation": {
-     "at": "event-data.js:719"
+     "at": "event-data.js:722"
     },
     "sticky": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyBottom": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyFlex": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyHeight": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyLR": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyPosition": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyTop": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyUnpinAtSection": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyUnpinAtSections": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     },
     "stickyWidth": {
-     "at": "event-data.js:724"
+     "at": "event-data.js:727"
     }
    },
    "css": [
@@ -1599,7 +1774,7 @@
    ],
    "specials": {
     "scrollAuto": {
-     "at": "exportCss.js:2291",
+     "at": "exportCss.js:2349",
      "values": [
       "yes"
      ]
@@ -1607,10 +1782,10 @@
    },
    "styles": {
     "left": {
-     "at": "exportCss.js:2287"
+     "at": "exportCss.js:2345"
     },
     "width": {
-     "at": "exportCss.js:2286"
+     "at": "exportCss.js:2344"
     }
    }
   },
@@ -1636,37 +1811,37 @@
    ],
    "specials": {
     "attrName": {
-     "at": "event-data.js:771"
+     "at": "event-data.js:774"
     },
     "default_value": {
-     "at": "index.js:1302",
+     "at": "index.js:1378",
      "default": "default-none",
      "values": [
       "default-none"
      ]
     },
     "field_name": {
-     "at": "index.js:1301"
+     "at": "index.js:1377"
     },
     "field_placeholder": {
-     "at": "index.js:1303"
+     "at": "index.js:1379"
     },
     "field_quantity": {
-     "at": "index.js:1306"
+     "at": "index.js:1382"
     },
     "options": {
-     "at": "index.js:1304"
+     "at": "index.js:1380"
     },
     "required": {
-     "at": "index.js:1305"
+     "at": "index.js:1381"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:2246"
+     "at": "exportCss.js:2304"
     },
     "color": {
-     "at": "exportCss.js:2247"
+     "at": "exportCss.js:2305"
     }
    },
    "styles_dropped": [
@@ -1691,7 +1866,7 @@
    ],
    "specials": {
     "html": {
-     "at": "index.js:1262",
+     "at": "index.js:1338",
      "default": ""
     }
    }
@@ -1700,30 +1875,30 @@
    "client_specials": true,
    "config": {
     "backgroundCompare": {
-     "at": "exportCss.js:589"
+     "at": "exportCss.js:597"
     },
     "heightBgImage": {
-     "at": "exportCss.js:586"
+     "at": "exportCss.js:594"
     },
     "keep_solution": {
-     "at": "exportCss.js:595"
+     "at": "exportCss.js:603"
     },
     "leftBgImage": {
-     "at": "exportCss.js:588",
+     "at": "exportCss.js:596",
      "default": 0
     },
     "overlay": {
-     "at": "exportCss.js:601"
+     "at": "exportCss.js:609"
     },
     "svgMask": {
-     "at": "exportCss.js:552"
+     "at": "exportCss.js:560"
     },
     "topBgImage": {
-     "at": "exportCss.js:587",
+     "at": "exportCss.js:595",
      "default": 0
     },
     "widthBgImage": {
-     "at": "exportCss.js:585"
+     "at": "exportCss.js:593"
     }
    },
    "css": [
@@ -1737,43 +1912,43 @@
    ],
    "specials": {
     "alt": {
-     "at": "index.js:320",
+     "at": "index.js:391",
      "default": ""
     },
     "enable_background_compare": {
-     "at": "index.js:2176"
+     "at": "index.js:2259"
     },
     "keep_solution": {
-     "at": "exportCss.js:595"
+     "at": "exportCss.js:603"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:593"
+     "at": "exportCss.js:601"
     },
     "borderColor": {
-     "at": "exportCss.js:557"
+     "at": "exportCss.js:565"
     },
     "borderImage": {
-     "at": "exportCss.js:560"
+     "at": "exportCss.js:568"
     },
     "borderRadius": {
-     "at": "exportCss.js:566"
+     "at": "exportCss.js:574"
     },
     "borderStyle": {
-     "at": "exportCss.js:590",
+     "at": "exportCss.js:598",
      "values": [
       "none"
      ]
     },
     "borderWidth": {
-     "at": "exportCss.js:591"
+     "at": "exportCss.js:599"
     },
     "height": {
-     "at": "exportCss.js:545"
+     "at": "exportCss.js:553"
     },
     "width": {
-     "at": "exportCss.js:545"
+     "at": "exportCss.js:553"
     }
    },
    "styles_dropped": [
@@ -1806,7 +1981,7 @@
    ],
    "specials": {
     "condition": {
-     "at": "index.js:466",
+     "at": "index.js:539",
      "values": [
       "country_default",
       "custom",
@@ -1815,13 +1990,13 @@
      ]
     },
     "defaultVal": {
-     "at": "index.js:484"
+     "at": "index.js:557"
     },
     "defaultVariationQuantity": {
-     "at": "index.js:483"
+     "at": "index.js:556"
     },
     "field_name": {
-     "at": "index.js:431",
+     "at": "index.js:504",
      "values": [
       "email",
       "phone_number",
@@ -1831,11 +2006,11 @@
      ]
     },
     "field_placeholder": {
-     "at": "index.js:433",
+     "at": "index.js:506",
      "default": ""
     },
     "field_type": {
-     "at": "index.js:432",
+     "at": "index.js:505",
      "default": "text",
      "values": [
       "number",
@@ -1843,61 +2018,61 @@
      ]
     },
     "hideContent": {
-     "at": "index.js:448"
+     "at": "index.js:521"
     },
     "inputPattern": {
-     "at": "index.js:446"
+     "at": "index.js:519"
     },
     "isLimited": {
-     "at": "index.js:442"
+     "at": "index.js:515"
     },
     "isMinimumLimited": {
-     "at": "index.js:444"
+     "at": "index.js:517"
     },
     "limit": {
-     "at": "index.js:443"
+     "at": "index.js:516"
     },
     "maxValue": {
-     "at": "index.js:440"
+     "at": "index.js:513"
     },
     "maxValueNumber": {
-     "at": "index.js:441"
+     "at": "index.js:514"
     },
     "minValue": {
-     "at": "index.js:438"
+     "at": "index.js:511"
     },
     "minValueNumber": {
-     "at": "index.js:439"
+     "at": "index.js:512"
     },
     "minimumLimit": {
-     "at": "index.js:445"
+     "at": "index.js:518"
     },
     "pattern": {
-     "at": "index.js:477",
+     "at": "index.js:550",
      "default": ""
     },
     "phone_validator": {
-     "at": "index.js:435"
+     "at": "index.js:508"
     },
     "required": {
-     "at": "index.js:434"
+     "at": "index.js:507"
     },
     "useInputPattern": {
-     "at": "index.js:447"
+     "at": "index.js:520"
     },
     "validate": {
-     "at": "index.js:437"
+     "at": "index.js:510"
     },
     "validate_country": {
-     "at": "index.js:436"
+     "at": "index.js:509"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:831"
+     "at": "exportCss.js:874"
     },
     "color": {
-     "at": "exportCss.js:832"
+     "at": "exportCss.js:875"
     }
    },
    "styles_dropped": [
@@ -1924,36 +2099,36 @@
    ],
    "specials": {
     "field_name": {
-     "at": "index.js:523"
+     "at": "index.js:596"
     },
     "field_placeholder": {
-     "at": "index.js:523",
+     "at": "index.js:596",
      "default": ""
     },
     "limit_option_type": {
-     "at": "index.js:523",
+     "at": "index.js:596",
      "values": [
       "fixed"
      ]
     },
     "required": {
-     "at": "index.js:523"
+     "at": "index.js:596"
     },
     "since_day": {
-     "at": "index.js:523",
+     "at": "index.js:596",
      "default": ""
     },
     "until_day": {
-     "at": "index.js:523",
+     "at": "index.js:596",
      "default": ""
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:864"
+     "at": "exportCss.js:907"
     },
     "color": {
-     "at": "exportCss.js:865"
+     "at": "exportCss.js:908"
     }
    },
    "styles_dropped": [
@@ -1971,14 +2146,14 @@
    "client_specials": true,
    "config": {
     "display_type": {
-     "at": "exportCss.js:901",
+     "at": "exportCss.js:944",
      "default": "default",
      "values": [
       "default"
      ]
     },
     "preview_size": {
-     "at": "exportCss.js:902",
+     "at": "exportCss.js:945",
      "default": 32
     }
    },
@@ -1993,25 +2168,25 @@
    ],
    "specials": {
     "field_name": {
-     "at": "index.js:994"
+     "at": "index.js:1067"
     },
     "field_placeholder": {
-     "at": "index.js:994",
+     "at": "index.js:1067",
      "default": ""
     },
     "maxFile": {
-     "at": "index.js:994"
+     "at": "index.js:1067"
     },
     "required": {
-     "at": "index.js:994"
+     "at": "index.js:1067"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:897"
+     "at": "exportCss.js:940"
     },
     "color": {
-     "at": "exportCss.js:898"
+     "at": "exportCss.js:941"
     }
    },
    "styles_dropped": [
@@ -2035,6 +2210,14 @@
    "html": [
     "renderLine"
    ],
+   "specials": {
+    "type": {
+     "at": "index.js:1094",
+     "values": [
+      "vertical"
+     ]
+    }
+   },
    "styles_dropped": [
     "height",
     "left",
@@ -2049,25 +2232,25 @@
    "client_specials": true,
    "config": {
     "iconColor": {
-     "at": "exportCss.js:1793",
+     "at": "exportCss.js:1844",
      "default": "rgba(0, 0, 0, 1)"
     },
     "iconFontSize": {
-     "at": "exportCss.js:1787"
+     "at": "exportCss.js:1838"
     },
     "iconImage": {
-     "at": "exportCss.js:1790"
+     "at": "exportCss.js:1841"
     },
     "iconSize": {
-     "at": "exportCss.js:1786",
+     "at": "exportCss.js:1837",
      "default": 40
     },
     "iconTop": {
-     "at": "exportCss.js:1783",
+     "at": "exportCss.js:1834",
      "default": 0
     },
     "iconType": {
-     "at": "exportCss.js:1782",
+     "at": "exportCss.js:1833",
      "default": "shape",
      "values": [
       "image",
@@ -2075,11 +2258,11 @@
      ]
     },
     "linePaddingBottom": {
-     "at": "exportCss.js:1785",
+     "at": "exportCss.js:1836",
      "default": 0
     },
     "linePaddingLeft": {
-     "at": "exportCss.js:1784",
+     "at": "exportCss.js:1835",
      "default": 0
     }
    },
@@ -2094,7 +2277,7 @@
    ],
    "specials": {
     "text": {
-     "at": "index.js:1082"
+     "at": "index.js:1158"
     }
    },
    "styles_dropped": [
@@ -2108,6 +2291,14 @@
    "styles_open": true
   },
   "list-product": {
+   "config": {
+    "thumbnail_height": {
+     "at": "exportCss.js:2408"
+    },
+    "thumbnail_width": {
+     "at": "exportCss.js:2409"
+    }
+   },
    "css": [
     "cssListProduct"
    ],
@@ -2119,33 +2310,33 @@
    ],
    "specials": {
     "background_size": {
-     "at": "exportCss.js:2347",
+     "at": "exportCss.js:2405",
      "default": "cover"
     },
     "boldExtraTitle": {
-     "at": "exportCss.js:2446"
+     "at": "exportCss.js:2504"
     },
     "boldName": {
-     "at": "exportCss.js:2441"
+     "at": "exportCss.js:2499"
     },
     "border_type_btn": {
-     "at": "exportCss.js:2434"
+     "at": "exportCss.js:2492"
     },
     "border_width_btn": {
-     "at": "exportCss.js:2436"
+     "at": "exportCss.js:2494"
     },
     "btn_border": {
-     "at": "exportCss.js:2434"
+     "at": "exportCss.js:2492"
     },
     "btn_height": {
-     "at": "exportCss.js:2435"
+     "at": "exportCss.js:2493"
     },
     "btn_width": {
-     "at": "exportCss.js:2384",
+     "at": "exportCss.js:2445",
      "default": 182
     },
     "direction": {
-     "at": "index.js:1346",
+     "at": "index.js:1422",
      "default": "row",
      "values": [
       "column",
@@ -2153,28 +2344,28 @@
      ]
     },
     "except": {
-     "at": "index.js:1343"
+     "at": "index.js:1419"
     },
     "exceptCategory": {
-     "at": "index.js:1348"
+     "at": "index.js:1424"
     },
     "exceptTags": {
-     "at": "index.js:1350"
+     "at": "index.js:1426"
     },
     "expect": {
-     "at": "index.js:1344"
+     "at": "index.js:1420"
     },
     "expectCategory": {
-     "at": "index.js:1347"
+     "at": "index.js:1423"
     },
     "expectTags": {
-     "at": "index.js:1349"
+     "at": "index.js:1425"
     },
     "font_family": {
-     "at": "index.js:1352"
+     "at": "index.js:1428"
     },
     "format_price": {
-     "at": "event-data.js:829",
+     "at": "event-data.js:832",
      "default": "range",
      "values": [
       "discount",
@@ -2182,7 +2373,7 @@
      ]
     },
     "format_title": {
-     "at": "event-data.js:828",
+     "at": "event-data.js:831",
      "default": "default",
      "values": [
       "name-category",
@@ -2191,35 +2382,35 @@
      ]
     },
     "hide_product_image": {
-     "at": "index.js:1479",
+     "at": "index.js:1570",
      "default": false
     },
     "iconCart": {
-     "at": "exportCss.js:2495"
+     "at": "exportCss.js:2551"
     },
     "is_runout": {
-     "at": "index.js:1353"
+     "at": "index.js:1429"
     },
     "list_product_font": {
-     "at": "exportCss.js:2338"
+     "at": "exportCss.js:2396"
     },
     "numerical_order": {
-     "at": "event-data.js:831",
+     "at": "event-data.js:834",
      "default": false
     },
     "remain_quantity_text": {
-     "at": "event-data.js:840",
+     "at": "event-data.js:843",
      "default": ""
     },
     "row_layout": {
-     "at": "index.js:1475",
+     "at": "index.js:1566",
      "default": "layout_1",
      "values": [
       "layout_2"
      ]
     },
     "select": {
-     "at": "index.js:1351",
+     "at": "index.js:1427",
      "default": "product",
      "values": [
       "category",
@@ -2227,7 +2418,7 @@
      ]
     },
     "show_add_button": {
-     "at": "index.js:1473",
+     "at": "index.js:1564",
      "default": "show",
      "values": [
       "hide",
@@ -2235,45 +2426,45 @@
      ]
     },
     "show_extra_sku": {
-     "at": "exportCss.js:2345",
+     "at": "exportCss.js:2403",
      "default": false
     },
     "show_flash_sale_icon": {
-     "at": "exportCss.js:2346",
+     "at": "exportCss.js:2404",
      "default": true
     },
     "show_rating_star": {
-     "at": "index.js:1477",
+     "at": "index.js:1568",
      "default": false
     },
     "show_remain_quantity": {
-     "at": "event-data.js:826",
+     "at": "event-data.js:829",
      "default": true
     },
     "show_thumbnail": {
-     "at": "event-data.js:827"
+     "at": "event-data.js:830"
     },
     "show_total_sold": {
-     "at": "index.js:1478",
+     "at": "index.js:1569",
      "default": false
     },
     "textAlign": {
-     "at": "exportCss.js:2334",
+     "at": "exportCss.js:2392",
      "default": "left"
     },
     "text_add_button": {
-     "at": "index.js:1474",
+     "at": "index.js:1565",
      "default": ""
     },
     "thumbnail_height": {
-     "at": "exportCss.js:2336"
+     "at": "exportCss.js:2394"
     },
     "thumbnail_size": {
-     "at": "exportCss.js:2335",
-     "default": 195
+     "at": "exportCss.js:2393",
+     "default": 169
     },
     "type": {
-     "at": "index.js:1345",
+     "at": "index.js:1421",
      "default": "except",
      "values": [
       "except"
@@ -2282,49 +2473,49 @@
    },
    "styles": {
     "borderRadius": {
-     "at": "exportCss.js:2432",
+     "at": "exportCss.js:2490",
      "default": 0
     },
     "colorBg": {
-     "at": "exportCss.js:2369"
+     "at": "exportCss.js:2430"
     },
     "colorBgIcon": {
-     "at": "exportCss.js:2484"
+     "at": "exportCss.js:2540"
     },
     "colorBtn": {
-     "at": "exportCss.js:2423",
+     "at": "exportCss.js:2481",
      "default": "rgba(246,4,87,1)"
     },
     "colorBtnBorder": {
-     "at": "exportCss.js:2431"
+     "at": "exportCss.js:2489"
     },
     "colorFlashSale": {
-     "at": "exportCss.js:2463"
+     "at": "exportCss.js:2521"
     },
     "colorIconBtn": {
-     "at": "exportCss.js:2427"
+     "at": "exportCss.js:2485"
     },
     "colorPrice": {
-     "at": "exportCss.js:2458"
+     "at": "exportCss.js:2516"
     },
     "colorQuantity": {
-     "at": "exportCss.js:2492"
+     "at": "exportCss.js:2548"
     },
     "colorTextBtn": {
-     "at": "exportCss.js:2488"
+     "at": "exportCss.js:2544"
     },
     "colorTextSale": {
-     "at": "exportCss.js:2472"
+     "at": "exportCss.js:2530"
     },
     "colorTitle": {
-     "at": "exportCss.js:2440"
+     "at": "exportCss.js:2498"
     },
     "height": {
-     "at": "exportCss.js:2353",
-     "default": 165
+     "at": "exportCss.js:2414",
+     "default": 150
     },
     "width": {
-     "at": "exportCss.js:2354",
+     "at": "exportCss.js:2415",
      "default": 400
     }
    },
@@ -2339,23 +2530,109 @@
    ],
    "styles_open": true
   },
+  "live-comment": {
+   "client_specials": true,
+   "config": {
+    "commentInputBackground": {
+     "at": "exportCss.js:2700"
+    },
+    "commentItemBackground": {
+     "at": "exportCss.js:2690"
+    },
+    "commentItemBorderRadius": {
+     "at": "exportCss.js:2689"
+    },
+    "commentItemFontSize": {
+     "at": "exportCss.js:2688"
+    },
+    "commentItemGap": {
+     "at": "exportCss.js:2686"
+    },
+    "commentItemHeight": {
+     "at": "exportCss.js:2685"
+    },
+    "commentItemTextPadding": {
+     "at": "exportCss.js:2687"
+    },
+    "inputBorderRadius": {
+     "at": "exportCss.js:2693"
+    },
+    "inputFontSize": {
+     "at": "exportCss.js:2694"
+    },
+    "inputHeight": {
+     "at": "exportCss.js:2692"
+    },
+    "inputIconColor": {
+     "at": "exportCss.js:2699"
+    },
+    "inputIconPadding": {
+     "at": "exportCss.js:2696"
+    },
+    "inputIconSize": {
+     "at": "exportCss.js:2697"
+    },
+    "inputPlaceholderColor": {
+     "at": "exportCss.js:2698"
+    },
+    "inputTextPadding": {
+     "at": "exportCss.js:2695"
+    },
+    "overlay": {
+     "at": "exportCss.js:2707",
+     "default": ""
+    }
+   },
+   "css": [
+    "cssLiveComment"
+   ],
+   "data": [
+    "element_struct"
+   ],
+   "html": [
+    "renderLiveComment"
+   ],
+   "specials": {
+    "inputIconSvg": {
+     "at": "index.js:2160"
+    },
+    "inputPlaceholder": {
+     "at": "index.js:2159"
+    }
+   },
+   "styles": {
+    "color": {
+     "at": "exportCss.js:2683",
+     "default": ""
+    }
+   },
+   "styles_dropped": [
+    "height",
+    "left",
+    "mixBlendMode",
+    "top",
+    "transform",
+    "width"
+   ],
+   "styles_open": true
+  },
   "notify": {
    "client_specials": true,
    "config": {
     "content_font": {
-     "at": "exportCss.js:1925",
-     "default": 12
+     "at": "exportCss.js:1976",
+     "default": 14
     },
     "notiBottom": {
-     "at": "exportCss.js:1953",
+     "at": "exportCss.js:2004",
      "default": 20
     },
     "notiLeft": {
-     "at": "exportCss.js:1950",
+     "at": "exportCss.js:2001",
      "default": 20
     },
     "notiPos": {
-     "at": "exportCss.js:1940",
+     "at": "exportCss.js:1991",
      "values": [
       "b-c",
       "b-l",
@@ -2367,20 +2644,20 @@
      ]
     },
     "notiRight": {
-     "at": "exportCss.js:1952",
+     "at": "exportCss.js:2003",
      "default": 20
     },
     "notiTop": {
-     "at": "exportCss.js:1951",
+     "at": "exportCss.js:2002",
      "default": 20
     },
     "time_font": {
-     "at": "exportCss.js:1926",
-     "default": 11
+     "at": "exportCss.js:1977",
+     "default": 12
     },
     "title_font": {
-     "at": "exportCss.js:1924",
-     "default": 13
+     "at": "exportCss.js:1975",
+     "default": 14
     }
    },
    "css": [
@@ -2394,13 +2671,13 @@
    ],
    "specials": {
     "dataSetData": {
-     "at": "event-data.js:608"
+     "at": "event-data.js:611"
     },
     "dataSheet": {
-     "at": "event-data.js:590"
+     "at": "event-data.js:593"
     },
     "dataType": {
-     "at": "event-data.js:559",
+     "at": "event-data.js:562",
      "default": 1,
      "values": [
       1,
@@ -2408,22 +2685,22 @@
      ]
     },
     "datasetId": {
-     "at": "event-data.js:594"
+     "at": "event-data.js:597"
     },
     "sheetID": {
-     "at": "event-data.js:564",
+     "at": "event-data.js:567",
      "default": "Sheet1"
     },
     "source": {
-     "at": "event-data.js:563"
+     "at": "event-data.js:566"
     }
    },
    "styles": {
     "height": {
-     "at": "exportCss.js:1898"
+     "at": "exportCss.js:1949"
     },
     "width": {
-     "at": "exportCss.js:1941"
+     "at": "exportCss.js:1992"
     }
    },
    "styles_dropped": [
@@ -2440,10 +2717,10 @@
    "client_specials": true,
    "config": {
     "keep_solution": {
-     "at": "exportCss.js:2193"
+     "at": "exportCss.js:2251"
     },
     "overlay": {
-     "at": "exportCss.js:2230"
+     "at": "exportCss.js:2288"
     }
    },
    "css": [
@@ -2457,42 +2734,42 @@
    ],
    "specials": {
     "keep_solution": {
-     "at": "exportCss.js:2193"
+     "at": "exportCss.js:2251"
     },
     "show_control_volume": {
-     "at": "index.js:1279"
+     "at": "index.js:1355"
     },
     "video_background": {
-     "at": "index.js:1279"
+     "at": "index.js:1355"
     }
    },
    "styles": {
     "--type": {
-     "at": "exportCss.js:2197"
+     "at": "exportCss.js:2255"
     },
     "background": {
-     "at": "exportCss.js:2185",
+     "at": "exportCss.js:2243",
      "default": ""
     },
     "borderColor": {
-     "at": "exportCss.js:2237",
+     "at": "exportCss.js:2295",
      "default": "#000"
     },
     "borderRadius": {
-     "at": "exportCss.js:2234"
+     "at": "exportCss.js:2292"
     },
     "borderStyle": {
-     "at": "exportCss.js:2235",
+     "at": "exportCss.js:2293",
      "default": "solid"
     },
     "borderWidth": {
-     "at": "exportCss.js:2236"
+     "at": "exportCss.js:2294"
     },
     "height": {
-     "at": "exportCss.js:2191"
+     "at": "exportCss.js:2249"
     },
     "width": {
-     "at": "exportCss.js:2190"
+     "at": "exportCss.js:2248"
     }
    },
    "styles_dropped": [
@@ -2518,30 +2795,30 @@
    ],
    "specials": {
     "defaultVal": {
-     "at": "index.js:743"
+     "at": "index.js:816"
     },
     "field_name": {
-     "at": "index.js:743"
+     "at": "index.js:816"
     },
     "hideSpinBtn": {
-     "at": "index.js:743"
+     "at": "index.js:816"
     },
     "maxValue": {
-     "at": "index.js:743"
+     "at": "index.js:816"
     },
     "maxValueNumber": {
-     "at": "index.js:743"
+     "at": "index.js:816"
     },
     "minValue": {
-     "at": "index.js:743"
+     "at": "index.js:816"
     },
     "minValueNumber": {
-     "at": "index.js:743"
+     "at": "index.js:816"
     }
    },
    "styles": {
     "height": {
-     "at": "exportCss.js:1117"
+     "at": "exportCss.js:1160"
     }
    },
    "styles_dropped": [
@@ -2558,14 +2835,14 @@
    "client_specials": true,
    "config": {
     "checkboxSize": {
-     "at": "exportCss.js:1008"
+     "at": "exportCss.js:1051"
     },
     "columns": {
-     "at": "exportCss.js:998",
+     "at": "exportCss.js:1041",
      "default": 1
     },
     "distance": {
-     "at": "exportCss.js:997",
+     "at": "exportCss.js:1040",
      "default": 0
     }
    },
@@ -2580,14 +2857,14 @@
    ],
    "specials": {
     "field_name": {
-     "at": "index.js:546",
+     "at": "index.js:619",
      "default": "Radio"
     },
     "options": {
-     "at": "index.js:545"
+     "at": "index.js:618"
     },
     "required": {
-     "at": "index.js:547"
+     "at": "index.js:620"
     }
    },
    "styles_dropped": [
@@ -2613,13 +2890,13 @@
    ],
    "specials": {
     "startNumber": {
-     "at": "index.js:1039",
+     "at": "index.js:1115",
      "default": 0
     }
    },
    "styles": {
     "fontSize": {
-     "at": "event-data.js:657"
+     "at": "event-data.js:660"
     }
    },
    "styles_dropped": [
@@ -2636,13 +2913,13 @@
    "client_specials": true,
    "config": {
     "keep_solution": {
-     "at": "exportCss.js:705"
+     "at": "exportCss.js:713"
     },
     "overlay": {
-     "at": "exportCss.js:728"
+     "at": "exportCss.js:736"
     },
     "svgMask": {
-     "at": "exportCss.js:653"
+     "at": "exportCss.js:661"
     }
    },
    "css": [
@@ -2656,33 +2933,33 @@
    ],
    "specials": {
     "keep_solution": {
-     "at": "exportCss.js:705"
+     "at": "exportCss.js:713"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:650"
+     "at": "exportCss.js:658"
     },
     "borderColor": {
-     "at": "exportCss.js:664"
+     "at": "exportCss.js:672"
     },
     "borderImage": {
-     "at": "exportCss.js:667"
+     "at": "exportCss.js:675"
     },
     "borderRadius": {
-     "at": "exportCss.js:673"
+     "at": "exportCss.js:681"
     },
     "boxShadow": {
-     "at": "exportCss.js:684"
+     "at": "exportCss.js:692"
     },
     "filter": {
-     "at": "exportCss.js:685"
+     "at": "exportCss.js:693"
     },
     "height": {
-     "at": "exportCss.js:649"
+     "at": "exportCss.js:657"
     },
     "width": {
-     "at": "exportCss.js:648"
+     "at": "exportCss.js:656"
     }
    },
    "styles_dropped": [
@@ -2707,19 +2984,25 @@
    "html": [
     "renderSearchListProduct"
    ],
+   "specials": {
+    "onlyInStockProducts": {
+     "at": "index.js:2083"
+    }
+   },
    "styles": {
     "background": {
-     "at": "exportCss.js:2531"
+     "at": "exportCss.js:2569"
     },
     "borderRadius": {
-     "at": "exportCss.js:2526"
+     "at": "exportCss.js:2585"
     },
     "color": {
-     "at": "exportCss.js:2530"
+     "at": "exportCss.js:2589"
     }
    },
    "styles_dropped": [
     "-webkit-text-stroke",
+    "background",
     "height",
     "left",
     "mixBlendMode",
@@ -2734,10 +3017,10 @@
    "client_specials": true,
    "config": {
     "keep_solution": {
-     "at": "exportCss.js:418"
+     "at": "exportCss.js:423"
     },
     "overlay": {
-     "at": "exportCss.js:460"
+     "at": "exportCss.js:465"
     }
    },
    "css": [
@@ -2751,38 +3034,38 @@
    ],
    "specials": {
     "compressible": {
-     "at": "exportCss.js:409"
+     "at": "exportCss.js:414"
     },
     "globalSection": {
-     "at": "index.js:278"
+     "at": "index.js:349"
     },
     "imageCompression": {
-     "at": "exportCss.js:408"
+     "at": "exportCss.js:413"
     },
     "keep_solution": {
-     "at": "exportCss.js:418"
+     "at": "exportCss.js:423"
     },
     "show_control_volume": {
-     "at": "index.js:281"
+     "at": "index.js:352"
     },
     "video_background": {
-     "at": "index.js:281"
+     "at": "index.js:352"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:410",
+     "at": "exportCss.js:415",
      "default": "#fff"
     },
     "filter": {
-     "at": "exportCss.js:406",
+     "at": "exportCss.js:411",
      "default": ""
     },
     "height": {
-     "at": "exportCss.js:415"
+     "at": "exportCss.js:420"
     },
     "opacity": {
-     "at": "exportCss.js:405",
+     "at": "exportCss.js:410",
      "default": 1
     }
    }
@@ -2800,7 +3083,7 @@
    ],
    "specials": {
     "default_value": {
-     "at": "index.js:587",
+     "at": "index.js:660",
      "default": "default-none",
      "values": [
       "default-none",
@@ -2808,24 +3091,24 @@
      ]
     },
     "field_name": {
-     "at": "index.js:589"
+     "at": "index.js:662"
     },
     "field_placeholder": {
-     "at": "index.js:588"
+     "at": "index.js:661"
     },
     "options": {
-     "at": "index.js:586"
+     "at": "index.js:659"
     },
     "required": {
-     "at": "index.js:590"
+     "at": "index.js:663"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:1043"
+     "at": "exportCss.js:1086"
     },
     "color": {
-     "at": "exportCss.js:1044"
+     "at": "exportCss.js:1087"
     }
    },
    "styles_dropped": [
@@ -2863,17 +3146,17 @@
   "slide": {
    "config": {
     "delayTime": {
-     "at": "event-data.js:539"
+     "at": "event-data.js:542"
     },
     "keep_solution": {
-     "at": "exportCss.js:1731"
+     "at": "exportCss.js:1782"
     },
     "slideToShow": {
-     "at": "exportCss.js:1672",
+     "at": "exportCss.js:1723",
      "default": 1
     },
     "transition": {
-     "at": "exportCss.js:1686",
+     "at": "exportCss.js:1737",
      "default": "default"
     }
    },
@@ -2897,16 +3180,16 @@
    ],
    "specials": {
     "alt": {
-     "at": "index.js:1069",
+     "at": "index.js:1145",
      "default": ""
     },
     "keep_solution": {
-     "at": "exportCss.js:1731"
+     "at": "exportCss.js:1782"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:1666"
+     "at": "exportCss.js:1717"
     }
    },
    "styles_dropped": [
@@ -2923,7 +3206,7 @@
    "client_specials": true,
    "config": {
     "btnSize": {
-     "at": "exportCss.js:2011",
+     "at": "exportCss.js:2063",
      "default": 80
     }
    },
@@ -2938,35 +3221,35 @@
    ],
    "specials": {
     "background": {
-     "at": "exportCss.js:1999"
+     "at": "exportCss.js:2050"
     },
     "backgroundBtn": {
-     "at": "exportCss.js:1999"
+     "at": "exportCss.js:2050"
     },
     "code": {
-     "at": "index.js:1147"
+     "at": "index.js:1223"
     },
     "codeDataset": {
-     "at": "index.js:1144"
+     "at": "index.js:1220"
     },
     "dataType": {
-     "at": "index.js:1143",
+     "at": "index.js:1219",
      "values": [
       2
      ]
     },
     "datasetId": {
-     "at": "index.js:1143"
+     "at": "index.js:1219"
     },
     "message": {
-     "at": "index.js:1164"
+     "at": "index.js:1240"
     },
     "rotateBackground": {
-     "at": "exportCss.js:1999",
+     "at": "exportCss.js:2050",
      "default": 0
     },
     "showCoupon": {
-     "at": "index.js:1120",
+     "at": "index.js:1196",
      "values": [
       "no"
      ]
@@ -2974,23 +3257,27 @@
    },
    "styles": {
     "color": {
-     "at": "exportCss.js:2014",
+     "at": "exportCss.js:2066",
      "default": "#FFFFFF"
     },
     "fontSize": {
-     "at": "exportCss.js:2005",
+     "at": "exportCss.js:2056",
      "default": 16
     },
+    "fontWeight": {
+     "at": "exportCss.js:2059",
+     "default": 600
+    },
     "rotate": {
-     "at": "exportCss.js:2004",
+     "at": "exportCss.js:2055",
      "default": 0
     },
     "textAlign": {
-     "at": "exportCss.js:2006",
+     "at": "exportCss.js:2057",
      "default": "start"
     },
     "widthText": {
-     "at": "exportCss.js:2007"
+     "at": "exportCss.js:2058"
     }
    }
   },
@@ -3007,68 +3294,79 @@
    ],
    "specials": {
     "alignment": {
-     "at": "index.js:396",
-     "default": "center"
+     "at": "index.js:468",
+     "default": "center",
+     "values": [
+      "left",
+      "right"
+     ]
     },
     "customInputSize": {
-     "at": "exportCss.js:2623"
+     "at": "exportCss.js:2804"
     },
     "hoveredBackground": {
-     "at": "exportCss.js:2632"
+     "at": "exportCss.js:2813"
     },
     "hoveredBorder": {
-     "at": "exportCss.js:2633"
+     "at": "exportCss.js:2814"
     },
     "hoveredColor": {
-     "at": "exportCss.js:2631"
+     "at": "exportCss.js:2812"
     },
     "hoveredScale": {
-     "at": "exportCss.js:2634"
+     "at": "exportCss.js:2815"
     },
     "imageHeight": {
-     "at": "exportCss.js:2622"
+     "at": "exportCss.js:2803"
     },
     "imageWidth": {
-     "at": "exportCss.js:2621"
+     "at": "exportCss.js:2802"
     },
     "inputHeight": {
-     "at": "exportCss.js:2625"
+     "at": "exportCss.js:2806"
     },
     "inputWidth": {
-     "at": "exportCss.js:2624"
+     "at": "exportCss.js:2805"
     },
     "options": {
-     "at": "index.js:397"
+     "at": "index.js:469"
+    },
+    "paddingBottom": {
+     "at": "exportCss.js:2817"
     },
     "required": {
-     "at": "index.js:399"
+     "at": "index.js:471"
     },
     "selectedBackground": {
-     "at": "exportCss.js:2628"
+     "at": "exportCss.js:2809"
     },
     "selectedBorder": {
-     "at": "exportCss.js:2629"
+     "at": "exportCss.js:2810"
     },
     "selectedColor": {
-     "at": "exportCss.js:2627"
+     "at": "exportCss.js:2808"
     },
     "selectedScale": {
-     "at": "exportCss.js:2630"
+     "at": "exportCss.js:2811"
     },
     "showInputQuantity": {
-     "at": "index.js:400"
+     "at": "index.js:472"
     },
     "type": {
-     "at": "index.js:398",
+     "at": "index.js:470",
      "values": [
       "image",
-      "text"
+      "text",
+      "text-image"
      ]
     }
    },
    "styles": {
     "borderRadius": {
-     "at": "exportCss.js:2666"
+     "at": "exportCss.js:2850"
+    },
+    "width": {
+     "at": "exportCss.js:2830"
     }
    },
    "styles_dropped": [
@@ -3083,6 +3381,14 @@
   },
   "table": {
    "client_specials": true,
+   "config": {
+    "borderWidth": {
+     "at": "exportCss.js:2127"
+    },
+    "padding_content": {
+     "at": "exportCss.js:2126"
+    }
+   },
    "css": [
     "cssTable"
    ],
@@ -3094,68 +3400,68 @@
    ],
    "specials": {
     "borderColor": {
-     "at": "exportCss.js:2069"
+     "at": "exportCss.js:2122"
     },
     "borderStyle": {
-     "at": "exportCss.js:2070"
+     "at": "exportCss.js:2123"
     },
     "borderWidth": {
-     "at": "exportCss.js:2068"
+     "at": "exportCss.js:2121"
     },
     "dataType": {
-     "at": "event-data.js:626",
+     "at": "event-data.js:629",
      "values": [
       1
      ]
     },
     "google_sheet_data": {
-     "at": "event-data.js:640"
+     "at": "event-data.js:643"
     },
     "head_background": {
-     "at": "exportCss.js:2061"
+     "at": "exportCss.js:2114"
     },
     "head_color": {
-     "at": "exportCss.js:2062"
+     "at": "exportCss.js:2115"
     },
     "hidden_title": {
-     "at": "exportCss.js:2060"
+     "at": "exportCss.js:2113"
     },
     "padding_content": {
-     "at": "exportCss.js:2067"
+     "at": "exportCss.js:2120"
     },
     "row_even_background": {
-     "at": "exportCss.js:2063"
+     "at": "exportCss.js:2116"
     },
     "row_even_color": {
-     "at": "exportCss.js:2064"
+     "at": "exportCss.js:2117"
     },
     "row_odd_background": {
-     "at": "exportCss.js:2065"
+     "at": "exportCss.js:2118"
     },
     "row_odd_color": {
-     "at": "exportCss.js:2066"
+     "at": "exportCss.js:2119"
     },
     "sheetID": {
-     "at": "event-data.js:628"
+     "at": "event-data.js:631"
     },
     "source": {
-     "at": "event-data.js:627"
+     "at": "event-data.js:630"
     },
     "sourceTable": {
-     "at": "index.js:1174",
+     "at": "index.js:1250",
      "default": ""
     }
    },
    "styles": {
     "fontFamily": {
-     "at": "exportCss.js:2089",
+     "at": "exportCss.js:2145",
      "default": "inherit"
     },
     "fontSize": {
-     "at": "exportCss.js:2088"
+     "at": "exportCss.js:2144"
     },
     "fontWeight": {
-     "at": "exportCss.js:2090",
+     "at": "exportCss.js:2146",
      "default": "inherit"
     }
    },
@@ -3182,31 +3488,40 @@
    ],
    "specials": {
     "tag": {
-     "at": "index.js:342",
+     "at": "index.js:413",
      "default": "p"
     },
     "text": {
-     "at": "index.js:343",
+     "at": "index.js:414",
      "default": ""
     }
    },
    "styles": {
     "-webkitBackgroundClip": {
-     "at": "exportCss.js:501"
+     "at": "exportCss.js:507"
     },
     "background": {
-     "at": "exportCss.js:492"
+     "at": "exportCss.js:497"
     },
     "backgroundTxt": {
-     "at": "exportCss.js:498",
+     "at": "exportCss.js:503",
+     "default": ""
+    },
+    "borderRadius": {
+     "at": "exportCss.js:516"
+    },
+    "filterBackgroundTxt": {
+     "at": "exportCss.js:504",
      "default": ""
     },
     "width": {
-     "at": "exportCss.js:495"
+     "at": "exportCss.js:500"
     }
    },
    "styles_dropped": [
     "-webkitBackgroundClip",
+    "backgroundTxt",
+    "filterBackgroundTxt",
     "height",
     "left",
     "mixBlendMode",
@@ -3229,26 +3544,26 @@
    ],
    "specials": {
     "field_name": {
-     "at": "index.js:571"
+     "at": "index.js:644"
     },
     "field_placeholder": {
-     "at": "index.js:571",
+     "at": "index.js:644",
      "default": ""
     },
     "isLimited": {
-     "at": "index.js:573"
+     "at": "index.js:646"
     },
     "isMinimumLimited": {
-     "at": "index.js:574"
+     "at": "index.js:647"
     },
     "limit": {
-     "at": "index.js:573"
+     "at": "index.js:646"
     },
     "minimumLimit": {
-     "at": "index.js:574"
+     "at": "index.js:647"
     },
     "required": {
-     "at": "index.js:571"
+     "at": "index.js:644"
     }
    },
    "styles_dropped": [
@@ -3274,7 +3589,7 @@
    ],
    "specials": {
     "text": {
-     "at": "index.js:987",
+     "at": "index.js:1060",
      "default": ""
     }
    },
@@ -3301,14 +3616,14 @@
    ],
    "specials": {
     "button_get_code_text": {
-     "at": "index.js:2030",
+     "at": "index.js:2098",
      "default": "Get code"
     },
     "field_placeholder": {
-     "at": "index.js:2033"
+     "at": "index.js:2101"
     },
     "length_otp": {
-     "at": "index.js:2031",
+     "at": "index.js:2099",
      "default": 4,
      "values": [
       4,
@@ -3316,7 +3631,7 @@
      ]
     },
     "type_otp_input": {
-     "at": "index.js:2032",
+     "at": "index.js:2100",
      "default": "split-input",
      "values": [
       "one-input",
@@ -3326,48 +3641,48 @@
    },
    "styles": {
     "backgroundBtnCode": {
-     "at": "exportCss.js:2599",
+     "at": "exportCss.js:2658",
      "default": "#26a69a"
     },
     "backgroundOtpInput": {
-     "at": "exportCss.js:2550",
+     "at": "exportCss.js:2609",
      "default": "#d2d2d2"
     },
     "borderColor": {
-     "at": "index.js:2035"
+     "at": "index.js:2103"
     },
     "borderStyle": {
-     "at": "index.js:2036"
+     "at": "index.js:2104"
     },
     "borderWidth": {
-     "at": "index.js:2034"
+     "at": "index.js:2102"
     },
     "fontFamilyBtnCode": {
-     "at": "exportCss.js:2589"
+     "at": "exportCss.js:2648"
     },
     "fontSizeBtnCode": {
-     "at": "exportCss.js:2587"
+     "at": "exportCss.js:2646"
     },
     "fontWeightBtnCode": {
-     "at": "exportCss.js:2588"
+     "at": "exportCss.js:2647"
     },
     "heightBtnCode": {
-     "at": "exportCss.js:2606",
+     "at": "exportCss.js:2665",
      "default": 30
     },
     "heightOtpInput": {
-     "at": "exportCss.js:2549",
+     "at": "exportCss.js:2608",
      "default": 40
     },
     "letterSpacingBtnCode": {
-     "at": "exportCss.js:2590"
+     "at": "exportCss.js:2649"
     },
     "widthBtnCode": {
-     "at": "exportCss.js:2605",
+     "at": "exportCss.js:2664",
      "default": 74
     },
     "widthOtpInput": {
-     "at": "exportCss.js:2548",
+     "at": "exportCss.js:2607",
      "default": 30
     }
    }
@@ -3376,37 +3691,37 @@
    "client_specials": true,
    "config": {
     "keep_solution": {
-     "at": "exportCss.js:1481"
+     "at": "exportCss.js:1526"
     },
     "sticky": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyBottom": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyFlex": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyHeight": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyLR": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyPosition": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyTop": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyUnpinAtSection": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyUnpinAtSections": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     },
     "stickyWidth": {
-     "at": "event-data.js:474"
+     "at": "event-data.js:477"
     }
    },
    "css": [
@@ -3420,35 +3735,35 @@
    ],
    "specials": {
     "hideDownload": {
-     "at": "index.js:870"
+     "at": "index.js:943"
     },
     "img": {
-     "at": "index.js:869",
+     "at": "index.js:942",
      "default": ""
     },
     "keep_solution": {
-     "at": "exportCss.js:1481"
+     "at": "exportCss.js:1526"
     },
     "typeVideo": {
-     "at": "index.js:868",
+     "at": "index.js:941",
      "values": [
       "vimeo",
       "youtube"
      ]
     },
     "videoFit": {
-     "at": "exportCss.js:1477"
+     "at": "exportCss.js:1522"
     }
    },
    "styles": {
     "background": {
-     "at": "exportCss.js:1476"
+     "at": "exportCss.js:1521"
     },
     "height": {
-     "at": "exportCss.js:1480"
+     "at": "exportCss.js:1525"
     },
     "width": {
-     "at": "exportCss.js:1479"
+     "at": "exportCss.js:1524"
     }
    },
    "styles_dropped": [

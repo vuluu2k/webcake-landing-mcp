@@ -9,7 +9,7 @@
 //   node scripts/mine-editor.mjs   (LANDING_BACKEND_DIR=../landing_page_backend)
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { sourceRev } from "./source-rev.mjs";
 import ts from "typescript";
 
 const BACKEND = path.resolve(process.env.LANDING_BACKEND_DIR || "../landing_page_backend");
@@ -298,10 +298,7 @@ function filesFor(type) {
 }
 
 const TYPES = [...new Set([...Object.keys(traitGroup), ...Object.keys(mined)])].filter((t) => traitGroup[t]).sort();
-const out = { meta: { source: "landing_page_backend/assets/editor/main/traits (statics/traitGroup.js → Trait.vue → panels)", branch: "?" }, types: {} };
-try {
-  out.meta.branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: BACKEND }).toString().trim();
-} catch {}
+const out = { meta: { source: "landing_page_backend/assets/editor/main/traits (statics/traitGroup.js → Trait.vue → panels)", branch: sourceRev(BACKEND, "landing_page_backend") }, types: {} };
 let nKeys = 0;
 let nOpt = 0;
 for (const T of TYPES) {

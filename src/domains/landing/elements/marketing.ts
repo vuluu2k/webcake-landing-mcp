@@ -6,6 +6,9 @@
 import type { ElementDescriptor } from "../../../core/descriptor.js";
 import { randomId, seedPosition, setStyle, setBox } from "../../../core/element.js";
 
+/** live-comment's default input icon (editor factory.js). */
+export const LIVE_COMMENT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256"><path d="M116,128a12,12,0,1,1,12,12A12,12,0,0,1,116,128ZM84,140a12,12,0,1,0-12-12A12,12,0,0,0,84,140Zm88,0a12,12,0,1,0-12-12A12,12,0,0,0,172,140Zm60-76V192a16,16,0,0,1-16,16H83l-32.6,28.16A16,16,0,0,1,24,224V64A16,16,0,0,1,40,48H216A16,16,0,0,1,232,64Z"></path></svg>`;
+
 export const MARKETING: ElementDescriptor[] = [
   {
     type: "countdown", category: "marketing", container: false, defaultName: "Count Down",
@@ -230,6 +233,48 @@ export const MARKETING: ElementDescriptor[] = [
           { id: randomId(), image: "", title: "Option 2", value: "value2", field_name: `sv_${el.id}_2` },
         ],
       };
+    },
+  },
+  {
+    type: "live-comment", category: "marketing", container: false, defaultName: "Live comment",
+    summary: "Livestream-style comment feed: comments scroll up inside the box (fading at the top) above a fake comment input. The SSR renders the wrapper + input (render/build index.js renderLiveComment); render_v4 live-comment.js fetches the comments and animates them. Comments come from a dataset (dataSourceType 'data_grid' + datasetId, the default) or from what visitors submit through a form on THIS page (dataSourceType 'data_form' + formId: GET /form_data/live_comment, and a new submit is appended live). Clicking the input opens popupId (put the comment form in that popup).",
+    useWhen: "Social proof on a livestream / sale page: a moving wall of buyer comments. Wire data_form + a form (name + comment fields) inside a popup + popupId so visitors can post.",
+    keySpecials: {
+      dataSourceType: "'data_grid' (default — a dataset: datasetId) | 'data_form' (submissions of a form on this page: formId). Nothing to show without one → empty feed.",
+      datasetId: "dataset id (data_grid).",
+      formId: "id of a form on this page (data_form); its submits are appended live.",
+      nameField: "column / field_name shown as the commenter's name.",
+      textCommentField: "column / field_name shown as the comment text.",
+      avatarField: "column / field_name holding an avatar URL (showAvatar:true, chat-bubble style only).",
+      popupId: "id of a popup opened when the comment input is clicked.",
+      commentType: "0 = colour bar (default), 1 = chat bubble (avatar + name + text).",
+      showAvatar: "boolean (chat bubble only).",
+      avatarSize: "px, default 28.",
+      commentLayout: "'horizontal' | 'vertical' — avatar beside / above the content (chat bubble).",
+      commentContentLayout: "'horizontal' | 'vertical' — name beside / above the text (chat bubble).",
+      inputPlaceholder: "REQUIRED string — the input's placeholder (printed raw: missing renders 'undefined').",
+      inputIconSvg: "REQUIRED string — the input's icon <svg> (printed raw).",
+      commentItemBackground: "(config, per breakpoint) REQUIRED [colour] or [colour, 'hidden'] — comment pill background. The CSS build reads [1] unguarded: missing crashes the whole page.",
+      commentInputBackground: "(config, per breakpoint) REQUIRED [colour] or [colour, 'hidden'] — input background. Missing crashes the whole page.",
+      commentItemHeight: "(config, per breakpoint) comment min-height px; also commentItemGap, commentItemTextPadding, commentItemFontSize, commentItemBorderRadius.",
+      inputHeight: "(config, per breakpoint) input height px; also inputBorderRadius, inputFontSize, inputTextPadding, inputIconSize, inputIconPadding, inputPlaceholderColor, inputIconColor.",
+      color: "(styles key) comment text colour.",
+    },
+    seed: (el) => {
+      // editor factory.js:687 — every key here is read unguarded (a missing one crashes or prints "undefined")
+      seedPosition(el);
+      setBox(el, 388, 200);
+      for (const bp of ["desktop", "mobile"] as const)
+        Object.assign(el.responsive[bp].config, {
+          inputIconSize: 16, inputHeight: 35, inputBorderRadius: 9999, inputFontSize: 13, inputTextPadding: 8, inputIconPadding: 8,
+          commentInputBackground: ["rgba(0, 0, 0, 0.2)"],
+          commentItemHeight: 32, commentItemGap: 6, commentItemBorderRadius: 6, commentItemFontSize: 12, commentItemTextPadding: 6,
+          commentItemBackground: ["rgba(242, 48, 48, 0.35)"],
+        });
+      Object.assign(el.specials, {
+        inputIconSvg: LIVE_COMMENT_ICON, inputPlaceholder: "Comment...",
+        commentType: 0, showAvatar: false, avatarSize: 28, commentLayout: "horizontal", commentContentLayout: "horizontal",
+      });
     },
   },
   {

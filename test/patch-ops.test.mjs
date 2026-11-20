@@ -110,3 +110,19 @@ test("refsTo: events that target removed ids", () => {
     { from: "b2", action: "open_popup", target: "p1" },
   ]);
 });
+
+test("duplicate remaps live-comment formId / popupId that point inside the copy", () => {
+  const src = { page: [el("s9", "section", { height: 600 }, { height: 600 }, { children: [
+    el("g9", "group", { left: 0, top: 0, width: 400, height: 400 }, { left: 0, top: 0, width: 400, height: 400 }, { children: [
+      el("f9", "form", { left: 0, top: 0, width: 300, height: 100 }, { left: 0, top: 0, width: 300, height: 100 }, { children: [] }),
+      el("lc9", "live-comment", { left: 0, top: 200, width: 300, height: 150 }, { left: 0, top: 200, width: 300, height: 150 }, { specials: { dataSourceType: "data_form", formId: "f9" } }),
+    ] }),
+  ] })] };
+  const r = duplicateNode(src, { id: "g9" });
+  assert.ok(r.ok);
+  const copy = src.page[0].children[1];
+  assert.notEqual(copy.id, "g9");
+  const [f, lc] = copy.children;
+  assert.notEqual(f.id, "f9");
+  assert.equal(lc.specials.formId, f.id);
+});

@@ -1,7 +1,7 @@
 {
  "meta": {
   "source": "landing_page_backend/assets/editor/main/traits (statics/traitGroup.js → Trait.vue → panels)",
-  "branch": "feat/ai-muse-key-guard"
+  "branch": "export@65885f7fb"
  },
  "types": {
   "address": {
@@ -5568,6 +5568,16 @@
     },
     "ratioConstrain": {
      "file": "main/traits/SizeAndPosition.vue"
+    },
+    "thumbnail_height": {
+     "label": "Image height",
+     "control": "number",
+     "file": "main/traits/ListProductOption.vue"
+    },
+    "thumbnail_width": {
+     "label": "Image width",
+     "control": "number",
+     "file": "main/traits/ListProductOption.vue"
     }
    },
    "specials": {
@@ -5842,6 +5852,11 @@
      "control": "number",
      "file": "main/traits/LiveCommentTrait.vue"
     },
+    "inputIconColor": {
+     "label": "Icon color",
+     "control": "color",
+     "file": "main/traits/LiveCommentTrait.vue"
+    },
     "inputIconPadding": {
      "control": "number",
      "file": "main/traits/LiveCommentTrait.vue"
@@ -5849,6 +5864,11 @@
     "inputIconSize": {
      "label": "Letter space",
      "control": "number",
+     "file": "main/traits/LiveCommentTrait.vue"
+    },
+    "inputPlaceholderColor": {
+     "label": "Placeholder color",
+     "control": "color",
      "file": "main/traits/LiveCommentTrait.vue"
     },
     "inputTextPadding": {
@@ -7660,6 +7680,10 @@
      "control": "text",
      "file": "main/traits/CustomAdvance.vue"
     },
+    "onlyInStockProducts": {
+     "control": "boolean",
+     "file": "main/traits/SearchListProductTrait.vue"
+    },
     "show_control_volume": {
      "label": "Select style",
      "control": "boolean",
@@ -8588,6 +8612,10 @@
      "control": "select",
      "file": "main/traits/SurveyTrait.vue"
     },
+    "paddingBottom": {
+     "control": "number",
+     "file": "main/traits/SurveyTrait.vue"
+    },
     "required": {
      "label": "Field ID",
      "control": "boolean",
@@ -8790,6 +8818,10 @@
   },
   "table": {
    "config": {
+    "borderWidth": {
+     "label": "Màu & độ dày",
+     "file": "main/traits/TableTrait.vue"
+    },
     "constrainProportions": {
      "file": "main/traits/SizeAndPosition.vue"
     },
@@ -8806,6 +8838,11 @@
     "marginText": {
      "control": "number",
      "file": "main/traits/TextSetting.vue"
+    },
+    "padding_content": {
+     "label": "K/cách trong ô",
+     "control": "number",
+     "file": "main/traits/TableTrait.vue"
     },
     "placeholder": {
      "label": "Placeholder",

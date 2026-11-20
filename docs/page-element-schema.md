@@ -186,7 +186,7 @@ Màu **luôn dùng định dạng `rgba(r, g, b, a)`** (theo dữ liệu thật 
 | `input` | – | `field_name` (KHOÁ dữ liệu), `field_placeholder`, `field_type` (`text`/`email`/`phone`/`number`), `required`, `formula` | Ô nhập 1 dòng. **`field_name` là tên cột dữ liệu submit.** |
 | `textarea` | – | `field_name`, `field_placeholder` | Ô nhập nhiều dòng. |
 | `select` | – | `field_name`, `options` | Dropdown. |
-| `checkbox` | – | `field_name` | 1 ô tick. |
+| `checkbox` | – | `field_name` | **Không render** trên trang thật (`NOT_RENDERED`, bị chặn) — dùng `checkbox-group` 1 lựa chọn. |
 | `checkbox-group` | ✓ | `field_name`, `options` | Nhiều lựa chọn. |
 | `radio` | ✓ | `field_name`, `options` | Chọn 1 trong nhiều. |
 | `address` | – | `field_name`, `detectAddress`, `hidden_commune` | Tỉnh/Quận/Phường (đa quốc gia). |
@@ -205,9 +205,9 @@ Màu **luôn dùng định dạng `rgba(r, g, b, a)`** (theo dữ liệu thật 
 |--------|:--------:|------------------|--------|
 | `list-product` | – | `format_title` (`"sku"`…), `numerical_order` (bool), `remain_quantity_text` | Danh sách sản phẩm (bind dataset). |
 | `search-list-product` | – | — | Ô tìm + danh sách sản phẩm. |
-| `cart-items` | – | — | Các mục trong giỏ. |
+| `cart-items` | – | — | **Không render** (`NOT_RENDERED`) — giỏ hàng nổi được chỉnh qua `cartConfigs.checkoutElements['CART-ITEM']`. |
 | `cart-quantity` | – | — | Tổng số lượng giỏ. |
-| `product-select` | – | — | Chọn sản phẩm/biến thể. |
+| `product-select` | – | — | **Không render** (`NOT_RENDERED`) — dùng `list-product` hoặc form + `group-select`. |
 | `table` | – | (dữ liệu bảng) | Bảng. |
 
 ### 4.5 Marketing / động
@@ -221,7 +221,8 @@ Màu **luôn dùng định dạng `rgba(r, g, b, a)`** (theo dữ liệu thật 
 | `notify` | – | (cấu hình thông báo) | Pop thông báo "vừa mua hàng…". |
 | `spin-wheel` | – | (cấu hình vòng quay + giải) | Vòng quay may mắn. |
 | `survey` | – | `options` (mảng {id,image,title,value,field_name}), `type` (`"text-image"`…), `multiOption`, `selectedBackground`, `selectedBorder` | Khảo sát/chọn ảnh. |
-| `alertMessage` | – | (nội dung cảnh báo) | Băng thông báo. |
+| `live-comment` | – | `dataSourceType` (`"data_grid"` + `datasetId` / `"data_form"` + `formId`), `nameField`, `textCommentField`, `popupId`, `inputPlaceholder`, `inputIconSvg`; config `commentItemBackground` / `commentInputBackground` (mảng `[màu]`, bắt buộc) | Khung bình luận chạy kiểu livestream + ô nhập giả; bấm ô nhập mở `popupId`. Thiếu nguồn dữ liệu → khung trống. |
+| `alertMessage` | – | (không đặt được) | Hàm toast nội bộ — renderer không render, đặt vào trang bị chặn (`NOT_RENDERED`). |
 
 ---
 
@@ -376,7 +377,7 @@ Mỗi phần tử trong mảng `events`:
 4. Toạ độ tuyệt đối, không chồng lấn; canvas desktop = 960px, mobile = 420px; section dùng `height`. Giữ `0 ≤ left` và `left + width ≤` canvas. Căn giữa box bằng `left = round((canvas − width)/2)` (đừng ước lượng); với một hàng N phần tử thì căn giữa cả khối hàng.
 5. Nội dung text/ảnh đặt trong `specials` (`text`, `src`, `media`…), KHÔNG đặt trong `styles`.
 6. Màu dùng `rgba(...)`. `fontSize`/`borderWidth`/`top`/`left`/`width`/`height` là **số** (px) — khi SINH ra luôn ghi số. Khi ĐỌC một trang đã chỉnh tay trong editor thì các key này có thể là chuỗi (editor lưu `fontSize: "59"`/`"13px"`, `height: "600"`, `opacity: "50%"`, `top: "unset"`): schema chấp nhận, và server tự chuẩn hoá chuỗi số/px về số trước khi validate + lưu, nên trang chỉnh tay vẫn dùng được mọi tool. Chỉ giá trị mang đơn vị mà renderer không dùng được (vd `width: "100%"` — renderer tự nối `px`) mới bị **cảnh báo**.
-7. Mọi `input`/`select`/`checkbox`… trong `form` phải có `specials.field_name` duy nhất.
+7. Mọi `input`/`select`/`checkbox-group`… trong `form` phải có `specials.field_name` duy nhất.
 8. `runtime` luôn `{}`; chỉ container mới có `children`.
 9. **Không tự sinh ảnh base64**: URI `data:image/…;base64,…` (trong `specials.src`, nền `url(...)`, gallery `item.link`, poster video, `settings`) không bao giờ nằm lại trong source đã lưu — bước tự-host khi lưu decode payload rồi upload lên CDN và ghi đè URL (tính vào `rehost`), nên `validate_page` chỉ **cảnh báo**. Base64 đến từ HTML tham chiếu hay người dùng dán vào thì cứ lưu bình thường; điều KHÔNG được làm là tự viết base64 ra source — cả tấm ảnh đi qua kết nối MCP trong payload, vài MB có thể làm rớt kết nối. Hãy dùng URL http(s) thật, hoặc `upload_images` (nhận cả URI `data:`) rồi dùng URL `statics.pancake.vn` trả về. URI `data:` không phải base64 (`data:image/svg+xml;utf8,…`) được giữ nguyên.
 10. Không bịa giá, số điện thoại, địa chỉ, số liệu (theo `Prompt` hiện có của repo).

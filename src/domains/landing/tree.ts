@@ -218,7 +218,7 @@ export function moveNode(src: any, op: MoveOp): { ok: true; change: any } | { ok
 type DupOp = { id: string; parent_id?: string; offset?: { desktop?: { x?: number; y?: number }; mobile?: { x?: number; y?: number } }; count?: number };
 
 /** specials keys that hold another element's id. */
-export const REF_SPECIALS = ["connectedForm", "connectedSurvey", "popup_target"];
+export const REF_SPECIALS = ["connectedForm", "connectedSurvey", "popup_target", "formId", "popupId"];
 
 /** Remap event / option targets inside a copied subtree that point into the copy. */
 function remapRefs(node: any, map: Map<string, string>) {

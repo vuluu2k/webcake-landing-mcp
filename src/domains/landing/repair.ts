@@ -49,6 +49,27 @@ export function repairSource(source: any): string[] {
       n.children = [createElement("grid-item")];
       fixed.push(`${id}: added a grid-item (the renderer renders children[0] and crashes on an empty grid)`);
     }
+    if (n.type === "live-comment") {
+      // cssLiveComment reads config.comment{Item,Input}Background[1] unguarded (crash); renderLiveComment
+      // prints inputPlaceholder / inputIconSvg raw ("undefined"). One answer: the editor default.
+      const seed = createElement("live-comment");
+      for (const bp of ["desktop", "mobile"] as const) {
+        const cfg = n.responsive?.[bp]?.config;
+        if (!isObj(cfg)) continue;
+        for (const k of ["commentItemBackground", "commentInputBackground"])
+          if (!Array.isArray(cfg[k])) {
+            const was = cfg[k];
+            // keep the user's colour / "hidden" when it is there in another shape; the default only for nothing
+            cfg[k] = typeof was === "string" && was.trim() ? [was] : isObj(was) && Object.keys(was).length ? Object.values(was) : structuredClone(seed.responsive[bp].config[k]);
+            fixed.push(`${id} [${bp}]: config.${k} → ${JSON.stringify(cfg[k])} (an array [colour] — the CSS build crashes without it)`);
+          }
+      }
+      for (const k of ["inputPlaceholder", "inputIconSvg"])
+        if (sp[k] == null) {
+          sp[k] = seed.specials[k];
+          fixed.push(`${id}: specials.${k} filled with the editor default (printed raw — missing renders "undefined")`);
+        } else if (typeof sp[k] !== "string") sp[k] = String(sp[k]);
+    }
     if (n.type === "spin-wheel" && typeof sp.code !== "string") {
       sp.code = "";
       fixed.push(`${id}: specials.code → "" (the renderer splits it and crashes when it is not a string)`);

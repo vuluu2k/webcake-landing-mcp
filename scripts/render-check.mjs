@@ -17,6 +17,7 @@ const arg = (n, d) => {
 };
 const verbose = process.argv.includes("--verbose");
 const BUILD_DIR = path.resolve(process.env.LANDING_BUILD_DIR || "../landing_page_build");
+console.error(`renderer: ${(await import("./source-rev.mjs")).sourceRev(BUILD_DIR, "landing_page_build")}`);
 const entry = path.join(BUILD_DIR, "render/build/index.js");
 if (!fs.existsSync(entry)) {
   console.error(`No landing renderer at ${entry} — set LANDING_BUILD_DIR (and npm ci there).`);
