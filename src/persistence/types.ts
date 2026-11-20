@@ -87,6 +87,8 @@ export type CreateOutcome = {
   via?: "patch" | "update";
   /** with via "patch": how many element ops were sent */
   patch_ops?: number;
+  /** nothing was written: the tree already equals the version it was read at */
+  unchanged?: boolean;
 };
 
 /**

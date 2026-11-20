@@ -109,6 +109,9 @@ const TOP_KEYS = ["settings", "options", "cartConfigs"];
 export function sourceOps(before: any, after: any): any[] | undefined {
   if (!isPlainObj(before) || !isPlainObj(after)) return undefined;
   const ops: any[] = [];
+  const rootOf = (src: any) => new Map(["page", "popup"].flatMap((r) => (Array.isArray(src[r]) ? src[r] : []).map((n: any) => [n?.id, r] as const)));
+  const ra = rootOf(before);
+  for (const [id, r] of rootOf(after)) if (ra.has(id) && ra.get(id) !== r) return undefined; // moved page ↔ popup
   for (const root of ["page", "popup"]) {
     const a: any[] = Array.isArray(before[root]) ? before[root] : [];
     const b: any[] = Array.isArray(after[root]) ? after[root] : [];
@@ -599,8 +602,13 @@ export async function updatePageSource(
   let via: "patch" | "update" = "update";
   let nOps = 0;
   const ops = opts.base && opts.before != null ? sourceOps(opts.before, hostedSource) : undefined;
+  // the tree equals the version it was read at: nothing to write (fonts still synced — a sync can fail and be retried)
   if (ops && ops.length === 0)
-    return { ok: true, status: 200, page_id: pageId, version: opts.base, via: "patch", patch_ops: 0, raw: { unchanged: true }, ...(rehost ? { rehost } : {}), ...(hostedSource !== source ? { rehosted_source: hostedSource } : {}) };
+    return {
+      ok: true, status: 200, page_id: pageId, version: opts.base, via: "patch", patch_ops: 0, unchanged: true, raw: { unchanged: true },
+      ...(rehost ? { rehost } : {}), ...(hostedSource !== source ? { rehosted_source: hostedSource } : {}),
+      ...(await fontSyncField(config, pageId, hostedSource, config.orgId)),
+    };
   if (ops && !patchMissing.has(config.base)) {
     const patchBody = JSON.stringify({ page_id: pageId, ops, ...baseField(opts.base) });
     if (patchBody.length < body.length) {
@@ -610,9 +618,17 @@ export async function updatePageSource(
   let res: Response;
   try {
     res = await fetch(url, { method: "POST", headers: authHeaders(config), body, signal: timeoutSignal(HTTP_TIMEOUT_MS) });
-    // an older backend without the route: remember it and send the whole tree
-    if (via === "patch" && res.status === 404) {
-      patchMissing.add(config.base);
+    // An older backend without the route (a router 404, not the app's own JSON reply) → remember it;
+    // ops the stored tree refuses (invalid_ops: an id our expanded copy has but the raw store lacks…)
+    // → this write only. Both send the whole tree against the same base.
+    let refusal: any = null;
+    if (via === "patch" && (res.status === 404 || res.status === 422)) {
+      refusal = await res.clone().json().catch(() => null);
+    }
+    const routeMissing = via === "patch" && res.status === 404 && !(refusal && "success" in refusal);
+    const opsRefused = via === "patch" && res.status === 422 && refusal?.reason === "invalid_ops";
+    if (routeMissing || opsRefused) {
+      if (routeMissing) patchMissing.add(config.base);
       [url, via, nOps] = [`${config.base}${UPDATE_ENDPOINT}`, "update", 0];
       res = await fetch(url, {
         method: "POST",
