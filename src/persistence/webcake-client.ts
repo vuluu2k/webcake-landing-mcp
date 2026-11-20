@@ -417,6 +417,7 @@ export async function createPage(
     editor_url: toEditorLoginUrl(config, editorPath),
     preview_url: toPreviewUrl(config, previewPath),
     organization_id: (orgId ?? config.orgId) ?? null,
+    version: versionOf(data),
     raw: data,
     ...(rehost ? { rehost } : {}),
     // Also when only the Google weight links changed it — publish must build what was stored.
@@ -718,7 +719,8 @@ export async function updatePageSource(
       });
     }
   } catch (e: any) {
-    return timeoutOrNetworkError(url, e);
+    // a timed-out save may still land: the draft must hold what it would have stored
+    return { ...timeoutOrNetworkError(url, e), rehosted_source: hostedSource };
   }
   const text = await res.text();
   let json: any = null;
@@ -729,7 +731,7 @@ export async function updatePageSource(
   }
   const data = json?.data ?? json;
   const pageIdOut = data?.page_id;
-  if (!res.ok || !pageIdOut) return writeFailure(res.status, json, text);
+  if (!res.ok || !pageIdOut) return { ...writeFailure(res.status, json, text), rehosted_source: hostedSource };
   return {
     ok: true,
     status: res.status,
