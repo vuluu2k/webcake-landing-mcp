@@ -15,7 +15,7 @@ import type { Domain } from "../core/domain.js";
 import { text, warningsField, autoFixedField } from "../mcp/response.js";
 import { objectOrJson, objectsOrJson } from "../mcp/params.js";
 import { readConfig, configFromHeaders } from "../persistence/config.js";
-import { applyOps,
+import { sourceOps, applyOps,
   buildRequestRedacted,
   buildUpdateRequestRedacted,
   buildAppendRequestRedacted,
@@ -127,9 +127,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   const readLiveSource = async (config: WebcakeConfig, pageId: string, opts: { trust?: true | string } = {}) => {
     const key = sourceCacheKey(pageId, config.jwt);
     const cv = cachedPageSourceVersion(key);
-    if (cv && opts.trust && (opts.trust === true || opts.trust === cv)) {
+    // only an exact (md5) version is trusted: updated_at has 1 s precision
+    if (cv && /^[0-9a-f]{32}$/.test(cv) && opts.trust && (opts.trust === true || opts.trust === cv)) {
       const hit = cachedPageSource(key, cv);
-      if (hit) return { ...hit, source: structuredClone(hit.source), from_cache: true as const };
+      if (hit) return { ...hit, source: structuredClone(hit.source), from_cache: true as const, trusted: true as const };
     }
     if (cachedPageSourceVersion(key)) {
       const probe = await getPageVersion(config, pageId);
@@ -161,6 +162,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     served.set(key, version);
     if (served.size > 500) served.delete(served.keys().next().value!); // ponytail: oldest-first cap
   };
+  /** A page the model just created: its tree IS the stored one (after the auto-publish re-save, if any). */
+  const servedAfterCreate = async (config: WebcakeConfig, pageId: string | undefined) => {
+    if (!pageId) return;
+    const v = await getPageVersion(config, pageId).catch(() => null);
+    if (v?.ok) rememberServed(config, pageId, v.version);
+  };
   const isServerToken = (v?: string) => !!v && (/^[0-9a-f]{32}$/.test(v) || /^\d{4}-\d\d-\d\dT/.test(v));
   /** After a write the backend versioned (source_hash / updated_at): the stored tree IS what we sent,
    *  so cache it under that version — the next read is a version probe, not a download. */
@@ -176,6 +183,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       } catch {
         stored = undefined;
       }
+    // a patch result is only as exact as its version: never cache one under a 1 s updated_at
+    if (outcome.via === "patch" && !/^[0-9a-f]{32}$/.test(outcome.version ?? "")) stored = undefined;
     if (outcome.version && stored != null && meta?.ok) cachePageSource(sourceCacheKey(pageId, config.jwt), outcome.version, { ...meta, version: outcome.version, source: structuredClone(stored), from_cache: undefined });
     else invalidateSource(config, pageId);
   };
@@ -209,7 +218,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     pageId: string,
     incoming: any,
     opts: { baseVersion?: string; force?: boolean; retryHint: string }
-  ): Promise<{ ok: true; liveVersion?: string; notice?: string; base?: { base?: string; before?: any }; live?: any } | { ok: false; payload: any }> => {
+  ): Promise<{ ok: true; liveVersion?: string; notice?: string; base?: { base?: string; before?: any; verified?: boolean }; live?: any } | { ok: false; payload: any }> => {
     if (opts.force) return { ok: true, notice: "force:true — the staleness check was skipped and any newer editor changes were overwritten." };
 
     const tokenBase = isServerToken(opts.baseVersion) ? opts.baseVersion : undefined;
@@ -218,7 +227,11 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     if (!live.ok || live.source == null) return { ok: true };
     // A server version token (from get_page): exact. The write carries it, the backend re-checks it under its lock.
     if (tokenBase && live.version) {
-      if (live.version === tokenBase) return { ok: true, liveVersion: live.version, base: { base: tokenBase, before: domain.expand(structuredClone(live.source)) }, live };
+      const before = domain.expand(structuredClone(live.source));
+      if (live.version === tokenBase) return { ok: true, liveVersion: live.version, base: { base: tokenBase, before, verified: !(live as any).trusted }, live };
+      // the page moved on but already holds exactly this tree (a timed-out save that did land): done
+      const landed = sourceOps(before, incoming);
+      if (landed && landed.length === 0) return { ok: true, liveVersion: live.version, base: { base: live.version, before, verified: true }, live };
       return {
         ok: false,
         payload: {
@@ -234,6 +247,21 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       };
     }
 
+    // The backend versions sources exactly, yet nothing says which version this tree was built
+    // from (no base_version, no get_page / create_page in this session): an overwrite cannot be
+    // checked, so it is refused rather than allowed when it happens to drop no ids.
+    if (!opts.baseVersion && /^[0-9a-f]{32}$/.test(live.version ?? ""))
+      return {
+        ok: false,
+        payload: {
+          reason: "unverified_overwrite",
+          page_id: pageId,
+          live_version: live.version,
+          hint:
+            "Nothing ties this source to a version of the page (no get_page of the whole tree in this session, no base_version), so the save cannot be checked against edits made since — it could revert them. " +
+            `Do ONE of these: (a) patch_page({ page_id, patches:[…] }) for element edits; (b) get_page({ page_id }) (the whole tree), apply your edit to it, then update_page; (c) pass base_version (get_page's source_version); (d) to overwrite regardless, re-run ${opts.retryHint} with force:true.`,
+        },
+      };
     // An explicit base_version comes from get_page's source_version — a real read.
     const baseline = opts.baseVersion
       ? ({ fp: opts.baseVersion, origin: "read" } as const)
@@ -580,6 +608,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           publish === false
             ? { published: false, skipped: true, note: "publish:false — created source-only; the preview stays blank until publish_page runs." }
             : await autoPublish(config, outcome.page_id!, outcome.rehosted_source ?? parsed);
+        await servedAfterCreate(config, outcome.page_id);
         return text({
           created: true,
           ...outcome,
@@ -729,8 +758,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // editor after this point cannot be silently overwritten.
       const source_version = res.version ?? sourceFingerprint(res.source);
       rememberPageVersion(page_id, sourceFingerprint(res.source), "read");
-      rememberServed(config, page_id, res.version);
       if (outline || element_id) return narrow(res.source, { page_id, name: res.name, source_version });
+      // only a WHOLE tree handed to the model is a base an update_page tree can come from
+      rememberServed(config, page_id, res.version);
       if (compact === false) return text({ ...res, source_version });
       return text({
         ...res,
@@ -817,7 +847,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // loses its stale measured height, and only errors this overwrite ADDS refuse it.
       const cfg0 = cfgFor(extra).config;
       // no explicit base: the version of the tree get_page last handed the model
-      if (!resolvedBaseVersion && cfg0) resolvedBaseVersion = servedOf(cfg0, resolvedPageId);
+      if (!resolvedBaseVersion && cfg0 && !draft_id) resolvedBaseVersion = servedOf(cfg0, resolvedPageId);
       let liveSrc: any = null;
       if (cfg0 && !draft_id) {
         const live = await readLiveSource(cfg0, resolvedPageId, isServerToken(resolvedBaseVersion) ? { trust: resolvedBaseVersion } : {}).catch(() => null);
@@ -1659,6 +1689,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // A page created via the fix-after-error path gets the same auto-publish
       // as a direct create_page (build + publish_html so the preview renders).
       const publishOutcome = outcome.ok ? await autoPublish(config, outcome.page_id!, outcome.rehosted_source ?? parsed) : undefined;
+      if (outcome.ok) await servedAfterCreate(config, outcome.page_id);
       return text({
         patched: outcome.ok,
         created: outcome.ok,
@@ -1717,7 +1748,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
     // against the version just read: only the changed sections travel, and an editor save that
     // landed in between is refused by the backend instead of being overwritten
-    const outcome = await updatePageSource(config!, page_id!, parsed, { base: liveRead?.version, before: before && domain.expand(before) });
+    const outcome = await updatePageSource(config!, page_id!, parsed, { base: liveRead?.version, before: before && domain.expand(before), verified: !liveRead?.trusted });
     if (outcome.page_changed) {
       await deleteDraft(liveDraftId);
       invalidateSource(config!, page_id!);
@@ -1914,6 +1945,15 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       const publishOpts = { ...opts, app, app_css };
       const outcome = await publishPage(config, page_id, source, publishOpts);
+      // publish_html re-saves the source it was given (same content, the backend's own bytes → a new md5):
+      // carry the model's base and the cache over to that version, or an update_page that follows is refused
+      if (outcome.ok && res.version) {
+        const v = await getPageVersion(config, page_id).catch(() => null);
+        if (v?.ok && v.version && v.version !== res.version) {
+          if (servedOf(config, page_id) === res.version) rememberServed(config, page_id, v.version);
+          cachePageSource(sourceCacheKey(page_id, config.jwt), v.version, { ...res, version: v.version, source: structuredClone(source), from_cache: undefined, trusted: undefined });
+        }
+      }
       return text({
         published: outcome.ok,
         // live = the PagePublishedV2 record public serving reads was written
