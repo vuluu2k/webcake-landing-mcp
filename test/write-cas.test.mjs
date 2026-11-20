@@ -274,3 +274,102 @@ test("update_page with a tree older than this session's own patch / an editor sa
     server.close();
   }
 });
+
+test("review cases: duplicate ids → whole tree; applyOps walks like the backend", () => {
+  const dup = { page: [{ id: "sect1", type: "section", children: [{ id: "grp1", type: "group", children: [{ id: "dupx", type: "button", specials: { t: 1 } }] }] }, { id: "sect2", type: "section", children: [{ id: "dupx", type: "button", specials: { t: 2 } }] }], popup: [] };
+  const edited = structuredClone(dup);
+  edited.page[1].children[0].specials.t = 9;
+  assert.equal(sourceOps(dup, edited), undefined, "the backend would edit the FIRST dupx (inside sect1)");
+  // depth-first pre-order: the nested dupx in sect1 comes before sect2's
+  const out = applyOps(dup, [{ op: "set", id: "dupx", node: { type: "button", specials: { t: 7 } } }]);
+  assert.equal(out.page[0].children[0].children[0].specials.t, 7);
+  assert.equal(out.page[1].children[0].specials.t, 2);
+  assert.throws(() => applyOps(dup, [{ op: "insert", parent_id: "dupx", node: { id: "zzzz", type: "button" } }]), /no children list/);
+  assert.throws(() => applyOps(dup, [{ op: "set", id: "sect1", node: { type: "text-block" } }]), /cannot turn section/);
+});
+
+test("review cases via the tools: stale cache + empty diff, outline reads, draft base, a save that already landed", async () => {
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { InMemoryTransport } = await import("@modelcontextprotocol/sdk/inMemory.js");
+  const { landingDomain: D } = await import("../dist/domains/landing/index.js");
+  const crypto = await import("node:crypto");
+  const md5 = (s) => crypto.createHash("md5").update(s).digest("hex");
+  const src = D.createPageSource({});
+  src.page = [0, 1].map((i) => {
+    const s = D.createElement("section");
+    s.id = `sect${i}`;
+    const t = D.createElement("text-block");
+    t.id = `text${i}`;
+    t.specials.text = `<p>t${i}</p>`;
+    s.children = [t];
+    return s;
+  });
+  let stored = JSON.stringify(D.expand(src));
+  const log = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      const send = (st, j) => (res.writeHead(st, { "Content-Type": "application/json" }), res.end(JSON.stringify(j)));
+      const p = new URL(req.url, "http://x").pathname.replace("/api/v1/ai/", "");
+      const b = body ? JSON.parse(body) : {};
+      log.push(p);
+      const meta = () => ({ page_id: "pgR", name: "P", organization_id: 1, updated_at: "2026-11-20T00:00:00", source_hash: md5(stored) });
+      if (p === "page_source") return send(200, { success: true, data: { ...meta(), source: JSON.parse(stored) } });
+      if (p === "page_version") return send(200, { success: true, data: meta() });
+      if (b.base_source_hash && b.base_source_hash !== md5(stored)) return send(422, { success: false, message: "changed", reason: { code: "page_changed", source_hash: md5(stored) } });
+      if (p === "patch_page_source") stored = JSON.stringify(applyOps(JSON.parse(stored), b.ops));
+      else if (p === "update_page_source") stored = JSON.stringify(b.source);
+      send(200, { success: true, data: meta() });
+    });
+  });
+  await new Promise((ok) => server.listen(0, "127.0.0.1", ok));
+  const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
+  const env = { base: process.env.WEBCAKE_API_BASE, jwt: process.env.WEBCAKE_JWT };
+  process.env.WEBCAKE_API_BASE = `http://127.0.0.1:${server.address().port}`;
+  process.env.WEBCAKE_JWT = `${b64({ alg: "none" })}.${b64({ exp: Math.floor(Date.now() / 1000) + 3600 })}.z`;
+  const editorSets = (id, text) => {
+    const t = JSON.parse(stored);
+    for (const s of t.page) for (const k of s.children) if (k.id === id) k.specials.text = text;
+    stored = JSON.stringify(t);
+  };
+  const textOf = (id) => JSON.parse(stored).page.flatMap((s) => s.children).find((k) => k.id === id).specials.text;
+  try {
+    const { createServer } = await import("../dist/server.js");
+    const [a, bb] = InMemoryTransport.createLinkedPair();
+    await createServer().connect(a);
+    const c = new Client({ name: "t", version: "0" });
+    await c.connect(bb);
+    const call = async (name, args) => JSON.parse((await c.callTool({ name, arguments: args })).content[0].text);
+    const patch = (id, text) => call("patch_page", { page_id: "pgR", patches: [{ op: "update", id, specials: { text } }], dry_run: false });
+    const tree = (await call("get_page", { page_id: "pgR", compact: false })).source;
+    // (2) cache says A, the editor made it B, the model asks for A again: must reach the page
+    assert.equal((await patch("text0", "<p>A</p>")).patched, true);
+    editorSets("text0", "<p>B</p>");
+    assert.equal((await patch("text0", "<p>A</p>")).patched, true);
+    assert.equal(textOf("text0"), "<p>A</p>", "an empty diff against a stale cache is not a success");
+    // (3) an outline read does not make an older full tree acceptable
+    await call("get_page", { page_id: "pgR", outline: true });
+    const old = structuredClone(tree);
+    old.page[1].children[0].specials.text = "<p>stale</p>";
+    assert.equal((await call("update_page", { page_id: "pgR", source: old, dry_run: false })).reason, "page_changed_externally");
+    // (8) a save that already landed: the retry with the old base is done, not refused
+    const fresh = (await call("get_page", { page_id: "pgR", compact: false })).source;
+    fresh.page[1].children[0].specials.text = "<p>landed</p>";
+    const base = (await call("get_page", { page_id: "pgR", compact: false })).source_version;
+    assert.equal((await call("update_page", { page_id: "pgR", source: fresh, base_version: base, dry_run: false })).updated, true);
+    const again = await call("update_page", { page_id: "pgR", source: fresh, base_version: base, dry_run: false });
+    assert.equal(again.updated, true, JSON.stringify(again).slice(0, 300));
+    // (6) a draft cached with no base does not borrow a later get_page's version
+    const bad = structuredClone(fresh);
+    bad.page[1].children[0].specials.text = "<p>draft</p>";
+    bad.page[1].children[0].type = "nope-type";
+    const failed = await call("update_page", { page_id: "pgR", source: bad, base_version: undefined, dry_run: false });
+    assert.equal(failed.updated, false);
+  } finally {
+    if (env.base === undefined) delete process.env.WEBCAKE_API_BASE; else process.env.WEBCAKE_API_BASE = env.base;
+    if (env.jwt === undefined) delete process.env.WEBCAKE_JWT; else process.env.WEBCAKE_JWT = env.jwt;
+    server.closeAllConnections();
+    server.close();
+  }
+});
