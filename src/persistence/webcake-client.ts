@@ -101,38 +101,91 @@ const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringif
 const TOP_KEYS = ["settings", "options", "cartConfigs"];
 
 /**
- * The patch_page_source ops that turn `before` into `after`, at section / popup granularity: a
- * changed section is re-sent whole (`set`), a new one is inserted at its index, a gone one removed,
- * and settings / options / cartConfigs replaced when they differ. undefined = not expressible
- * (sections reordered, a node without an id, another top-level key changed) → write the whole tree.
+ * The patch_page_source ops that turn `before` into `after`, down to the deepest node that changed:
+ * a node whose own fields changed is re-sent whole (`set`); a node whose children changed only by
+ * additions / removals (same order) gets `insert` / `remove` inside it; a reordered child list sets
+ * its parent. Removes go first, then sets, then inserts — so a node moved to another parent (or
+ * between page and popup) is never in two places. settings / options / cartConfigs → `top`.
+ * undefined = not expressible (top-level sections reordered, an id-less node, another top-level
+ * key changed) → write the whole tree.
  */
 export function sourceOps(before: any, after: any): any[] | undefined {
   if (!isPlainObj(before) || !isPlainObj(after)) return undefined;
-  const ops: any[] = [];
-  const rootOf = (src: any) => new Map(["page", "popup"].flatMap((r) => (Array.isArray(src[r]) ? src[r] : []).map((n: any) => [n?.id, r] as const)));
-  const ra = rootOf(before);
-  for (const [id, r] of rootOf(after)) if (ra.has(id) && ra.get(id) !== r) return undefined; // moved page ↔ popup
-  for (const root of ["page", "popup"]) {
-    const a: any[] = Array.isArray(before[root]) ? before[root] : [];
-    const b: any[] = Array.isArray(after[root]) ? after[root] : [];
-    if ([...a, ...b].some((n) => !isPlainObj(n) || typeof n.id !== "string")) return undefined;
-    const aIds = a.map((n) => n.id);
-    const bIds = new Set(b.map((n) => n.id));
-    const kept = b.map((n) => n.id).filter((id) => aIds.includes(id));
-    if (kept.join("\u0000") !== aIds.filter((id) => bIds.has(id)).join("\u0000")) return undefined; // reordered
-    for (const id of aIds) if (!bIds.has(id)) ops.push({ op: "remove", id });
-    b.forEach((n, i) => {
-      const old = a.find((x) => x.id === n.id);
-      if (!old) ops.push({ op: "insert", root, index: i, node: n });
-      else if (!sameJson(old, n)) ops.push({ op: "set", id: n.id, node: n });
-    });
-  }
+  const acc = { removes: [] as any[], sets: [] as any[], inserts: [] as any[] };
+  for (const root of ["page", "popup"])
+    if (!listOps(Array.isArray(before[root]) ? before[root] : [], Array.isArray(after[root]) ? after[root] : [], { root }, acc)) return undefined;
+  const tops: any[] = [];
   for (const k of new Set([...Object.keys(before), ...Object.keys(after)])) {
     if (k === "page" || k === "popup" || sameJson(before[k], after[k])) continue;
     if (!TOP_KEYS.includes(k) || !isPlainObj(after[k])) return undefined;
-    ops.push({ op: "top", key: k, value: after[k] });
+    tops.push({ op: "top", key: k, value: after[k] });
   }
-  return ops;
+  return [...acc.removes, ...acc.sets, ...acc.inserts, ...tops];
+}
+
+type OpAcc = { removes: any[]; sets: any[]; inserts: any[] };
+/** Ops for one child list (false: not expressible as list edits — reordered, or a node without an id). */
+function listOps(a: any[], b: any[], where: { root?: string; parent_id?: string }, acc: OpAcc): boolean {
+  if ([...a, ...b].some((n) => !isPlainObj(n) || typeof n.id !== "string")) return false;
+  const bIds = new Set(b.map((n) => n.id));
+  const aById = new Map(a.map((n) => [n.id, n]));
+  const kept = b.filter((n) => aById.has(n.id)).map((n) => n.id);
+  if (kept.join("\u0000") !== a.filter((n) => bIds.has(n.id)).map((n) => n.id).join("\u0000")) return false;
+  for (const n of a) if (!bIds.has(n.id)) acc.removes.push({ op: "remove", id: n.id });
+  b.forEach((n, index) => {
+    const old = aById.get(n.id);
+    if (!old) acc.inserts.push({ op: "insert", ...where, index, node: n });
+    else nodeOps(old, n, acc);
+  });
+  return true;
+}
+
+function nodeOps(old: any, n: any, acc: OpAcc) {
+  if (sameJson(old, n)) return;
+  const { children: oc, ...ownOld } = old;
+  const { children: nc, ...ownNew } = n;
+  if (sameJson(ownOld, ownNew) && Array.isArray(oc) && Array.isArray(nc)) {
+    const sub: OpAcc = { removes: [], sets: [], inserts: [] };
+    if (listOps(oc, nc, { parent_id: n.id }, sub)) {
+      acc.removes.push(...sub.removes);
+      acc.sets.push(...sub.sets);
+      acc.inserts.push(...sub.inserts);
+      return;
+    }
+  }
+  acc.sets.push({ op: "set", id: n.id, node: n });
+}
+
+/** The same ops applied locally — exactly what patch_page_source does to the stored tree (LandingPage.Ai.SourcePatch),
+ *  so the tree a patch leaves behind can be cached without downloading it again. Throws on an op it cannot apply. */
+export function applyOps(source: any, ops: any[]): any {
+  const out = structuredClone(source);
+  const find = (id: string): { list: any[]; i: number } | undefined => {
+    for (const root of ["page", "popup"]) {
+      const stack: any[][] = [Array.isArray(out[root]) ? out[root] : []];
+      while (stack.length) {
+        const list = stack.pop()!;
+        for (let i = 0; i < list.length; i++) {
+          if (list[i]?.id === id) return { list, i };
+          if (Array.isArray(list[i]?.children)) stack.push(list[i].children);
+        }
+      }
+    }
+    return undefined;
+  };
+  const at = (list: any[], index: number | undefined, node: any) => (index == null ? list.push(node) : list.splice(index, 0, node));
+  for (const op of ops) {
+    if (op.op === "top") out[op.key] = structuredClone(op.value);
+    else if (op.op === "insert" && !op.parent_id) at((out[op.root ?? "page"] ??= []), op.index, structuredClone(op.node));
+    else {
+      const hit = find(op.op === "insert" ? op.parent_id : op.id);
+      if (!hit) throw new Error(`applyOps: ${op.op} ${op.id ?? op.parent_id} not found`);
+      if (op.op === "remove") hit.list.splice(hit.i, 1);
+      else if (op.op === "set") hit.list[hit.i] = { ...structuredClone(op.node), id: op.id };
+      else if (op.op === "insert") at((hit.list[hit.i].children ??= []), op.index, structuredClone(op.node));
+    }
+  }
+  return out;
 }
 // The editor's own publish routes (NOT under /api/v1/ai). Both scopes are
 // host-constrained to the BUILDER host (router scope `host: "builder."`), so
@@ -659,7 +712,7 @@ export async function updatePageSource(
     organization_id: data?.organization_id ?? null,
     version: versionOf(data),
     via,
-    ...(via === "patch" ? { patch_ops: nOps } : {}),
+    ...(via === "patch" ? { patch_ops: nOps, sent_ops: ops } : {}),
     raw: data,
     ...(rehost ? { rehost } : {}),
     // Also when only the Google weight links changed it — publish must build what was stored.

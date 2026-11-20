@@ -15,7 +15,7 @@ import type { Domain } from "../core/domain.js";
 import { text, warningsField, autoFixedField } from "../mcp/response.js";
 import { objectOrJson, objectsOrJson } from "../mcp/params.js";
 import { readConfig, configFromHeaders } from "../persistence/config.js";
-import {
+import { applyOps,
   buildRequestRedacted,
   buildUpdateRequestRedacted,
   buildAppendRequestRedacted,
@@ -121,8 +121,15 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // We probe only when something IS cached, so a cold read costs exactly one
   // request as before; a warm one costs a tiny probe and no download. A backend
   // without the route answers 404 → nothing ever caches → one full read, as before.
-  const readLiveSource = async (config: WebcakeConfig, pageId: string) => {
+  // trust: true = use whatever is cached without asking (the write's base check catches a stale one);
+  // a version string = use the cache only when it holds exactly that version.
+  const readLiveSource = async (config: WebcakeConfig, pageId: string, opts: { trust?: true | string } = {}) => {
     const key = sourceCacheKey(pageId, config.jwt);
+    const cv = cachedPageSourceVersion(key);
+    if (cv && opts.trust && (opts.trust === true || opts.trust === cv)) {
+      const hit = cachedPageSource(key, cv);
+      if (hit) return { ...hit, source: structuredClone(hit.source), from_cache: true as const };
+    }
     if (cachedPageSourceVersion(key)) {
       const probe = await getPageVersion(config, pageId);
       if (probe.ok && probe.version) {
@@ -140,12 +147,35 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   const invalidateSource = (config: WebcakeConfig, pageId: string | undefined) => {
     if (pageId) dropCachedPageSource(sourceCacheKey(pageId, config.jwt));
   };
+  // The server version of the last tree get_page handed the MODEL, per page: a whole-tree
+  // update_page without base_version is checked against it — the tree the model sends can only be
+  // that version plus its edits, so a page that moved on since (an editor save, and also this
+  // session's own patch_page / add_section, which the model's copy does not contain) is refused.
+  const served = new Map<string, string>();
+  const servedOf = (config: WebcakeConfig, pageId: string) => served.get(sourceCacheKey(pageId, config.jwt));
+  const rememberServed = (config: WebcakeConfig, pageId: string, version: string | undefined) => {
+    if (!version) return;
+    const key = sourceCacheKey(pageId, config.jwt);
+    served.delete(key);
+    served.set(key, version);
+    if (served.size > 500) served.delete(served.keys().next().value!); // ponytail: oldest-first cap
+  };
+  const isServerToken = (v?: string) => !!v && (/^[0-9a-f]{32}$/.test(v) || /^\d{4}-\d\d-\d\dT/.test(v));
   /** After a write the backend versioned (source_hash / updated_at): the stored tree IS what we sent,
    *  so cache it under that version — the next read is a version probe, not a download. */
-  // ponytail: only a whole-tree write is cached — after a patch the server holds the untouched
-  // sections in their stored (unexpanded) form, so the next read downloads it once.
-  const afterWrite = (config: WebcakeConfig, pageId: string, outcome: { version?: string; via?: string }, stored: unknown, meta?: any) => {
-    if (outcome.version && outcome.via === "update" && meta?.ok) cachePageSource(sourceCacheKey(pageId, config.jwt), outcome.version, { ...meta, version: outcome.version, source: structuredClone(stored), from_cache: undefined });
+  // A whole-tree write stored `hosted`; a patch stored applyOps(rawBefore, sent_ops) — the same ops
+  // applied to the same stored tree the backend applied them to (its base check guarantees it).
+  const afterWrite = (config: WebcakeConfig, pageId: string, outcome: { version?: string; via?: string; sent_ops?: any[]; unchanged?: boolean }, hosted: unknown, rawBefore: unknown, meta?: any) => {
+    if (outcome.unchanged) return; // nothing written: the cache still holds the stored tree
+    let stored: unknown;
+    if (outcome.via === "update") stored = hosted;
+    else if (outcome.via === "patch" && outcome.sent_ops && rawBefore != null)
+      try {
+        stored = applyOps(rawBefore, outcome.sent_ops);
+      } catch {
+        stored = undefined;
+      }
+    if (outcome.version && stored != null && meta?.ok) cachePageSource(sourceCacheKey(pageId, config.jwt), outcome.version, { ...meta, version: outcome.version, source: structuredClone(stored), from_cache: undefined });
     else invalidateSource(config, pageId);
   };
   /** The backend refused the write: the page moved on between our read and the save (under its row lock). */
@@ -181,9 +211,27 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   ): Promise<{ ok: true; liveVersion?: string; notice?: string; base?: { base?: string; before?: any }; live?: any } | { ok: false; payload: any }> => {
     if (opts.force) return { ok: true, notice: "force:true — the staleness check was skipped and any newer editor changes were overwritten." };
 
-    const live = await readLiveSource(config, pageId);
+    const tokenBase = isServerToken(opts.baseVersion) ? opts.baseVersion : undefined;
+    const live = await readLiveSource(config, pageId, tokenBase ? { trust: tokenBase } : {});
     // Cannot read the live page (offline/404): don't block the write on our own check.
     if (!live.ok || live.source == null) return { ok: true };
+    // A server version token (from get_page): exact. The write carries it, the backend re-checks it under its lock.
+    if (tokenBase && live.version) {
+      if (live.version === tokenBase) return { ok: true, liveVersion: live.version, base: { base: tokenBase, before: domain.expand(structuredClone(live.source)) }, live };
+      return {
+        ok: false,
+        payload: {
+          reason: "page_changed_externally",
+          page_id: pageId,
+          live_version: live.version,
+          base_version: tokenBase,
+          hint:
+            "The page changed after the get_page this source was built from — saved in the Webcake editor or by another agent, or by this session's own patch_page / add_section, which your copy does not contain. Saving it would revert those changes. " +
+            "Do ONE of these: (a) patch_page({ page_id, patches:[…] }) — it merges into the LIVE tree; (b) get_page({ page_id }) again, re-apply your edit to the fresh tree, then save; " +
+            `(c) if discarding the newer changes is intended, re-run ${opts.retryHint} with force:true.`,
+        },
+      };
+    }
 
     // An explicit base_version comes from get_page's source_version — a real read.
     const baseline = opts.baseVersion
@@ -196,7 +244,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         liveVersion: verdict.liveVersion,
         // the write goes against THIS read: the backend refuses it if the page moved since
         // (expanded like the incoming tree, so only sections that really change are sent)
-        base: { base: live.version, before: domain.expand(live.source) },
+        base: { base: live.version, before: domain.expand(structuredClone(live.source)) },
         live,
         ...(verdict.unverified
           ? {
@@ -678,8 +726,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // Fingerprint what the page holds RIGHT NOW: this read is the baseline a
       // later update_page is checked against, so an edit made in the Webcake
       // editor after this point cannot be silently overwritten.
-      const source_version = sourceFingerprint(res.source);
-      rememberPageVersion(page_id, source_version, "read");
+      const source_version = res.version ?? sourceFingerprint(res.source);
+      rememberPageVersion(page_id, sourceFingerprint(res.source), "read");
+      rememberServed(config, page_id, res.version);
       if (outline || element_id) return narrow(res.source, { page_id, name: res.name, source_version });
       if (compact === false) return text({ ...res, source_version });
       return text({
@@ -766,9 +815,11 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // The live page as it is now (version-validated cache): a text whose content changed against it
       // loses its stale measured height, and only errors this overwrite ADDS refuse it.
       const cfg0 = cfgFor(extra).config;
+      // no explicit base: the version of the tree get_page last handed the model
+      if (!resolvedBaseVersion && cfg0) resolvedBaseVersion = servedOf(cfg0, resolvedPageId);
       let liveSrc: any = null;
       if (cfg0 && !draft_id) {
-        const live = await readLiveSource(cfg0, resolvedPageId).catch(() => null);
+        const live = await readLiveSource(cfg0, resolvedPageId, isServerToken(resolvedBaseVersion) ? { trust: resolvedBaseVersion } : {}).catch(() => null);
         liveSrc = live?.ok ? live.source : null;
         if (typeof liveSrc === "string") {
           try {
@@ -848,7 +899,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         await deleteDraft(existingDraftId);
         // The page now holds exactly what we sent — that becomes the new baseline.
         rememberPageVersion(resolvedPageId, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
-        afterWrite(config!, resolvedPageId, outcome, outcome.rehosted_source ?? parsed, guard.live);
+        afterWrite(config!, resolvedPageId, outcome, outcome.rehosted_source ?? parsed, guard.live?.source, guard.live);
+        // the model's tree is now exactly what is stored
+        rememberServed(config!, resolvedPageId, outcome.version);
         return text({ updated: true, ...outcome, ...warningsField(result.warnings), ...(guard.notice ? { stale_check: guard.notice } : {}) });
       }
       await updateDraft(existingDraftId, expanded);
@@ -1210,6 +1263,495 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     return touched;
   };
 
+  // patch_page body. `fresh`: the retry after the backend refused a write made against a cached
+  // tree (page_changed) — re-read the live page and apply the same ops to it, once.
+  const runPatch = async ({ page_id, draft_id, patches, force, dry_run }: any, extra: any, fresh = false): Promise<any> => {
+    const isDry = dry_run !== false; // default true (safe)
+    const ops = asArray(patches).filter((p) => p != null && typeof p === "object");
+    // Empty ops are only valid when a draft_id is supplied (commit-as-is / retry path).
+    // For a live-page patch with no draft_id, we still require at least one op.
+    if (ops.length === 0 && !draft_id) {
+      return text({ patched: false, reason: "no_patches", hint: "Pass an op object or a non-empty array of { op, id, … } ops, or provide a draft_id to commit the cached draft as-is." });
+    }
+    if (!page_id && !draft_id) {
+      return text({ patched: false, reason: "no_target", hint: "Pass page_id (a live page) or draft_id (the cached source from a failed/timed-out create_page, update_page, or add_section)." });
+    }
+
+    const { config, missing } = cfgFor(extra);
+
+    // Resolve the base source: a cached draft (create-before-save), else a live page.
+    let base: any;
+    let liveRead: any; // the live read a page_id patch merges into (its version guards the save)
+    const draft = draft_id ? await getDraft(draft_id) : null;
+    if (draft_id) {
+      if (!draft) {
+        return text({
+          patched: false,
+          reason: "draft_expired",
+          hint: "The cached draft is gone (expired after ~2 h or evicted). Re-send the full source via create_page.",
+        });
+      }
+      // a working copy: a batch that fails part-way must not leave its first ops in the cached draft
+      base = structuredClone(draft.source); // already an expanded full tree
+    } else {
+      if (!config) {
+        return text({
+          patched: false,
+          reason: "missing_env",
+          missing_env: missing,
+          hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT (env), or send the x-webcake-jwt header (remote), then retry.",
+        });
+      }
+      // a real run trusts the cache (no version probe): the write carries the cached version and
+      // the backend refuses it if the page moved — then this re-runs once on a fresh read
+      const current = await readLiveSource(config, page_id!, !isDry && !fresh ? { trust: true } : {});
+      if (!current.ok || current.source == null) {
+        return text({
+          patched: false,
+          reason: "fetch_failed",
+          status: current.status,
+          error: current.error ?? "Page source not found.",
+          hint: "Check the page_id (find_pages/list_pages) and that the account owns it.",
+        });
+      }
+      // This read is by definition current, so it becomes the baseline: a later
+      // update_page that still matches it is provably not reverting anything.
+      rememberPageVersion(page_id!, sourceFingerprint(current.source), "read");
+      liveRead = current;
+      base = current.source;
+      if (typeof base === "string") {
+        try {
+          base = JSON.parse(base);
+        } catch {
+          return text({ patched: false, reason: "bad_source", hint: "The stored page source could not be parsed." });
+        }
+      }
+    }
+    // the tree as it was before these ops: a live edit is refused only for errors IT adds
+    const before = draft_id ? null : structuredClone(base);
+    const treeRoots = [base.page, base.popup].filter((a) => Array.isArray(a)) as any[][];
+    const locate = (id: string) => {
+      for (const r of treeRoots) {
+        const hit = findById(r, id);
+        if (hit) return hit;
+      }
+      return null;
+    };
+
+    // Apply every op against the live tree. A missing target aborts the whole
+    // patch (we never write a partial edit).
+    const applied: any[] = [];
+    const notFound: { op: string; id: string }[] = [];
+    const badOps: string[] = [];
+    const removedIds = new Set<string>();
+    for (const p of ops) {
+      const op = p.op ?? "update";
+      if (op === "add") {
+        const pid = p.parent_id ?? p.id;
+        if (typeof pid !== "string" || p.element == null) {
+          badOps.push(`add needs parent_id + element`);
+          continue;
+        }
+        const hit = locate(pid);
+        if (!hit) {
+          notFound.push({ op, id: pid });
+          continue;
+        }
+        hit.node.children = Array.isArray(hit.node.children) ? hit.node.children : [];
+        hit.node.children.push(p.element);
+        applied.push({ op, parent_id: pid, added_id: p.element?.id });
+        continue;
+      }
+      if (op === "move" || op === "duplicate") {
+        if (typeof p.id !== "string") {
+          badOps.push(`${op} needs a string id`);
+          continue;
+        }
+        const r = op === "move" ? moveNode(base, p) : duplicateNode(base, p);
+        if (r.ok) applied.push(r.change);
+        else if (r.error.startsWith("not_found:")) notFound.push({ op, id: r.error.slice("not_found:".length) });
+        else badOps.push(r.error);
+        continue;
+      }
+      // update / style / remove may target a `match` selector instead of one id.
+      let ids: string[];
+      const byMatch = typeof p.id !== "string" && p.match != null && typeof p.match === "object" && op !== "replace";
+      if (byMatch) {
+        const limit = typeof p.limit === "number" ? p.limit : 50;
+        const problem = matchProblem(p.match);
+        if (problem) {
+          badOps.push(`${op}: ${problem}`);
+          continue;
+        }
+        ids = selectIds(base, p.match);
+        if (ids.length === 0) {
+          notFound.push({ op, id: `match:${JSON.stringify(p.match)}` });
+          continue;
+        }
+        if (ids.length > limit) {
+          badOps.push(`${op} match ${JSON.stringify(p.match)} hit ${ids.length} elements (> limit ${limit}) — narrow it or pass a higher limit`);
+          continue;
+        }
+      } else if (typeof p.id === "string") {
+        ids = [p.id];
+      } else {
+        badOps.push(`${op} needs a string id${op === "replace" ? "" : " or a match"}`);
+        continue;
+      }
+      const matchChanged = new Set<string>();
+      for (const id of ids) {
+        // A matched descendant of a container this match already removed is gone with it.
+        if (byMatch && removedIds.has(id)) continue;
+        const hit = locate(id);
+        if (!hit) {
+          notFound.push({ op, id });
+          continue;
+        }
+        if (op === "remove") {
+          for (const rid of subtreeIds(hit.node)) removedIds.add(rid);
+          hit.parentArr.splice(hit.index, 1);
+          if (!byMatch) applied.push({ op, id });
+        } else if (op === "replace") {
+          if (p.element == null) {
+            badOps.push(`replace ${id} needs element`);
+            continue;
+          }
+          const repl = p.element;
+          if (repl && typeof repl === "object" && repl.id == null) repl.id = id;
+          hit.parentArr[hit.index] = repl;
+          applied.push({ op, id });
+        } else if (op === "style") {
+          const changed = mergeStyleMap(hit.node, "styles", { desktop: p.desktop, mobile: p.mobile });
+          dropStaleMeasure(hit.node, null, { desktop: p.desktop, mobile: p.mobile }, null);
+          changed.forEach((c) => matchChanged.add(c));
+          if (!byMatch) applied.push({ op, id, changed });
+        } else {
+          // update (default)
+          const changed: string[] = [];
+          if (typeof p.type === "string" && p.type.trim() !== "") {
+            hit.node.type = p.type;
+            changed.push("type");
+          }
+          if (p.specials && typeof p.specials === "object") {
+            hit.node.specials = { ...(hit.node.specials ?? {}), ...p.specials };
+            changed.push("specials");
+          }
+          changed.push(...mergeStyleMap(hit.node, "styles", p.styles));
+          changed.push(...mergeStyleMap(hit.node, "config", p.config));
+          if (Array.isArray(p.events)) {
+            hit.node.events = p.events;
+            changed.push("events");
+          }
+          if (p.properties && typeof p.properties === "object") {
+            hit.node.properties = { ...(hit.node.properties ?? {}), ...p.properties };
+            changed.push("properties");
+          }
+          dropStaleMeasure(hit.node, p.specials, p.styles, p.config);
+          changed.forEach((c) => matchChanged.add(c));
+          if (!byMatch) applied.push({ op: "update", id, changed });
+        }
+      }
+      if (byMatch) applied.push({ op, match: p.match, matched_ids: ids, ...(op === "remove" ? {} : { changed: [...matchChanged] }) });
+    }
+    // Removed elements that other elements' events still target (open_popup, scroll_to, …).
+    const dangling = removedIds.size ? refsTo(base, removedIds) : [];
+    const integrity = dangling.length
+      ? { dangling_events: dangling, dangling_warning: `${dangling.length} event(s) still target removed element(s) and will do nothing — retarget or remove them (patch_page update events).` }
+      : {};
+
+    if (badOps.length > 0) {
+      return text({ patched: false, reason: "bad_ops", bad_ops: badOps, hint: "Each op needs id (or parent_id for add) and an element where required." });
+    }
+    if (notFound.length > 0) {
+      return text({
+        patched: false,
+        reason: "target_not_found",
+        not_found: notFound,
+        hint: "No element with that id exists on the live page. Run get_page to see the current ids; ids are case-sensitive.",
+      });
+    }
+
+    // Validate the WHOLE merged tree (hydrate sparse replaced/added nodes first).
+    const expanded = domain.expand(base);
+    const result = domain.validate(expanded);
+
+    // DRAFT path: the source came from a failed/dry-run create_page, add_section,
+    // or a timed-out/failed update_page / live-page patch_page.
+    // Keep applied fixes cached between rounds; once valid, dispatch based on kind:
+    //   'page'    (or absent) → CREATE a new page
+    //   'sections'            → APPEND to the live page
+    //   'update'              → UPDATE the existing page (updatePageSource)
+    if (draft_id && draft) {
+      // an update draft refuses only errors beyond what the live page already had
+      const blocking = result.valid ? [] : draft.kind === "update" && draft.prior_errors ? addedAgainst(draft.prior_errors, result.errors) : result.errors;
+      if (blocking.length) {
+        await updateDraft(draft_id, base); // persist partial fixes for the next patch round
+        return text({
+          patched: false,
+          reason: "validation_failed",
+          errors: blocking,
+          ...(blocking.length < result.errors.length ? { pre_existing_errors: result.errors.length - blocking.length } : {}),
+          ...warningsField(result.warnings),
+          patches_applied: applied, ...integrity,
+          draft_id,
+          hint: "Still invalid — fix the remaining errors with another patch_page({ draft_id, patches:[…] }); your applied fixes are kept in the draft. Each error names the offending element id — target THAT id. A stray/extra key ('must NOT have additional properties') needs op:'replace' with a clean node (op:'update' merges; it cannot delete a key). Do NOT rebuild with create_page — the draft already holds everything.",
+        });
+      }
+      const parsed = domain.coerce(expanded);
+
+      // --- Sections draft: APPEND to the live page once valid ---
+      if (draft.kind === "sections") {
+        const targetPageId = page_id ?? draft.page_id;
+        if (!targetPageId) {
+          await updateDraft(draft_id, base);
+          return text({
+            patched: false,
+            reason: "no_page_id",
+            draft_id,
+            hint: "No page_id on this sections draft. Pass page_id explicitly to patch_page to set the append target.",
+          });
+        }
+        if (isDry) {
+          await updateDraft(draft_id, base);
+          return text({
+            dry_run: true,
+            draft_id,
+            page_id: targetPageId,
+            patches_applied: applied, ...integrity,
+            validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
+            env_ready: missing.length === 0,
+            missing_env: missing,
+            request: config
+              ? buildAppendRequestRedacted(config, targetPageId, (expanded as any).page ?? [])
+              : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable the append." },
+            hint: `Sections draft is now valid. Re-run patch_page({ draft_id: "${draft_id}", dry_run: false }) with NO patches to append the sections. (the ones just applied are saved in the draft; resending them would apply them twice).`,
+          });
+        }
+        if (!config) {
+          await updateDraft(draft_id, base);
+          return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
+        }
+        const sectionsToAppend = Array.isArray((expanded as any).page) ? (expanded as any).page : [];
+        const outcome = await appendSection(config, targetPageId, sectionsToAppend);
+        if (outcome.ok) {
+          await deleteDraft(draft_id);
+          forgetPageVersion(targetPageId);
+          invalidateSource(config, targetPageId);
+        } else {
+          await updateDraft(draft_id, base);
+        }
+        return text({
+          patched: outcome.ok,
+          appended: outcome.ok,
+          from_draft: draft_id,
+          patches_applied: applied, ...integrity,
+          page_id: outcome.page_id ?? targetPageId,
+          editor_url: outcome.editor_url,
+          preview_url: outcome.preview_url,
+          status: outcome.status,
+          error: outcome.error,
+          ...saveExtras(outcome),
+          ...warningsField(result.warnings),
+          ...(outcome.ok ? {} : { draft_id, hint: `Append failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
+        });
+      }
+
+      // --- Update draft: UPDATE the existing page once valid ---
+      if (draft.kind === "update") {
+        const targetPageId = page_id ?? draft.page_id;
+        if (!targetPageId) {
+          await updateDraft(draft_id, base);
+          return text({
+            patched: false,
+            reason: "no_page_id",
+            draft_id,
+            hint: "No page_id on this update draft. Pass page_id explicitly to patch_page to set the update target.",
+          });
+        }
+        if (isDry) {
+          await updateDraft(draft_id, base);
+          return text({
+            dry_run: true,
+            draft_id,
+            page_id: targetPageId,
+            patches_applied: applied, ...integrity,
+            validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
+            env_ready: missing.length === 0,
+            missing_env: missing,
+            request: config
+              ? buildUpdateRequestRedacted(config, targetPageId, parsed)
+              : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable the update." },
+            hint: `Update draft is now valid. Re-run patch_page({ draft_id: "${draft_id}", dry_run: false }) with NO patches to save. (the ones just applied are saved in the draft; resending them would apply them twice).`,
+          });
+        }
+        if (!config) {
+          await updateDraft(draft_id, base);
+          return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
+        }
+        const guard = await guardOverwrite(config, targetPageId, parsed, {
+          baseVersion: draft.base_version,
+          force,
+          retryHint: `patch_page({ draft_id: "${draft_id}", dry_run:false })`,
+        });
+        if (!guard.ok) {
+          await updateDraft(draft_id, base);
+          return text({ patched: false, updated: false, ...guard.payload, draft_id, patches_applied: applied, ...integrity });
+        }
+        const outcome = await updatePageSource(config, targetPageId, parsed, guard.base);
+        if (outcome.page_changed) {
+          await updateDraft(draft_id, base);
+          return text({ patched: false, ...pageChangedPayload(targetPageId, outcome, `patch_page({ draft_id: "${draft_id}", dry_run:false })`), draft_id });
+        }
+        if (outcome.ok) {
+          await deleteDraft(draft_id);
+          rememberPageVersion(targetPageId, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+          invalidateSource(config!, targetPageId);
+        } else {
+          await updateDraft(draft_id, base);
+        }
+        return text({
+          patched: outcome.ok,
+          updated: outcome.ok,
+          from_draft: draft_id,
+          patches_applied: applied, ...integrity,
+          page_id: outcome.page_id ?? targetPageId,
+          editor_url: outcome.editor_url,
+          preview_url: outcome.preview_url,
+          status: outcome.status,
+          error: outcome.error,
+          ...saveExtras(outcome),
+          ...warningsField(result.warnings),
+          ...(outcome.ok ? {} : { draft_id, hint: `Update failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
+        });
+      }
+
+      // --- Page draft (kind='page' or absent): CREATE as a new page once valid ---
+      if (isDry) {
+        await updateDraft(draft_id, base);
+        return text({
+          dry_run: true,
+          draft_id,
+          patches_applied: applied, ...integrity,
+          validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
+          env_ready: missing.length === 0,
+          missing_env: missing,
+          request: config
+            ? buildRequestRedacted(config, draft.name ?? "AI Page", parsed, draft.organization_id)
+            : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable creation." },
+          hint: `Draft is now valid. Re-run patch_page({ draft_id: "${draft_id}", dry_run: false }) with NO patches to create the page. (the ones just applied are saved in the draft; resending them would apply them twice).`,
+        });
+      }
+      if (!config) {
+        await updateDraft(draft_id, base);
+        return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
+      }
+      // CACHE-FIRST: source is already in the draft; refresh before the network call.
+      await updateDraft(draft_id, base);
+      const outcome = await createPage(config, draft.name ?? "AI Page", parsed, draft.organization_id);
+      if (outcome.ok) {
+        await deleteDraft(draft_id);
+        rememberPageVersion(outcome.page_id, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+        invalidateSource(config!, outcome.page_id);
+      } else {
+        await updateDraft(draft_id, base); // keep for retry
+      }
+      // A page created via the fix-after-error path gets the same auto-publish
+      // as a direct create_page (build + publish_html so the preview renders).
+      const publishOutcome = outcome.ok ? await autoPublish(config, outcome.page_id!, outcome.rehosted_source ?? parsed) : undefined;
+      return text({
+        patched: outcome.ok,
+        created: outcome.ok,
+        from_draft: draft_id,
+        patches_applied: applied, ...integrity,
+        page_id: outcome.page_id,
+        editor_url: outcome.editor_url,
+        preview_url: outcome.preview_url,
+        status: outcome.status,
+        error: outcome.error,
+        ...saveExtras(outcome),
+        ...(publishOutcome ? { publish: publishOutcome } : {}),
+        ...warningsField(result.warnings),
+        ...(outcome.ok ? {} : { draft_id, hint: `Create failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) or resolve the error first.` }),
+      });
+    }
+
+    // LIVE-PAGE path: edit an existing page (page_id) and update it in place.
+    // Errors the page already had (an old enum value, an editor-written oddity) don't block an edit
+    // that doesn't add any: only errors THIS write introduces are refused.
+    const added = result.valid ? [] : addedErrors(domain, before, result.errors);
+    if (!result.valid && added.length) {
+      return text({
+        patched: false,
+        reason: "validation_failed",
+        errors: added,
+        ...(added.length < result.errors.length ? { pre_existing_errors: result.errors.length - added.length } : {}),
+        ...warningsField(result.warnings),
+        patches_applied: applied, ...integrity,
+        hint: "The edit produced an invalid tree — fix the listed errors in your ops, then retry.",
+      });
+    }
+    const parsed = domain.coerce(expanded);
+
+    // CACHE-FIRST: write an 'update' draft BEFORE the network call so a timeout or
+    // failure is recoverable via patch_page({ draft_id, dry_run:false }) with no patches.
+    const liveDraftId = await putDraft({
+      source: expanded,
+      kind: "update",
+      page_id: page_id!,
+      prior_errors: priorErrors(domain, before),
+      base_version: lastKnownPageVersion(page_id!)?.fp,
+    });
+
+    if (isDry) {
+      return text({
+        dry_run: true,
+        page_id,
+        patches_applied: applied, ...integrity,
+        validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
+        draft_id: liveDraftId,
+        request: buildUpdateRequestRedacted(config!, page_id!, parsed),
+        hint: `Re-run patch_page({ draft_id: "${liveDraftId}", dry_run: false }) — no need to re-send patches. Or re-run with page_id + dry_run:false.`,
+      });
+    }
+
+    // against the version just read: only the changed sections travel, and an editor save that
+    // landed in between is refused by the backend instead of being overwritten
+    const outcome = await updatePageSource(config!, page_id!, parsed, { base: liveRead?.version, before: before && domain.expand(before) });
+    if (outcome.page_changed) {
+      await deleteDraft(liveDraftId);
+      invalidateSource(config!, page_id!);
+      if (!fresh) return runPatch({ page_id, draft_id, patches, force, dry_run }, extra, true);
+      return text({ patched: false, ...pageChangedPayload(page_id!, outcome, "patch_page"), hint: "The page was saved by someone else between this patch's read and its write — nothing was written. Re-run the SAME patch_page call: it re-reads the live page and applies your ops to it." });
+    }
+    if (outcome.ok) {
+      await deleteDraft(liveDraftId);
+      rememberPageVersion(page_id!, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
+      afterWrite(config!, page_id!, outcome, outcome.rehosted_source ?? parsed, before, liveRead);
+      return text({
+        patched: true,
+        patches_applied: applied, ...integrity,
+        page_id: outcome.page_id,
+        editor_url: outcome.editor_url,
+        preview_url: outcome.preview_url,
+        status: outcome.status,
+        ...saveExtras(outcome),
+        ...warningsField(result.warnings),
+      });
+    }
+    // Network failure / timeout: keep the update draft for retry.
+    await updateDraft(liveDraftId, expanded);
+    return text({
+      patched: false,
+      patches_applied: applied, ...integrity,
+      page_id: outcome.page_id ?? page_id,
+      status: outcome.status,
+      error: outcome.error,
+      ...saveExtras(outcome),
+      ...warningsField(result.warnings),
+      draft_id: liveDraftId,
+      hint: `Save failed — the patched source is cached. Retry via patch_page({ draft_id: "${liveDraftId}", dry_run: false }) with no patches. The draft expires in ~2 h.`,
+    });
+  };
   server.tool(
     "patch_page",
     "Edits a page by element id without sending the whole source. The target is either a live page (page_id) or a cached draft (draft_id) returned by a failed or dry-run create_page, add_section or update_page call. Ops: {op:'update', id, type?, specials?, styles?:{desktop?,mobile?}, config?:{desktop?,mobile?}, events?, properties?} shallow-merges fields (op defaults to 'update'; it cannot delete existing keys), {op:'replace', id, element} swaps the node, {op:'remove', id} deletes it (events elsewhere that targeted it are reported in dangling_events), {op:'add', parent_id, element} appends a child to a container; `element` may be sparse. {op:'move', id, parent_id?, index?, desktop?:{left?,top?}, mobile?:{left?,top?}} reparents and/or reorders (z-order = child order), keeping the element visually in place unless left/top are given. {op:'duplicate', id, parent_id?, offset?:{desktop?:{x,y},mobile?:{x,y}}, count?} deep-copies with fresh unique ids (internal event targets remapped); copy i is shifted by offset×i. {op:'style', id|match, desktop?:{…}, mobile?:{…}} merges styles. update/style/remove accept match:{type?, text?, section_id?, within?} instead of id (text = case-insensitive substring, tags stripped; within = a container id) and apply to every match, refused above limit (default 50); matched_ids are reported. The server loads the source, applies the ops, validates the whole merged tree (errors block the save) and saves: a live page is updated in place, a create draft becomes a new page, a section draft is appended, and an update draft is re-saved. With a draft_id and no patches, the cached draft is committed as-is (the retry after a timeout). dry_run defaults to true (load, merge, validate, preview; no write); dry_run:false saves. Requires Webcake credentials; a page_id patch reads the live page, so it needs them even on a dry run.",
@@ -1231,490 +1773,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .describe("Default TRUE — load, merge, validate and preview the resulting save WITHOUT writing. Set false to actually save."),
     },
     { title: "Patch Webcake Page (by element id)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ page_id, draft_id, patches, force, dry_run }, extra) => {
-      const isDry = dry_run !== false; // default true (safe)
-      const ops = asArray(patches).filter((p) => p != null && typeof p === "object");
-      // Empty ops are only valid when a draft_id is supplied (commit-as-is / retry path).
-      // For a live-page patch with no draft_id, we still require at least one op.
-      if (ops.length === 0 && !draft_id) {
-        return text({ patched: false, reason: "no_patches", hint: "Pass an op object or a non-empty array of { op, id, … } ops, or provide a draft_id to commit the cached draft as-is." });
-      }
-      if (!page_id && !draft_id) {
-        return text({ patched: false, reason: "no_target", hint: "Pass page_id (a live page) or draft_id (the cached source from a failed/timed-out create_page, update_page, or add_section)." });
-      }
-
-      const { config, missing } = cfgFor(extra);
-
-      // Resolve the base source: a cached draft (create-before-save), else a live page.
-      let base: any;
-      let liveRead: any; // the live read a page_id patch merges into (its version guards the save)
-      const draft = draft_id ? await getDraft(draft_id) : null;
-      if (draft_id) {
-        if (!draft) {
-          return text({
-            patched: false,
-            reason: "draft_expired",
-            hint: "The cached draft is gone (expired after ~2 h or evicted). Re-send the full source via create_page.",
-          });
-        }
-        // a working copy: a batch that fails part-way must not leave its first ops in the cached draft
-        base = structuredClone(draft.source); // already an expanded full tree
-      } else {
-        if (!config) {
-          return text({
-            patched: false,
-            reason: "missing_env",
-            missing_env: missing,
-            hint: "Configure WEBCAKE_API_BASE and WEBCAKE_JWT (env), or send the x-webcake-jwt header (remote), then retry.",
-          });
-        }
-        const current = await readLiveSource(config, page_id!);
-        if (!current.ok || current.source == null) {
-          return text({
-            patched: false,
-            reason: "fetch_failed",
-            status: current.status,
-            error: current.error ?? "Page source not found.",
-            hint: "Check the page_id (find_pages/list_pages) and that the account owns it.",
-          });
-        }
-        // This read is by definition current, so it becomes the baseline: a later
-        // update_page that still matches it is provably not reverting anything.
-        rememberPageVersion(page_id!, sourceFingerprint(current.source), "read");
-        liveRead = current;
-        base = current.source;
-        if (typeof base === "string") {
-          try {
-            base = JSON.parse(base);
-          } catch {
-            return text({ patched: false, reason: "bad_source", hint: "The stored page source could not be parsed." });
-          }
-        }
-      }
-      // the tree as it was before these ops: a live edit is refused only for errors IT adds
-      const before = draft_id ? null : structuredClone(base);
-      const treeRoots = [base.page, base.popup].filter((a) => Array.isArray(a)) as any[][];
-      const locate = (id: string) => {
-        for (const r of treeRoots) {
-          const hit = findById(r, id);
-          if (hit) return hit;
-        }
-        return null;
-      };
-
-      // Apply every op against the live tree. A missing target aborts the whole
-      // patch (we never write a partial edit).
-      const applied: any[] = [];
-      const notFound: { op: string; id: string }[] = [];
-      const badOps: string[] = [];
-      const removedIds = new Set<string>();
-      for (const p of ops) {
-        const op = p.op ?? "update";
-        if (op === "add") {
-          const pid = p.parent_id ?? p.id;
-          if (typeof pid !== "string" || p.element == null) {
-            badOps.push(`add needs parent_id + element`);
-            continue;
-          }
-          const hit = locate(pid);
-          if (!hit) {
-            notFound.push({ op, id: pid });
-            continue;
-          }
-          hit.node.children = Array.isArray(hit.node.children) ? hit.node.children : [];
-          hit.node.children.push(p.element);
-          applied.push({ op, parent_id: pid, added_id: p.element?.id });
-          continue;
-        }
-        if (op === "move" || op === "duplicate") {
-          if (typeof p.id !== "string") {
-            badOps.push(`${op} needs a string id`);
-            continue;
-          }
-          const r = op === "move" ? moveNode(base, p) : duplicateNode(base, p);
-          if (r.ok) applied.push(r.change);
-          else if (r.error.startsWith("not_found:")) notFound.push({ op, id: r.error.slice("not_found:".length) });
-          else badOps.push(r.error);
-          continue;
-        }
-        // update / style / remove may target a `match` selector instead of one id.
-        let ids: string[];
-        const byMatch = typeof p.id !== "string" && p.match != null && typeof p.match === "object" && op !== "replace";
-        if (byMatch) {
-          const limit = typeof p.limit === "number" ? p.limit : 50;
-          const problem = matchProblem(p.match);
-          if (problem) {
-            badOps.push(`${op}: ${problem}`);
-            continue;
-          }
-          ids = selectIds(base, p.match);
-          if (ids.length === 0) {
-            notFound.push({ op, id: `match:${JSON.stringify(p.match)}` });
-            continue;
-          }
-          if (ids.length > limit) {
-            badOps.push(`${op} match ${JSON.stringify(p.match)} hit ${ids.length} elements (> limit ${limit}) — narrow it or pass a higher limit`);
-            continue;
-          }
-        } else if (typeof p.id === "string") {
-          ids = [p.id];
-        } else {
-          badOps.push(`${op} needs a string id${op === "replace" ? "" : " or a match"}`);
-          continue;
-        }
-        const matchChanged = new Set<string>();
-        for (const id of ids) {
-          // A matched descendant of a container this match already removed is gone with it.
-          if (byMatch && removedIds.has(id)) continue;
-          const hit = locate(id);
-          if (!hit) {
-            notFound.push({ op, id });
-            continue;
-          }
-          if (op === "remove") {
-            for (const rid of subtreeIds(hit.node)) removedIds.add(rid);
-            hit.parentArr.splice(hit.index, 1);
-            if (!byMatch) applied.push({ op, id });
-          } else if (op === "replace") {
-            if (p.element == null) {
-              badOps.push(`replace ${id} needs element`);
-              continue;
-            }
-            const repl = p.element;
-            if (repl && typeof repl === "object" && repl.id == null) repl.id = id;
-            hit.parentArr[hit.index] = repl;
-            applied.push({ op, id });
-          } else if (op === "style") {
-            const changed = mergeStyleMap(hit.node, "styles", { desktop: p.desktop, mobile: p.mobile });
-            dropStaleMeasure(hit.node, null, { desktop: p.desktop, mobile: p.mobile }, null);
-            changed.forEach((c) => matchChanged.add(c));
-            if (!byMatch) applied.push({ op, id, changed });
-          } else {
-            // update (default)
-            const changed: string[] = [];
-            if (typeof p.type === "string" && p.type.trim() !== "") {
-              hit.node.type = p.type;
-              changed.push("type");
-            }
-            if (p.specials && typeof p.specials === "object") {
-              hit.node.specials = { ...(hit.node.specials ?? {}), ...p.specials };
-              changed.push("specials");
-            }
-            changed.push(...mergeStyleMap(hit.node, "styles", p.styles));
-            changed.push(...mergeStyleMap(hit.node, "config", p.config));
-            if (Array.isArray(p.events)) {
-              hit.node.events = p.events;
-              changed.push("events");
-            }
-            if (p.properties && typeof p.properties === "object") {
-              hit.node.properties = { ...(hit.node.properties ?? {}), ...p.properties };
-              changed.push("properties");
-            }
-            dropStaleMeasure(hit.node, p.specials, p.styles, p.config);
-            changed.forEach((c) => matchChanged.add(c));
-            if (!byMatch) applied.push({ op: "update", id, changed });
-          }
-        }
-        if (byMatch) applied.push({ op, match: p.match, matched_ids: ids, ...(op === "remove" ? {} : { changed: [...matchChanged] }) });
-      }
-      // Removed elements that other elements' events still target (open_popup, scroll_to, …).
-      const dangling = removedIds.size ? refsTo(base, removedIds) : [];
-      const integrity = dangling.length
-        ? { dangling_events: dangling, dangling_warning: `${dangling.length} event(s) still target removed element(s) and will do nothing — retarget or remove them (patch_page update events).` }
-        : {};
-
-      if (badOps.length > 0) {
-        return text({ patched: false, reason: "bad_ops", bad_ops: badOps, hint: "Each op needs id (or parent_id for add) and an element where required." });
-      }
-      if (notFound.length > 0) {
-        return text({
-          patched: false,
-          reason: "target_not_found",
-          not_found: notFound,
-          hint: "No element with that id exists on the live page. Run get_page to see the current ids; ids are case-sensitive.",
-        });
-      }
-
-      // Validate the WHOLE merged tree (hydrate sparse replaced/added nodes first).
-      const expanded = domain.expand(base);
-      const result = domain.validate(expanded);
-
-      // DRAFT path: the source came from a failed/dry-run create_page, add_section,
-      // or a timed-out/failed update_page / live-page patch_page.
-      // Keep applied fixes cached between rounds; once valid, dispatch based on kind:
-      //   'page'    (or absent) → CREATE a new page
-      //   'sections'            → APPEND to the live page
-      //   'update'              → UPDATE the existing page (updatePageSource)
-      if (draft_id && draft) {
-        // an update draft refuses only errors beyond what the live page already had
-        const blocking = result.valid ? [] : draft.kind === "update" && draft.prior_errors ? addedAgainst(draft.prior_errors, result.errors) : result.errors;
-        if (blocking.length) {
-          await updateDraft(draft_id, base); // persist partial fixes for the next patch round
-          return text({
-            patched: false,
-            reason: "validation_failed",
-            errors: blocking,
-            ...(blocking.length < result.errors.length ? { pre_existing_errors: result.errors.length - blocking.length } : {}),
-            ...warningsField(result.warnings),
-            patches_applied: applied, ...integrity,
-            draft_id,
-            hint: "Still invalid — fix the remaining errors with another patch_page({ draft_id, patches:[…] }); your applied fixes are kept in the draft. Each error names the offending element id — target THAT id. A stray/extra key ('must NOT have additional properties') needs op:'replace' with a clean node (op:'update' merges; it cannot delete a key). Do NOT rebuild with create_page — the draft already holds everything.",
-          });
-        }
-        const parsed = domain.coerce(expanded);
-
-        // --- Sections draft: APPEND to the live page once valid ---
-        if (draft.kind === "sections") {
-          const targetPageId = page_id ?? draft.page_id;
-          if (!targetPageId) {
-            await updateDraft(draft_id, base);
-            return text({
-              patched: false,
-              reason: "no_page_id",
-              draft_id,
-              hint: "No page_id on this sections draft. Pass page_id explicitly to patch_page to set the append target.",
-            });
-          }
-          if (isDry) {
-            await updateDraft(draft_id, base);
-            return text({
-              dry_run: true,
-              draft_id,
-              page_id: targetPageId,
-              patches_applied: applied, ...integrity,
-              validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
-              env_ready: missing.length === 0,
-              missing_env: missing,
-              request: config
-                ? buildAppendRequestRedacted(config, targetPageId, (expanded as any).page ?? [])
-                : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable the append." },
-              hint: `Sections draft is now valid. Re-run patch_page({ draft_id: "${draft_id}", dry_run: false }) with NO patches to append the sections. (the ones just applied are saved in the draft; resending them would apply them twice).`,
-            });
-          }
-          if (!config) {
-            await updateDraft(draft_id, base);
-            return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
-          }
-          const sectionsToAppend = Array.isArray((expanded as any).page) ? (expanded as any).page : [];
-          const outcome = await appendSection(config, targetPageId, sectionsToAppend);
-          if (outcome.ok) {
-            await deleteDraft(draft_id);
-            forgetPageVersion(targetPageId);
-            invalidateSource(config, targetPageId);
-          } else {
-            await updateDraft(draft_id, base);
-          }
-          return text({
-            patched: outcome.ok,
-            appended: outcome.ok,
-            from_draft: draft_id,
-            patches_applied: applied, ...integrity,
-            page_id: outcome.page_id ?? targetPageId,
-            editor_url: outcome.editor_url,
-            preview_url: outcome.preview_url,
-            status: outcome.status,
-            error: outcome.error,
-            ...saveExtras(outcome),
-            ...warningsField(result.warnings),
-            ...(outcome.ok ? {} : { draft_id, hint: `Append failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
-          });
-        }
-
-        // --- Update draft: UPDATE the existing page once valid ---
-        if (draft.kind === "update") {
-          const targetPageId = page_id ?? draft.page_id;
-          if (!targetPageId) {
-            await updateDraft(draft_id, base);
-            return text({
-              patched: false,
-              reason: "no_page_id",
-              draft_id,
-              hint: "No page_id on this update draft. Pass page_id explicitly to patch_page to set the update target.",
-            });
-          }
-          if (isDry) {
-            await updateDraft(draft_id, base);
-            return text({
-              dry_run: true,
-              draft_id,
-              page_id: targetPageId,
-              patches_applied: applied, ...integrity,
-              validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
-              env_ready: missing.length === 0,
-              missing_env: missing,
-              request: config
-                ? buildUpdateRequestRedacted(config, targetPageId, parsed)
-                : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable the update." },
-              hint: `Update draft is now valid. Re-run patch_page({ draft_id: "${draft_id}", dry_run: false }) with NO patches to save. (the ones just applied are saved in the draft; resending them would apply them twice).`,
-            });
-          }
-          if (!config) {
-            await updateDraft(draft_id, base);
-            return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
-          }
-          const guard = await guardOverwrite(config, targetPageId, parsed, {
-            baseVersion: draft.base_version,
-            force,
-            retryHint: `patch_page({ draft_id: "${draft_id}", dry_run:false })`,
-          });
-          if (!guard.ok) {
-            await updateDraft(draft_id, base);
-            return text({ patched: false, updated: false, ...guard.payload, draft_id, patches_applied: applied, ...integrity });
-          }
-          const outcome = await updatePageSource(config, targetPageId, parsed, guard.base);
-          if (outcome.page_changed) {
-            await updateDraft(draft_id, base);
-            return text({ patched: false, ...pageChangedPayload(targetPageId, outcome, `patch_page({ draft_id: "${draft_id}", dry_run:false })`), draft_id });
-          }
-          if (outcome.ok) {
-            await deleteDraft(draft_id);
-            rememberPageVersion(targetPageId, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
-            invalidateSource(config!, targetPageId);
-          } else {
-            await updateDraft(draft_id, base);
-          }
-          return text({
-            patched: outcome.ok,
-            updated: outcome.ok,
-            from_draft: draft_id,
-            patches_applied: applied, ...integrity,
-            page_id: outcome.page_id ?? targetPageId,
-            editor_url: outcome.editor_url,
-            preview_url: outcome.preview_url,
-            status: outcome.status,
-            error: outcome.error,
-            ...saveExtras(outcome),
-            ...warningsField(result.warnings),
-            ...(outcome.ok ? {} : { draft_id, hint: `Update failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) after resolving the error.` }),
-          });
-        }
-
-        // --- Page draft (kind='page' or absent): CREATE as a new page once valid ---
-        if (isDry) {
-          await updateDraft(draft_id, base);
-          return text({
-            dry_run: true,
-            draft_id,
-            patches_applied: applied, ...integrity,
-            validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
-            env_ready: missing.length === 0,
-            missing_env: missing,
-            request: config
-              ? buildRequestRedacted(config, draft.name ?? "AI Page", parsed, draft.organization_id)
-              : { note: "Set WEBCAKE_API_BASE + WEBCAKE_JWT (env) or send the x-webcake-jwt header to enable creation." },
-            hint: `Draft is now valid. Re-run patch_page({ draft_id: "${draft_id}", dry_run: false }) with NO patches to create the page. (the ones just applied are saved in the draft; resending them would apply them twice).`,
-          });
-        }
-        if (!config) {
-          await updateDraft(draft_id, base);
-          return text({ patched: false, reason: "missing_env", missing_env: missing, hint: `Add WEBCAKE_API_BASE + WEBCAKE_JWT, then retry patch_page({ draft_id: "${draft_id}", dry_run:false }).` });
-        }
-        // CACHE-FIRST: source is already in the draft; refresh before the network call.
-        await updateDraft(draft_id, base);
-        const outcome = await createPage(config, draft.name ?? "AI Page", parsed, draft.organization_id);
-        if (outcome.ok) {
-          await deleteDraft(draft_id);
-          rememberPageVersion(outcome.page_id, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
-          invalidateSource(config!, outcome.page_id);
-        } else {
-          await updateDraft(draft_id, base); // keep for retry
-        }
-        // A page created via the fix-after-error path gets the same auto-publish
-        // as a direct create_page (build + publish_html so the preview renders).
-        const publishOutcome = outcome.ok ? await autoPublish(config, outcome.page_id!, outcome.rehosted_source ?? parsed) : undefined;
-        return text({
-          patched: outcome.ok,
-          created: outcome.ok,
-          from_draft: draft_id,
-          patches_applied: applied, ...integrity,
-          page_id: outcome.page_id,
-          editor_url: outcome.editor_url,
-          preview_url: outcome.preview_url,
-          status: outcome.status,
-          error: outcome.error,
-          ...saveExtras(outcome),
-          ...(publishOutcome ? { publish: publishOutcome } : {}),
-          ...warningsField(result.warnings),
-          ...(outcome.ok ? {} : { draft_id, hint: `Create failed — fixes kept in draft. Retry patch_page({ draft_id: "${draft_id}", dry_run:false }) or resolve the error first.` }),
-        });
-      }
-
-      // LIVE-PAGE path: edit an existing page (page_id) and update it in place.
-      // Errors the page already had (an old enum value, an editor-written oddity) don't block an edit
-      // that doesn't add any: only errors THIS write introduces are refused.
-      const added = result.valid ? [] : addedErrors(domain, before, result.errors);
-      if (!result.valid && added.length) {
-        return text({
-          patched: false,
-          reason: "validation_failed",
-          errors: added,
-          ...(added.length < result.errors.length ? { pre_existing_errors: result.errors.length - added.length } : {}),
-          ...warningsField(result.warnings),
-          patches_applied: applied, ...integrity,
-          hint: "The edit produced an invalid tree — fix the listed errors in your ops, then retry.",
-        });
-      }
-      const parsed = domain.coerce(expanded);
-
-      // CACHE-FIRST: write an 'update' draft BEFORE the network call so a timeout or
-      // failure is recoverable via patch_page({ draft_id, dry_run:false }) with no patches.
-      const liveDraftId = await putDraft({
-        source: expanded,
-        kind: "update",
-        page_id: page_id!,
-        prior_errors: priorErrors(domain, before),
-        base_version: lastKnownPageVersion(page_id!)?.fp,
-      });
-
-      if (isDry) {
-        return text({
-          dry_run: true,
-          page_id,
-          patches_applied: applied, ...integrity,
-          validation: { valid: true, ...warningsField(result.warnings), stats: result.stats },
-          draft_id: liveDraftId,
-          request: buildUpdateRequestRedacted(config!, page_id!, parsed),
-          hint: `Re-run patch_page({ draft_id: "${liveDraftId}", dry_run: false }) — no need to re-send patches. Or re-run with page_id + dry_run:false.`,
-        });
-      }
-
-      // against the version just read: only the changed sections travel, and an editor save that
-      // landed in between is refused by the backend instead of being overwritten
-      const outcome = await updatePageSource(config!, page_id!, parsed, { base: liveRead?.version, before: before && domain.expand(before) });
-      if (outcome.page_changed) {
-        await deleteDraft(liveDraftId);
-        invalidateSource(config!, page_id!);
-        return text({ patched: false, ...pageChangedPayload(page_id!, outcome, "patch_page"), hint: "The page was saved by someone else between this patch's read and its write — nothing was written. Re-run the SAME patch_page call: it re-reads the live page and applies your ops to it." });
-      }
-      if (outcome.ok) {
-        await deleteDraft(liveDraftId);
-        rememberPageVersion(page_id!, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
-        afterWrite(config!, page_id!, outcome, outcome.rehosted_source ?? parsed, liveRead);
-        return text({
-          patched: true,
-          patches_applied: applied, ...integrity,
-          page_id: outcome.page_id,
-          editor_url: outcome.editor_url,
-          preview_url: outcome.preview_url,
-          status: outcome.status,
-          ...saveExtras(outcome),
-          ...warningsField(result.warnings),
-        });
-      }
-      // Network failure / timeout: keep the update draft for retry.
-      await updateDraft(liveDraftId, expanded);
-      return text({
-        patched: false,
-        patches_applied: applied, ...integrity,
-        page_id: outcome.page_id ?? page_id,
-        status: outcome.status,
-        error: outcome.error,
-        ...saveExtras(outcome),
-        ...warningsField(result.warnings),
-        draft_id: liveDraftId,
-        hint: `Save failed — the patched source is cached. Retry via patch_page({ draft_id: "${liveDraftId}", dry_run: false }) with no patches. The draft expires in ~2 h.`,
-      });
-    }
+    async (args: any, extra: any) => runPatch(args, extra),
   );
 
   // 15) Publish page (go live) -------------------------------------------------
