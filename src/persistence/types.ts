@@ -89,6 +89,8 @@ export type CreateOutcome = {
   patch_ops?: number;
   /** nothing was written: the tree already equals the version it was read at */
   unchanged?: boolean;
+  /** with via "patch": the ops sent (applyOps(before, sent_ops) = the stored tree) */
+  sent_ops?: any[];
 };
 
 /**
