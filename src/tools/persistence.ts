@@ -127,11 +127,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       const probe = await getPageVersion(config, pageId);
       if (probe.ok && probe.version) {
         const hit = cachedPageSource(key, probe.version);
-        if (hit) return { ...hit, from_cache: true as const };
+        // a copy: callers edit the tree they get (patch ops, expand) — the cache must stay the STORED tree
+        if (hit) return { ...hit, source: structuredClone(hit.source), from_cache: true as const };
       }
     }
     const full = await getPageSource(config, pageId);
-    if (full.ok && full.source != null) cachePageSource(key, full.version, full);
+    if (full.ok && full.source != null) cachePageSource(key, full.version, { ...full, source: structuredClone(full.source) });
     return { ...full, from_cache: false as const };
   };
 
@@ -144,7 +145,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // ponytail: only a whole-tree write is cached — after a patch the server holds the untouched
   // sections in their stored (unexpanded) form, so the next read downloads it once.
   const afterWrite = (config: WebcakeConfig, pageId: string, outcome: { version?: string; via?: string }, stored: unknown, meta?: any) => {
-    if (outcome.version && outcome.via === "update" && meta?.ok) cachePageSource(sourceCacheKey(pageId, config.jwt), outcome.version, { ...meta, version: outcome.version, source: stored, from_cache: undefined });
+    if (outcome.version && outcome.via === "update" && meta?.ok) cachePageSource(sourceCacheKey(pageId, config.jwt), outcome.version, { ...meta, version: outcome.version, source: structuredClone(stored), from_cache: undefined });
     else invalidateSource(config, pageId);
   };
   /** The backend refused the write: the page moved on between our read and the save (under its row lock). */
