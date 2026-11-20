@@ -224,6 +224,18 @@ console.log("== expand: relocates misplaced responsive.<bp>.animation into confi
   check("explicit config.animation wins over the stray key", kept.config.animation.name === "zoomIn" && kept.animation === undefined, kept.config);
 }
 
+console.log("== editor-saved values: looping animation + empty click event (#4) ==");
+{
+  // A page saved by the editor carries repeat:"infinite" on looping animations and
+  // action:null on an event added but never configured — a whole-tree patch must not choke on them.
+  const ed = structuredClone(good) as any;
+  const el = ed.page[0].children[0];
+  el.responsive.desktop.config.animation = { name: "pulse", delay: 0, duration: 1, repeat: "infinite" };
+  el.events = [{ id: "ev_null", type: "click", action: null, target: null }];
+  const r = validatePage(landingDomain.expand(ed));
+  check("editor repeat:'infinite' + action:null validate", r.valid, r.errors);
+}
+
 console.log("== form fields: field_default follows the system field_name; alias names warn ==");
 {
   // The editor locks a field's ID when properties.field_default is true and
