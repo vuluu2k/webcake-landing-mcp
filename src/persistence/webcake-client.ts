@@ -585,7 +585,7 @@ export async function appendSection(
   opts: WriteBase = {}
 ): Promise<CreateOutcome & { endpoint_missing?: boolean; section_count?: number; sections_added?: number }> {
   const url = `${config.base}${APPEND_ENDPOINT}`;
-  const { source: hostedSections, report: rehost } = await rehostSourceImages(config, sections);
+  const { source: hostedSections, report: rehost } = await rehostSourceImages(config, sections, pageId);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -649,7 +649,7 @@ export async function updatePageSource(
   opts: WriteBase = {}
 ): Promise<CreateOutcome> {
   let url = `${config.base}${UPDATE_ENDPOINT}`;
-  const { source: hostedSource, report: rehost } = await rehostSourceImages(config, withGoogleWeightLinks(source));
+  const { source: hostedSource, report: rehost } = await rehostSourceImages(config, withGoogleWeightLinks(source), pageId);
   // Against a known version: send only the changed sections (patch_page_source) when that is smaller.
   let body = JSON.stringify({ page_id: pageId, source: hostedSource, ...baseField(opts.base) });
   let via: "patch" | "update" = "update";
@@ -1305,7 +1305,8 @@ function rehostFilename(src: string, ext: string): string {
  */
 export async function rehostSourceImages(
   config: WebcakeConfig,
-  source: unknown
+  source: unknown,
+  pageId?: string
 ): Promise<{ source: unknown; report?: RehostReport }> {
   const candidates = collectExternalImageUrls(source);
   if (candidates.length === 0) return { source };
@@ -1319,7 +1320,15 @@ export async function rehostSourceImages(
   // collection. This never blocks the save: a page's images are not worth
   // failing a write over, and create_page already refuses to save at all when
   // the org is ambiguous, so by this point an org is normally settled.
-  const orgId = config.jwt ? await resolveCollectionOrgId(config) : undefined;
+  let orgId = config.jwt ? await resolveCollectionOrgId(config) : undefined;
+  // An edit (update/append) on a multi-org account: file into the PAGE's org.
+  // The public fallback mints URLs without the -w:/-h: info, which the editor's
+  // publish turns into a 404 `sNaN` thumbnail/favicon (#5).
+  if (!orgId && config.jwt && pageId) {
+    const found = await searchPages(config, { id: pageId, limit: 1 });
+    const org = found.pages?.find((p) => `${p.id}` === `${pageId}`)?.organization_id;
+    if (org != null && `${org}` !== "") orgId = `${org}`;
+  }
   if (orgId) config = { ...config, orgId };
   const scope = config.jwt && orgId ? `org:${orgId}` : "public";
 

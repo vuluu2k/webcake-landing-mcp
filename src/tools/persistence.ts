@@ -34,6 +34,7 @@ import { applyOps,
   toPreviewUrl,
 } from "../persistence/webcake-client.js";
 import { matchAccountDomain, normalizeDomain } from "../persistence/domain-match.js";
+import { healBrokenResizeUrls } from "../persistence/rehost.js";
 import { putDraft, getDraft, updateDraft, deleteDraft } from "../persistence/draft-cache.js";
 import {
   sourceFingerprint,
@@ -1802,6 +1803,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       if (!res.ok || res.source == null) {
         return text({ published: false, reason: "page_not_found", status: res.status, error: res.error ?? "No source on this page." });
       }
+      // An editor publish may have stored a 404 `sNaN` thumbnail/favicon — don't republish it (#5).
+      const source = healBrokenResizeUrls(res.source);
       // Resolve the domain to publish to the way the editor's publish modal does:
       // an explicit arg wins, otherwise reuse the page's CURRENTLY-ATTACHED domain
       // so a plain publish_page({ page_id }) keeps the page live at the same URL
@@ -1880,7 +1883,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             : { would_run: false, note: "No build host configured — publish will fall back to the LEGACY source-only route (nothing goes live). Set WEBCAKE_BUILD_BASE env or x-webcake-build-base header (prod preset: https://build.webcake.io) to publish for real." },
           ...(previewExpiryNote ? { note: previewExpiryNote } : {}),
           ...(domainNote ? { domain_note: domainNote } : {}),
-          request: buildPublishRequestRedacted(config, page_id, res.source, opts, !!buildBase),
+          request: buildPublishRequestRedacted(config, page_id, source, opts, !!buildBase),
           hint: "Re-run with dry_run=false to actually publish.",
         });
       }
@@ -1895,7 +1898,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       if (buildBase) {
         console.error(`[publish_page] calling build host ${buildBase} for page ${page_id}`);
-        const buildResult = await buildPageApp(buildBase, page_id, res.source);
+        const buildResult = await buildPageApp(buildBase, page_id, source);
         if (buildResult.ok) {
           app = buildResult.app;
           app_css = buildResult.app_css;
@@ -1910,7 +1913,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       }
 
       const publishOpts = { ...opts, app, app_css };
-      const outcome = await publishPage(config, page_id, res.source, publishOpts);
+      const outcome = await publishPage(config, page_id, source, publishOpts);
       return text({
         published: outcome.ok,
         // live = the PagePublishedV2 record public serving reads was written
