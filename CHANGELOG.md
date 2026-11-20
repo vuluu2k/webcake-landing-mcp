@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.5] - 2026-11-20
+
+### Fixed
+- `update_page`/`patch_page` no longer block on a click event the Webcake editor itself saved with `action:null` (an event added via the editor's EventTrait picker before a behavior was chosen, which the renderer simply ignores) — the page schema now accepts `null` for an event's `action`, alongside the existing `repeat:"infinite"` looping-animation value, so a live page carrying either no longer fails whole-tree validation on edit.
+
 ## [1.13.4] - 2026-11-20
 
 ### Changed

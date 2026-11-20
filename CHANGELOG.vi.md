@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.5] - 2026-11-20
+
+### Fixed
+- `update_page`/`patch_page` không còn bị chặn bởi một event click mà chính editor Webcake đã lưu với `action:null` (một event được thêm qua picker EventTrait của editor trước khi chọn hành vi, và renderer đơn giản bỏ qua nó) — page schema nay chấp nhận giá trị `null` cho `action` của event, cùng với giá trị animation lặp `repeat:"infinite"` đã hỗ trợ trước đó, nên một trang đang chạy mang một trong hai giá trị này không còn bị validate cả cây từ chối khi sửa.
+
 ## [1.13.4] - 2026-11-20
 
 ### Changed
