@@ -210,8 +210,8 @@
           "description": "Trigger. Matches the editor's own dropdown: click/hover on any element, success/error on a form, delay on anything (plus the legacy \"unset\")."
         },
         "action": {
-          "type": "string",
-          "description": "Behavior. Common click actions and what target holds: none(-), open_link(URL), open_popup(popup id), close_popup(popup id), scroll_to(element/section id), show_section/hide_section(section id), show_hide_element(element id), change_tab(id), lightbox(image id/url), copy(text), collapse(id), set_field_value(field_name + set_value), back_to/back_home(url), share(url), play_audio/stop_audio(id), open_cart/add_to_cart(product id), open_app(provider: botcake|whatsapp|mess_prefill|tiktok_prefill|line_prefill), change_color, custom_js. Hover actions: change_color, change_background, change_text_color, change_underline, change_overline, change_image, animation_hover, show_hide_element.",
+          "type": ["string", "null"],
+          "description": "null = an event the editor added but no action was picked yet (EventTrait.vue add()); the renderer ignores it and create_page's repair drops it. Behavior. Common click actions and what target holds: none(-), open_link(URL), open_popup(popup id), close_popup(popup id), scroll_to(element/section id), show_section/hide_section(section id), show_hide_element(element id), change_tab(id), lightbox(image id/url), copy(text), collapse(id), set_field_value(field_name + set_value), back_to/back_home(url), share(url), play_audio/stop_audio(id), open_cart/add_to_cart(product id), open_app(provider: botcake|whatsapp|mess_prefill|tiktok_prefill|line_prefill), change_color, custom_js. Hover actions: change_color, change_background, change_text_color, change_underline, change_overline, change_image, animation_hover, show_hide_element.",
           "examples": [
             "none", "open_link", "open_popup", "close_popup", "scroll_to",
             "show_section", "hide_section", "show_hide_element", "copy",
