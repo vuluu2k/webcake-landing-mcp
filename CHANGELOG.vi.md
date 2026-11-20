@@ -6,6 +6,13 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] - 2026-11-20
+
+### Fixed
+- `update_page`, `patch_page`, `add_section` (đường fallback cho backend cũ), và việc hoàn tất một draft đã cache qua `create_page`/`patch_page`/`update_page` với `draft_id` nay đều chỉ chặn lưu vì lỗi validate do chính lần sửa này tạo ra, không còn chặn vì lỗi trang đang chạy đã có từ trước — mở rộng quy tắc trước đây chỉ áp dụng cho sửa trực tiếp qua `update_page`/`patch_page`.
+- Kiểm tra `[NO_EFFECT]` của `validate_page` và bảng `keys` của `get_element` không còn coi `currentTime`/`typeTimeGroup` là có render trên mọi loại element (chỉ `timegroup` mới đọc chúng) hay `multiOption` là có render trên mọi type (chỉ `survey` mới đọc nó), và không còn báo sai `columns`, `margin`, `alignment`, `checkboxSize`, `hoveredBorder`, `imageHeight`, `imageWidth`, `head_background`, `head_color`, `row_even_background`, `row_even_color`, `row_odd_background`, `row_odd_color`, `selectedBackground`, `selectedBorder` là các key có render.
+- Mô tả `fb_event_type` của element `form`, trả về qua `get_element`/`list_elements`/`new_element`, nay ghi rõ form dựng từ `new_element` mang mặc định sự kiện Facebook pixel `CompleteRegistration` của chính editor, và sự kiện này chỉ bắn khi trang có cài Facebook pixel.
+
 ## [1.13.0] - 2026-11-19
 
 ### Added

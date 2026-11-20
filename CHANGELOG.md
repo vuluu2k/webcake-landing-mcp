@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] - 2026-11-20
+
+### Fixed
+- `update_page`, `patch_page`, `add_section` (legacy fallback path), and completing a cached draft via `create_page`/`patch_page`/`update_page` with a `draft_id` now all block a save only on validation errors introduced by the current edit, not on errors the live page already had — extending the rule that previously covered only direct `update_page`/`patch_page` edits.
+- `validate_page`'s `[NO_EFFECT]` check and `get_element`'s `keys` reference no longer treat `currentTime`/`typeTimeGroup` as rendered on every element type (only `timegroup` reads them) or `multiOption` as rendered on every type (only `survey` reads it), and no longer misreport `columns`, `margin`, `alignment`, `checkboxSize`, `hoveredBorder`, `imageHeight`, `imageWidth`, `head_background`, `head_color`, `row_even_background`, `row_even_color`, `row_odd_background`, `row_odd_color`, `selectedBackground`, and `selectedBorder` as rendered keys.
+- The `form` element's `fb_event_type` doc, returned by `get_element`/`list_elements`/`new_element`, now notes that a form built by `new_element` defaults to the editor's own `CompleteRegistration` Facebook pixel event, which only fires when the page has a Facebook pixel installed.
+
 ## [1.13.0] - 2026-11-19
 
 ### Added
