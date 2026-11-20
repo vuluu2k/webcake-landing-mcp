@@ -137,6 +137,7 @@ export function elementSchema(type: string): ElementSchema | undefined {
       ...Object.keys(ed?.[b] || {}),
       ...Object.keys(desc[b]),
       ...Object.keys(fvals[b]),
+      ...(b === "specials" ? CLIENT_BY_TYPE[type] ?? [] : []),
     ]);
     for (const k of names) {
       // A shared helper's default / compared values hold for every type only for config (sticky*,

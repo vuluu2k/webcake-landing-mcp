@@ -131,7 +131,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       }
     }
     const full = await getPageSource(config, pageId);
-    if (full.ok && full.source != null) cachePageSource(key, full.updated_at, full);
+    if (full.ok && full.source != null) cachePageSource(key, full.version, full);
     return { ...full, from_cache: false as const };
   };
 
@@ -139,6 +139,23 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   const invalidateSource = (config: WebcakeConfig, pageId: string | undefined) => {
     if (pageId) dropCachedPageSource(sourceCacheKey(pageId, config.jwt));
   };
+  /** After a write the backend versioned (source_hash / updated_at): the stored tree IS what we sent,
+   *  so cache it under that version — the next read is a version probe, not a download. */
+  // ponytail: only a whole-tree write is cached — after a patch the server holds the untouched
+  // sections in their stored (unexpanded) form, so the next read downloads it once.
+  const afterWrite = (config: WebcakeConfig, pageId: string, outcome: { version?: string; via?: string }, stored: unknown, meta?: any) => {
+    if (outcome.version && outcome.via === "update" && meta?.ok) cachePageSource(sourceCacheKey(pageId, config.jwt), outcome.version, { ...meta, version: outcome.version, source: stored, from_cache: undefined });
+    else invalidateSource(config, pageId);
+  };
+  /** The backend refused the write: the page moved on between our read and the save (under its row lock). */
+  const pageChangedPayload = (pageId: string, outcome: { live_version?: string }, retryHint: string) => ({
+    reason: "page_changed_externally",
+    page_id: pageId,
+    live_version: outcome.live_version,
+    hint:
+      "The page was saved by someone else (the Webcake editor, another agent) between this read and the write — the backend refused it, nothing was overwritten. " +
+      `Do ONE of these: (a) patch_page({ page_id, patches:[…] }) — it re-reads and merges into the LIVE tree; (b) get_page again, re-apply, save; (c) to discard their change, re-run ${retryHint} with force:true.`,
+  });
 
   // ---- stale-overwrite guard ------------------------------------------------
   // update_page (and a committed 'update' draft) REPLACES the stored source with a
@@ -160,7 +177,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     pageId: string,
     incoming: any,
     opts: { baseVersion?: string; force?: boolean; retryHint: string }
-  ): Promise<{ ok: true; liveVersion?: string; notice?: string } | { ok: false; payload: any }> => {
+  ): Promise<{ ok: true; liveVersion?: string; notice?: string; base?: { base?: string; before?: any }; live?: any } | { ok: false; payload: any }> => {
     if (opts.force) return { ok: true, notice: "force:true — the staleness check was skipped and any newer editor changes were overwritten." };
 
     const live = await readLiveSource(config, pageId);
@@ -176,6 +193,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       return {
         ok: true,
         liveVersion: verdict.liveVersion,
+        // the write goes against THIS read: the backend refuses it if the page moved since
+        // (expanded like the incoming tree, so only sections that really change are sent)
+        base: { base: live.version, before: domain.expand(live.source) },
+        live,
         ...(verdict.unverified
           ? {
               notice:
@@ -818,12 +839,15 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         return text({ updated: false, ...guard.payload, draft_id: existingDraftId });
       }
 
-      const outcome = await updatePageSource(config, resolvedPageId, parsed);
+      const outcome = await updatePageSource(config, resolvedPageId, parsed, guard.base);
+      if (outcome.page_changed) {
+        return text({ updated: false, ...pageChangedPayload(resolvedPageId, outcome, `update_page({ draft_id: "${existingDraftId}", dry_run:false })`), draft_id: existingDraftId });
+      }
       if (outcome.ok) {
         await deleteDraft(existingDraftId);
         // The page now holds exactly what we sent — that becomes the new baseline.
         rememberPageVersion(resolvedPageId, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
-        invalidateSource(config!, resolvedPageId);
+        afterWrite(config!, resolvedPageId, outcome, outcome.rehosted_source ?? parsed, guard.live);
         return text({ updated: true, ...outcome, ...warningsField(result.warnings), ...(guard.notice ? { stale_check: guard.notice } : {}) });
       }
       await updateDraft(existingDraftId, expanded);
@@ -1096,7 +1120,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
       const parsed = domain.coerce(merged);
-      const fbOutcome = await updatePageSource(config, page_id, parsed);
+      const fbOutcome = await updatePageSource(config, page_id, parsed, { base: current.version, before: domain.expand(base) });
+      if (fbOutcome.page_changed) {
+        return text({ added: false, ...pageChangedPayload(page_id, fbOutcome, "add_section"), hint: "The page was saved by someone else while the sections were being merged — nothing was written. Re-run the same add_section call." });
+      }
       if (fbOutcome.ok && existingDraftId) await deleteDraft(existingDraftId);
       // The fallback merged into the tree it JUST read, so no staleness guard is
       // needed here — but the save makes a new baseline worth recording.
@@ -1219,6 +1246,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       // Resolve the base source: a cached draft (create-before-save), else a live page.
       let base: any;
+      let liveRead: any; // the live read a page_id patch merges into (its version guards the save)
       const draft = draft_id ? await getDraft(draft_id) : null;
       if (draft_id) {
         if (!draft) {
@@ -1252,6 +1280,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         // This read is by definition current, so it becomes the baseline: a later
         // update_page that still matches it is provably not reverting anything.
         rememberPageVersion(page_id!, sourceFingerprint(current.source), "read");
+        liveRead = current;
         base = current.source;
         if (typeof base === "string") {
           try {
@@ -1531,7 +1560,11 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
             await updateDraft(draft_id, base);
             return text({ patched: false, updated: false, ...guard.payload, draft_id, patches_applied: applied, ...integrity });
           }
-          const outcome = await updatePageSource(config, targetPageId, parsed);
+          const outcome = await updatePageSource(config, targetPageId, parsed, guard.base);
+          if (outcome.page_changed) {
+            await updateDraft(draft_id, base);
+            return text({ patched: false, ...pageChangedPayload(targetPageId, outcome, `patch_page({ draft_id: "${draft_id}", dry_run:false })`), draft_id });
+          }
           if (outcome.ok) {
             await deleteDraft(draft_id);
             rememberPageVersion(targetPageId, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
@@ -1644,11 +1677,18 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
 
-      const outcome = await updatePageSource(config!, page_id!, parsed);
+      // against the version just read: only the changed sections travel, and an editor save that
+      // landed in between is refused by the backend instead of being overwritten
+      const outcome = await updatePageSource(config!, page_id!, parsed, { base: liveRead?.version, before: before && domain.expand(before) });
+      if (outcome.page_changed) {
+        await deleteDraft(liveDraftId);
+        invalidateSource(config!, page_id!);
+        return text({ patched: false, ...pageChangedPayload(page_id!, outcome, "patch_page"), hint: "The page was saved by someone else between this patch's read and its write — nothing was written. Re-run the SAME patch_page call: it re-reads the live page and applies your ops to it." });
+      }
       if (outcome.ok) {
         await deleteDraft(liveDraftId);
         rememberPageVersion(page_id!, sourceFingerprint(outcome.rehosted_source ?? parsed), "write");
-        invalidateSource(config!, page_id!);
+        afterWrite(config!, page_id!, outcome, outcome.rehosted_source ?? parsed, liveRead);
         return text({
           patched: true,
           patches_applied: applied, ...integrity,

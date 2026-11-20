@@ -9,7 +9,7 @@
 //   node scripts/mine-renderer.mjs   (LANDING_BUILD_DIR=../landing_page_build, LANDING_BACKEND_DIR=../landing_page_backend)
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { sourceRev } from "./source-rev.mjs";
 import ts from "typescript";
 
 const BUILD = path.resolve(process.env.LANDING_BUILD_DIR || "../landing_page_build");
@@ -408,30 +408,36 @@ const clientFiles = [];
 const mined = JSON.parse(fs.readFileSync("src/domains/landing/element-keys.generated.json", "utf8"));
 const universe = new Set();
 for (const t of Object.values(mined)) for (const b of BUCKETS) for (const k of Object.keys(t[b] || {})) universe.add(k);
-// Keys the editor itself writes on a dropped element (scripts/mine-presets.mjs), per type: a key the
-// runtime reads but no sampled page happens to use (timegroup currentTime / typeTimeGroup) is real —
-// for THAT type only, when its own render_v4/src/elements/<type>.js mentions it.
-const presetKeys = {};
-try {
-  const walkKeys = (n, set) => {
-    if (!n || typeof n !== "object") return;
-    for (const k of Object.keys(n.specials || {})) set.add(k);
-    for (const bp of ["desktop", "mobile"]) for (const b of ["config", "styles"]) for (const k of Object.keys(n.responsive?.[bp]?.[b] || {})) set.add(k);
-  };
-  for (const [t, p] of Object.entries(JSON.parse(fs.readFileSync("src/domains/landing/element-presets.json", "utf8")))) walkKeys(p.default, (presetKeys[t] = new Set()));
-} catch {}
 const tokensOf = (files) => {
   const s = new Set();
   for (const f of files) for (const m of fs.readFileSync(f, "utf8").matchAll(/[A-Za-z_$][\w$]*/g)) if (universe.has(m[0])) s.add(m[0]);
   return s;
 };
 const client = tokensOf(clientFiles);
+// Per type: the specials its OWN runtime file reads (render_v4/src/elements/<type>.js) — `specials.x`,
+// `specials?.x`, and `const { a, b = 1 } = this.vm.specials` — whether or not a sampled page uses them.
 const clientByType = {};
-for (const [t, keys] of Object.entries(presetKeys)) {
-  const f = path.join(BACKEND, "assets/render_v4/src/elements", `${t}.js`);
-  if (!fs.existsSync(f)) continue;
-  const src = fs.readFileSync(f, "utf8");
-  const hits = [...keys].filter((k) => !client.has(k) && new RegExp(`\\b${k.replace(/[$]/g, "\\$")}\\b`).test(src));
+const ELEMENTS_DIR = path.join(BACKEND, "assets/render_v4/src/elements");
+// src/index.js dispatches `case 'input-file': new Upload(vm)` and imports Upload from './elements/upload.js'
+const dispatchSrc = fs.existsSync(path.join(ELEMENTS_DIR, "../index.js")) ? fs.readFileSync(path.join(ELEMENTS_DIR, "../index.js"), "utf8") : "";
+const fileOfClass = Object.fromEntries([...dispatchSrc.matchAll(/import\s+(\w+)\s+from\s+['"]\.\/elements\/([\w-]+)\.js['"]/g)].map((m) => [m[1], m[2]]));
+const typeOfFile = {};
+for (const m of dispatchSrc.matchAll(/case\s+['"]([\w-]+)['"]\s*:\s*new\s+(\w+)/g)) if (fileOfClass[m[2]]) typeOfFile[fileOfClass[m[2]]] = m[1];
+for (const f of fs.existsSync(ELEMENTS_DIR) ? fs.readdirSync(ELEMENTS_DIR) : []) {
+  if (!f.endsWith(".js")) continue;
+  const t = typeOfFile[f.replace(/\.js$/, "")] ?? f.replace(/\.js$/, "");
+  const src = fs.readFileSync(path.join(ELEMENTS_DIR, f), "utf8");
+  // only the element's OWN vm (this.vm / this.el / this.element) — a file also reads child fields'
+  // and linked elements' specials (form.js: vm.specials of each field, survey.specials) — and not
+  // assignment targets (this.vm.specials.dataSetData = … is a runtime cache)
+  const OWN = String.raw`this\.(?:vm|el|element)\??\.specials`;
+  const keys = new Set([...src.matchAll(new RegExp(`${OWN}\\??\\.([A-Za-z_$][\\w$]*)(?![\\w$])(?!\\s*=(?!=))`, "g"))].map((m) => m[1]));
+  for (const m of src.matchAll(new RegExp(`\\{([^{}]*)\\}\\s*=\\s*${OWN}\\b`, "g")))
+    for (const part of m[1].split(",")) {
+      const k = part.trim().split(/[\s:=]/)[0];
+      if (/^[A-Za-z_$][\w$]*$/.test(k)) keys.add(k);
+    }
+  const hits = [...keys].filter((k) => !client.has(k));
   if (hits.length) clientByType[t] = hits.sort();
 }
 // Also any string literal / identifier on the server side (keys read through a key list or variable).
@@ -451,11 +457,7 @@ const ser = (o) => {
   }
   return o;
 };
-let branch = "?";
-try {
-  branch = execSync("git rev-parse --abbrev-ref HEAD", { cwd: BUILD }).toString().trim();
-} catch {}
-if (branch !== "master" && branch !== "?") console.warn(`! landing_page_build is on "${branch}", not master`);
+const branch = `build ${sourceRev(BUILD, "landing_page_build")} · render_v4 ${sourceRev(BACKEND, "landing_page_backend")}`;
 const out = {
   meta: { source: "landing_page_build/render/build (index.js, exportCss.js, event-data.js, animate.js, common.js) + landing_page_backend/assets/render_v4", branch, types: Object.keys(types).length, note: "at = file:line of the first read. styles_open: the CSS builder emits every styles key (minus styles_dropped). client_specials: all specials are shipped to window.event_data for the client runtime." },
   dispatched_html: Object.keys(html).sort(),

@@ -90,7 +90,7 @@
         "verify-code", "group-select", "group-select-item",
         "list-product", "search-list-product", "cart-items", "cart-quantity", "product-select", "table",
         "countdown", "timegroup", "auto-number", "random-number", "notify", "spin-wheel", "survey",
-        "alertMessage"
+        "live-comment", "alertMessage"
       ]
     },
     "styles": {

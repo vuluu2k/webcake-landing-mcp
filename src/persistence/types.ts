@@ -77,6 +77,16 @@ export type CreateOutcome = {
   rehosted_source?: unknown;
   /** present when settings.fontGroups was synced into the org's Font Groups (editor Font Manage) */
   fonts?: FontSyncReport;
+  /** the stored source's version token after the write (source_hash, else updated_at) — absent on an older backend */
+  version?: string;
+  /** refused by the backend: the stored source is no longer the `base` version this write was made against */
+  page_changed?: boolean;
+  /** with page_changed: the version the page is at now */
+  live_version?: string;
+  /** "patch" = only the changed sections were sent (patch_page_source); "update" = the whole tree */
+  via?: "patch" | "update";
+  /** with via "patch": how many element ops were sent */
+  patch_ops?: number;
 };
 
 /**

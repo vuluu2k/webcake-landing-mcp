@@ -289,6 +289,7 @@ export function validatePage(input: unknown): ValidationResult {
   const connectRefs: { from: string; key: string; target: string }[] = [];
   // form nodes — used to check field_name uniqueness within each form's scope
   const forms: any[] = [];
+  const liveComments: { node: any; path: string }[] = [];
   let elementCount = 0;
   // Whether ANY element (section, button, text…) carries real color on either
   // breakpoint. A page where this stays false renders flat/colorless (warned once).
@@ -932,6 +933,7 @@ export function validatePage(input: unknown): ValidationResult {
       }
     }
     if (type === "form") forms.push(node);
+    if (type === "live-comment") liveComments.push({ node, path });
 
     if (Array.isArray(node.children)) {
       node.children.forEach((c: any, idx: number) => walk(c, `${path}.children[${idx}]`, type));
@@ -962,6 +964,38 @@ export function validatePage(input: unknown): ValidationResult {
     const cleaned = target.replace(/^#?w-/, "");
     return !ids.has(target) && !ids.has(cleaned);
   };
+
+  // live-comment: crash shapes (repair fills them on save), data source, links to a form / popup
+  const bare = (id: unknown) => (typeof id === "string" ? id.replace(/^#?w-/, "") : "");
+  const formIds = new Set(forms.map((f) => f.id));
+  const popupIds = new Set((Array.isArray(page?.popup) ? page.popup : []).map((p: any) => p?.id));
+  for (const { node, path } of liveComments) {
+    const sp = node.specials ?? {};
+    // the CSS build reads [1]: null/undefined crash the whole page, a bare string builds wrong CSS
+    const bps = page?.options?.mobileOnly ? (["mobile"] as const) : (["desktop", "mobile"] as const);
+    for (const bp of bps)
+      for (const k of ["commentItemBackground", "commentInputBackground"]) {
+        const v = node.responsive?.[bp]?.config?.[k];
+        if (v == null) errors.push(`${path} (live-comment) [${bp}]: config.${k} is missing — the CSS build reads ${k}[1] and the whole page fails. Use [colour] (or [colour, "hidden"]).`);
+        else if (!Array.isArray(v)) warnings.push(`${path} (live-comment) [${bp}]: config.${k} must be an array [colour] (or [colour, "hidden"]) — a ${typeof v} builds a wrong background.`);
+      }
+    const src = sp.dataSourceType || "data_grid";
+    if (src === "data_grid" && !sp.datasetId)
+      warnings.push(`[EMPTY_RENDER] ${path} (live-comment): no specials.datasetId — the feed is empty. Set datasetId, or dataSourceType:"data_form" + formId (comments from a form on this page).`);
+    if (src === "data_form" && (!sp.formId || sp.formId === "none"))
+      warnings.push(`[EMPTY_RENDER] ${path} (live-comment): dataSourceType "data_form" without specials.formId — the feed is empty. Set formId to the comment form's id.`);
+    const formSet = typeof sp.formId === "string" && sp.formId && sp.formId !== "none";
+    if (src === "data_form" && formSet && !formIds.has(bare(sp.formId)))
+      warnings.push(`${path} (live-comment): specials.formId "${sp.formId}" is not a form on this page — new submits are not appended live (the feed still loads this page's live_comment submissions).`);
+    if (typeof sp.popupId === "string" && sp.popupId && sp.popupId !== "none") {
+      if (danglesId(sp.popupId)) warnings.push(`${path} (live-comment): specials.popupId "${sp.popupId}" matches no element — clicking the comment input does nothing.`);
+      else if (!popupIds.has(bare(sp.popupId))) warnings.push(`${path} (live-comment): specials.popupId "${sp.popupId}" is not a popup — openPopup does nothing for it. Point it at a popup's id.`);
+    }
+    // the runtime falls back to {{name}} {{comment}} placeholders in a legacy specials.content
+    const legacy = typeof sp.content === "string" && /\{\{[^}]+\}\}/.test(sp.content);
+    for (const k of ["nameField", "textCommentField"])
+      if (src === "data_form" && formSet && !sp[k] && !legacy) warnings.push(`${path} (live-comment): specials.${k} is empty — that part of every comment is blank. Set it to a field_name of the comment form.`);
+  }
 
   // dangling element-target events
   for (const t of eventTargets) {
