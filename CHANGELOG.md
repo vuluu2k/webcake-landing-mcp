@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.4] - 2026-11-20
+
+### Changed
+- All read-only tools (`get_generation_guide`, `list_elements`, `get_element`, `get_page_schema`, `new_element`, `new_page_skeleton`, `validate_page`, `compute_layout`, `ingest_html`, `ingest_url`, `search_images`, `get_icon_svg`, `render_preview`, `list_organizations`, `list_pages`, `find_pages`, `get_page`) now explicitly declare `destructiveHint:false`, making their non-destructive nature visible to MCP clients and directory reviewers instead of being left unannotated.
+
 ## [1.13.3] - 2026-11-20
 
 ### Fixed

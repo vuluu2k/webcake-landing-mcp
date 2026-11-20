@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.4] - 2026-11-20
+
+### Changed
+- Tất cả tool chỉ-đọc (`get_generation_guide`, `list_elements`, `get_element`, `get_page_schema`, `new_element`, `new_page_skeleton`, `validate_page`, `compute_layout`, `ingest_html`, `ingest_url`, `search_images`, `get_icon_svg`, `render_preview`, `list_organizations`, `list_pages`, `find_pages`, `get_page`) nay khai báo rõ `destructiveHint:false`, giúp các MCP client và người review directory thấy rõ tính không phá hủy của các tool này thay vì để trống annotation.
+
 ## [1.13.3] - 2026-11-20
 
 ### Fixed
