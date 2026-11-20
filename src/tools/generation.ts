@@ -19,7 +19,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
       type: z.string().describe("Element type to create."),
       name: z.string().optional().describe("Optional properties.name override (layer label)."),
     },
-    { title: "New Element Node", readOnlyHint: true, openWorldHint: false },
+    { title: "New Element Node", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ type, name }) => {
       if (!domain.catalog[type]) {
         return text({ error: `Unknown element type "${type}".`, valid_types: domain.elementTypes });
@@ -39,7 +39,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
       desktopWidth: z.union([z.literal(960), z.literal(1200)]).optional().describe("Desktop canvas width (settings.width_section.desktop). 960 (default, simple/narrow) or 1200 (wide/multi-column/editorial, or cloning a >960 reference)."),
       mobileWidth: z.union([z.literal(420), z.literal(360)]).optional().describe("Mobile canvas width (settings.width_section.mobile). 420 (default) or 360 (to match a ~360–390 mobile design)."),
     },
-    { title: "New Page Skeleton", readOnlyHint: true, openWorldHint: false },
+    { title: "New Page Skeleton", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ mobileOnly, desktopWidth, mobileWidth }) =>
       text(
         domain.createPageSource({
@@ -60,7 +60,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
       page: objectOrJson()
         .describe("The page source object { page:[...], settings:{} } OR a JSON string of it."),
     },
-    { title: "Validate Page Source", readOnlyHint: true, openWorldHint: false },
+    { title: "Validate Page Source", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ page }) => {
       // Hydrate sparse nodes (the model may omit boilerplate) before validating,
       // so what we check is the same full tree that create_page/add_section persist.
@@ -98,7 +98,7 @@ export function registerGenerationTools(server: McpServer, domain: Domain) {
       align: z.enum(["center", "left", "right"]).optional().describe("Horizontal alignment of the block within the canvas. Default center."),
       mobileItemWidth: z.number().optional().describe("Stacked-mobile item width (row/grid). Default = mobile content width."),
     },
-    { title: "Compute Layout Coordinates", readOnlyHint: true, openWorldHint: false },
+    { title: "Compute Layout Coordinates", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async (opts) => {
       if (!domain.computeLayout) {
         return text({ error: "This domain does not provide layout coordinates." });

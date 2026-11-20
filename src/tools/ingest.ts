@@ -100,7 +100,7 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
         .optional()
         .describe("The page's original URL, when the HTML was saved or copied from a live site. Resolves relative font and image URLs and fetches the page's external stylesheets (+ @imports), so self-hosted fonts (`font_groups`) and computed type (`typography` / `text_styles`) defined outside the HTML are included."),
     },
-    { title: "Ingest HTML Reference", readOnlyHint: true, openWorldHint: true },
+    { title: "Ingest HTML Reference", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async ({ html, intent, detail, sections, base_url }) => {
       const baseUrl = base_url && /^https?:\/\//i.test(base_url) ? base_url : undefined;
       const extraCss = baseUrl ? await fetchStylesheets(html, baseUrl) : undefined;
@@ -120,7 +120,7 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
       detail: detailParam,
       sections: sectionsParam,
     },
-    { title: "Ingest URL Reference", readOnlyHint: true, openWorldHint: true },
+    { title: "Ingest URL Reference", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async ({ url, intent, detail, sections }) => {
       const fetched = await fetchHtml(url);
       if (!fetched.ok) {

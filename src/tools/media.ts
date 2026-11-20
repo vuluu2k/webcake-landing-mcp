@@ -250,7 +250,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
       color: z.string().optional().describe("Optional color filter: a name (red, blue, …) or a hex like '6a8f3c'."),
       page: z.number().int().min(1).optional().describe("Result page for pagination (default 1)."),
     },
-    { title: "Search Stock Images", readOnlyHint: true, openWorldHint: true },
+    { title: "Search Stock Images", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async ({ query, queries, per_page, pick, orientation, size, color, page }, extra) => {
       const list: string[] = queries && queries.length ? queries : query ? [query] : [];
       if (list.length === 0) {
@@ -313,7 +313,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
         .max(40)
         .describe("Icon references to resolve (1–40), e.g. [\"ms:verified\", \"ms:support_agent\", \"fa:chart-line\"] — typically the block.icon values from an ingest result."),
     },
-    { title: "Resolve Icon SVGs", readOnlyHint: true, openWorldHint: true },
+    { title: "Resolve Icon SVGs", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async ({ icons }) => {
       const unique = [...new Set(icons)];
       const results = await Promise.all(unique.map(async (ref) => [ref, await resolveIconSvg(ref)] as const));
@@ -350,7 +350,7 @@ export function registerMediaTools(server: McpServer, allowLocalFiles = true) {
       width: z.number().int().min(320).max(2560).optional().describe("Viewport width in px (default 1280; ~960 or 1200 matches the desktop page canvas, ~420 the mobile one)."),
       tiles: z.boolean().optional().describe("Tall pages: return the page as MULTIPLE top→bottom band images (each readable in detail) instead of one squished full-page image. Requires a Playwright host (RENDER_SCREENSHOT_BASE); without one it falls back to a single image."),
     },
-    { title: "Render Preview Screenshot", readOnlyHint: true, openWorldHint: true },
+    { title: "Render Preview Screenshot", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async ({ page_id, url, full_page, width, tiles }, extra) => {
       const headers = extra?.requestInfo?.headers;
       let target = url?.trim();

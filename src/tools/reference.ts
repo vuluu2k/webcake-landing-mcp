@@ -17,7 +17,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   server.tool(
     "get_generation_guide",
     "Returns the page-building conventions reference: output shape, the absolute-positioning coordinate system, event vocabulary, and the recommended workflow.",
-    { title: "Get Generation Guide", readOnlyHint: true, openWorldHint: false },
+    { title: "Get Generation Guide", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async () => text(domain.guide)
   );
 
@@ -25,7 +25,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   server.tool(
     "list_elements",
     "List every supported element type, grouped by category, with a one-line summary and whether it is a container (can hold children).",
-    { title: "List Element Types", readOnlyHint: true, openWorldHint: false },
+    { title: "List Element Types", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async () => {
       const byCategory: Record<string, any[]> = {};
       for (const t of domain.elementTypes) {
@@ -52,7 +52,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
         .optional()
         .describe("Several element types fetched in one call, e.g. ['section','text-block','button','form','input']."),
     },
-    { title: "Get Element Details", readOnlyHint: true, openWorldHint: false },
+    { title: "Get Element Details", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async ({ type, types }) => {
       const list: string[] = types && types.length ? types : type ? [type] : [];
       if (list.length === 0) {
@@ -96,7 +96,7 @@ export function registerReferenceTools(server: McpServer, domain: Domain) {
   server.tool(
     "get_page_schema",
     "Returns the full JSON Schema (Draft 2020-12) of a Webcake page source object { page: [...], settings: {...} } for structural reference and validation.",
-    { title: "Get Page JSON Schema", readOnlyHint: true, openWorldHint: false },
+    { title: "Get Page JSON Schema", readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     async () => text(domain.schema)
   );
 }

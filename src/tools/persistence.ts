@@ -324,7 +324,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     "list_organizations",
     "Returns the account's Webcake organizations (id, name, is_default). The default org (type===1, usually the personal workspace) is where pages normally go. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {},
-    { title: "List Webcake Organizations", readOnlyHint: true, openWorldHint: true },
+    { title: "List Webcake Organizations", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async (_args, extra) => {
       const { config, missing } = cfgFor(extra);
       if (!config) {
@@ -617,7 +617,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     "list_pages",
     "Lists the pages owned by the account (id, name, organization_id, updated_at), most-recent first. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
     {},
-    { title: "List Webcake Pages", readOnlyHint: true, openWorldHint: true },
+    { title: "List Webcake Pages", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async (_args, extra) => {
       const { config, missing } = cfgFor(extra);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
@@ -647,7 +647,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       page_id: z.string().optional().describe("Exact page id — narrows to that single page (useful to confirm it exists/owned)."),
       limit: z.number().int().positive().max(100).optional().describe("Max results (default 50, capped at 100)."),
     },
-    { title: "Find Webcake Pages", readOnlyHint: true, openWorldHint: true },
+    { title: "Find Webcake Pages", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async ({ name, domain, page_id, limit }, extra) => {
       const { config, missing } = cfgFor(extra);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
@@ -689,7 +689,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .optional()
         .describe("Default TRUE — strip factory-default boilerplate from every element (sparse shape, far fewer tokens). false returns the raw stored tree."),
     },
-    { title: "Get Webcake Page Source", readOnlyHint: true, openWorldHint: true },
+    { title: "Get Webcake Page Source", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     async ({ page_id, draft_id, outline, element_id, compact }, extra) => {
       // Outline / one element / a draft: a narrow read of the same tree.
       const narrow = (src: any, meta: Record<string, unknown>) => {
