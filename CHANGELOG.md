@@ -6,6 +6,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.2] - 2026-11-20
+
+### Added
+- A new `live-comment` element (livestream-style scrolling comment feed above a fake input) is now in the catalog, with full docs in `get_element`/`list_elements`/`new_element`, an editor-matching seed, auto-repair of crash-prone shapes on save, and `validate_page` checks for its data source (`dataSourceType`/`datasetId`/`formId`), its required `config.commentItemBackground`/`commentInputBackground` arrays, and its `popupId`/`formId` links.
+
+### Changed
+- `update_page`, `patch_page`, and `add_section` now check a live-page write against the exact server-side version of the source the model last read (via `get_page` or an earlier `patch_page`/`add_section` in the same session) instead of a locally computed fingerprint, so a save that would revert an editor change, another agent's edit, or this session's own earlier edit is now reliably refused with `page_changed_externally` instead of silently overwriting it.
+- `update_page` and `patch_page` now send only the sections of the source that actually changed (via the backend's `patch_page_source` endpoint) instead of the whole tree whenever that is smaller, falling back to a whole-tree write on an older backend or when the backend rejects the computed ops; this cuts most single-element edits to one small request instead of a full read-then-write round trip.
+- After a successful `update_page`/`patch_page`/`add_section` write, the resulting page source is cached locally from the write itself, so an immediately following `get_page` or edit no longer re-downloads the page.
+- `patch_page` against a live page now automatically retries once, re-reading the live page and reapplying the same ops, when the backend reports the page changed between the read and the write.
+- `patch_page`'s internal duplicate/move ops (`REF_SPECIALS`) now also remap `live-comment`'s `formId`/`popupId` when duplicating a subtree that contains one.
+
+### Fixed
+- `get_element`'s `keys` reference and `validate_page`'s `[NO_EFFECT]` check are now computed from exactly the `specials` keys each element type's own renderer code reads, removing remaining false positives (e.g. a form's `ggc_*` keys, `input-file`'s `maxFile`, `timegroup`'s own keys) that were previously misreported as having no rendering effect.
+- The element catalog, presets, and renderer/editor key reference are now mined from the actual `origin/master` deploy of the renderer and editor instead of a local checkout that had drifted behind, fixing several stale defaults and key facts.
+
 ## [1.13.1] - 2026-11-20
 
 ### Fixed

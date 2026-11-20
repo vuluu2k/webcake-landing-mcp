@@ -6,6 +6,22 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.2] - 2026-11-20
+
+### Added
+- Danh mục có thêm element `live-comment` (luồng bình luận kiểu livestream cuộn lên trên một ô input giả), kèm tài liệu đầy đủ trong `get_element`/`list_elements`/`new_element`, seed khớp editor, tự sửa các hình dạng dễ crash khi lưu, và `validate_page` kiểm tra nguồn dữ liệu (`dataSourceType`/`datasetId`/`formId`), các mảng `config.commentItemBackground`/`commentInputBackground` bắt buộc, cùng liên kết `popupId`/`formId`.
+
+### Changed
+- `update_page`, `patch_page`, `add_section` nay kiểm tra việc ghi trang đang chạy dựa trên đúng phiên bản phía server của nguồn mà model đọc gần nhất (qua `get_page` hoặc một lần `patch_page`/`add_section` trước đó trong cùng phiên) thay vì một fingerprint tính cục bộ, nên một lần lưu có thể đè mất thay đổi của editor, của agent khác, hoặc của chính lần sửa trước trong phiên này giờ bị chặn chắc chắn với `page_changed_externally` thay vì ghi đè âm thầm.
+- `update_page` và `patch_page` nay chỉ gửi phần section thực sự đổi của nguồn (qua endpoint `patch_page_source` của backend) thay vì cả cây mỗi khi phần đó nhỏ hơn, và quay về ghi cả trang khi backend cũ hoặc khi backend từ chối các op đã tính; nhờ vậy hầu hết các lần sửa một element chỉ còn một request nhỏ thay vì một vòng đọc-rồi-ghi toàn trang.
+- Sau khi `update_page`/`patch_page`/`add_section` ghi thành công, nguồn trang kết quả được cache ngay từ lần ghi đó, nên một lần `get_page` hoặc sửa tiếp theo ngay sau không còn phải tải lại trang.
+- `patch_page` trên trang đang chạy nay tự động thử lại một lần — đọc lại trang và áp lại đúng các op — khi backend báo trang đã đổi giữa lúc đọc và lúc ghi.
+- Các op `duplicate`/`move` nội bộ của `patch_page` (`REF_SPECIALS`) nay cũng remap `formId`/`popupId` của `live-comment` khi sao chép một subtree có chứa nó.
+
+### Fixed
+- Bảng `keys` của `get_element` và kiểm tra `[NO_EFFECT]` của `validate_page` nay tính đúng theo các key `specials` mà chính mã renderer của mỗi type đọc, bỏ các báo sai còn sót (ví dụ key `ggc_*` của form, `maxFile` của `input-file`, các key riêng của `timegroup`) trước đây bị báo nhầm là không có tác dụng render.
+- Danh mục element, bộ preset, và bảng tra key renderer/editor nay được khai thác từ đúng bản deploy `origin/master` của renderer và editor thay vì một checkout cục bộ đã lệch, sửa một số giá trị mặc định và thông tin key bị cũ.
+
 ## [1.13.1] - 2026-11-20
 
 ### Fixed
