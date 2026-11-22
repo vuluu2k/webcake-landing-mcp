@@ -32,7 +32,7 @@ AI tự lo phần khó: bố cục, toạ độ, màu, validate, lưu về Webca
 | **Cài gì?** | Cần Node.js 18+ | Không cài gì cả |
 | **Chạy ở đâu?** | Trên máy bạn | Trên server tụi mình |
 | **Hợp với** | Dùng cá nhân, toàn quyền | Máy yếu, dùng nhóm, claude.ai |
-| **Lấy nhanh** | `npx -y webcake-landing-mcp install` | Mở <https://webcake.io/mcp-remote> trong dashboard → copy |
+| **Lấy nhanh** | `npx -y webcake-landing-mcp@latest install` | Mở <https://webcake.io/mcp-remote> trong dashboard → copy |
 
 > 💡 Không rành kỹ thuật? **Chọn Cách ②** — chỉ copy 1 cái link là xong.
 
@@ -59,13 +59,13 @@ Token là "chìa khoá" để AI dùng đúng tài khoản Webcake của bạn. 
 
 ```bash
 # Mở trình duyệt: bấm Kết nối, các IDE trên máy tự được cấu hình (prod). Thêm --dev để hỏi từng bước
-npx -y webcake-landing-mcp install
+npx -y webcake-landing-mcp@latest install
 
 # Một phát ăn ngay: cấu hình mọi IDE
-npx -y webcake-landing-mcp install --ide all --jwt <TOKEN>
+npx -y webcake-landing-mcp@latest install --ide all --jwt <TOKEN>
 
 # Gỡ khỏi mọi IDE
-npx -y webcake-landing-mcp uninstall
+npx -y webcake-landing-mcp@latest uninstall
 ```
 
 ### Hoặc dán tay vào file cấu hình
@@ -173,6 +173,7 @@ Gắn vào URL (`&khoá=giá-trị`) hoặc đặt làm env / header:
 | Tool lưu trang báo **`missing_env`** | Thiếu token | Thêm `?jwt=` hoặc `x-webcake-jwt` |
 | Tạo trang vào **nhầm tài khoản** | Token sai / hết hạn | Lấy token mới (`login` hoặc <https://webcake.io/mcp-remote>) |
 | `localhost` không add được vào claude.ai | claude.ai fetch từ server của họ | Phải dùng URL **HTTPS public** |
+| Claude Desktop không thấy server sau khi cài | Config được ghi vào file khác file Claude đang đọc (hoặc `npx` dùng bản cũ trong bộ nhớ đệm) | So sánh đường dẫn `install` in ra với **Settings → Developer → Edit Config**; thoát hẳn Claude Desktop (icon khay → Quit) rồi mở lại; dùng `npx -y webcake-landing-mcp@latest install` |
 
 Tự kiểm tra server sống chưa:
 ```bash

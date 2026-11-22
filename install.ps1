@@ -132,7 +132,7 @@ function Write-OrMerge {
   if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
   $server = Build-Server
   if ((Test-Path $File) -and (Get-Item $File).Length -gt 0) {
-    try { $config = Get-Content $File -Raw | ConvertFrom-Json } catch { Write-Warn "Khong doc duoc $File — bo qua."; return }
+    try { $config = (Get-Content $File -Raw).TrimStart([char]0xFEFF) | ConvertFrom-Json } catch { Write-Warn "Khong doc duoc $File — bo qua."; return }
     if ($config.PSObject.Properties.Name -notcontains "mcpServers") { $config | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{}) }
     $config.mcpServers | Add-Member -NotePropertyName $script:NAME -NotePropertyValue $server -Force
     $config | ConvertTo-Json -Depth 8 | Set-Content -Path $File -Encoding UTF8
@@ -141,10 +141,27 @@ function Write-OrMerge {
   }
 }
 
+function Get-ClaudeDesktopConfigs {
+  $list = New-Object System.Collections.Generic.List[string]
+  $pk = "$env:LOCALAPPDATA\Packages"
+  if (Test-Path $pk) {
+    Get-ChildItem -Path $pk -Directory -Filter "*claude*" -ErrorAction SilentlyContinue | ForEach-Object {
+      if (Test-Path "$($_.FullName)\LocalCache") { $list.Add("$($_.FullName)\LocalCache\Roaming\Claude\claude_desktop_config.json") }
+    }
+  }
+  $cd = "$env:LOCALAPPDATA\Claude-Data"
+  if (Test-Path $cd) {
+    Get-ChildItem -Path $cd -Filter "claude_desktop_config.json" -Recurse -Depth 4 -File -ErrorAction SilentlyContinue | ForEach-Object { $list.Add($_.FullName) }
+  }
+  if ((Test-Path "$env:APPDATA\Claude") -or $list.Count -eq 0) { $list.Add("$env:APPDATA\Claude\claude_desktop_config.json") }
+  return @($list | Group-Object { $_.ToLower() } | ForEach-Object { $_.Group[0] })
+}
+
 function Configure-ClaudeDesktop {
   Write-Info "Dang cau hinh Claude Desktop..."
-  Write-OrMerge "$env:APPDATA\Claude\claude_desktop_config.json"
-  Write-Success "Da cau hinh Claude Desktop"; Write-Warn "Khoi dong lai Claude Desktop"
+  if (Get-Process -Name claude -ErrorAction SilentlyContinue) { Write-Warn "Claude Desktop dang chay - thoat hen (chuot phai icon khay -> Quit) roi mo lai de nap server" }
+  foreach ($f in (Get-ClaudeDesktopConfigs)) { Write-OrMerge $f; Write-Success "Da cau hinh Claude Desktop ($f)" }
+  Write-Warn "Khoi dong lai Claude Desktop"
 }
 function Configure-ClaudeCode {
   Write-Info "Dang cau hinh Claude Code..."
@@ -245,15 +262,15 @@ function Uninstall-MCP {
   if (Get-Command claude -ErrorAction SilentlyContinue) { claude mcp remove $script:NAME 2>$null; Write-Success "Da xoa khoi Claude Code" }
   $files = @(
     "$env:USERPROFILE\.claude.json",
-    "$env:APPDATA\Claude\claude_desktop_config.json",
     "$env:USERPROFILE\.cursor\mcp.json",
     "$env:USERPROFILE\.codeium\windsurf\mcp_config.json",
     "$env:APPDATA\Code\User\mcp.json"
   )
+  $files = $files + @(Get-ClaudeDesktopConfigs)
   foreach ($f in $files) {
     if (Test-Path $f) {
       try {
-        $c = Get-Content $f -Raw | ConvertFrom-Json
+        $c = (Get-Content $f -Raw).TrimStart([char]0xFEFF) | ConvertFrom-Json
         if ($c.mcpServers -and ($c.mcpServers.PSObject.Properties.Name -contains $script:NAME)) {
           $c.mcpServers.PSObject.Properties.Remove($script:NAME)
           $c | ConvertTo-Json -Depth 8 | Set-Content -Path $f -Encoding UTF8

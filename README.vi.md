@@ -102,17 +102,19 @@ Không cần cài đặt, luôn bản mới nhất, cần Node.js 18+. **Một d
 
 ```bash
 # Mở trình duyệt — bấm Kết nối, các IDE trên máy được cấu hình tự động (prod)
-npx -y webcake-landing-mcp install
+npx -y webcake-landing-mcp@latest install
 
 # Chỉ dành cho dev — từng bước: môi trường, đăng nhập hoặc JWT, org, IDE
-npx -y webcake-landing-mcp install --dev
+npx -y webcake-landing-mcp@latest install --dev
 
 # Script và CI — mọi IDE được hỗ trợ, kể cả IDE chưa cài
-npx -y webcake-landing-mcp install --ide all --jwt <your-jwt>
+npx -y webcake-landing-mcp@latest install --ide all --jwt <your-jwt>
 
 # Gỡ server khỏi mọi cấu hình IDE
-npx -y webcake-landing-mcp uninstall
+npx -y webcake-landing-mcp@latest uninstall
 ```
+
+> **Xử lý sự cố (Claude Desktop):** so sánh đường dẫn `install` in ra với **Settings → Developer → Edit Config**, và thoát hẳn Claude Desktop (icon khay → Quit) rồi mở lại.
 
 **`install` không hỏi gì cả.** Lệnh kết nối tới production, mở trình duyệt để bạn bấm *Kết nối*, rồi thêm server vào mọi ứng dụng AI
 tìm thấy trên máy. Các server khác của bạn được giữ nguyên, và file cấu hình nào bị đổi đều có bản sao lưu ngay cạnh, tên

@@ -32,7 +32,7 @@ The AI handles the hard part: layout, coordinates, colors, validation, saving ba
 | **Install?** | Needs Node.js 18+ | Nothing to install |
 | **Runs where?** | On your machine | On our server |
 | **Best for** | Personal use, full control | Low-spec machines, teams, claude.ai |
-| **Quick grab** | `npx -y webcake-landing-mcp install` | Open <https://webcake.io/mcp-remote> in the dashboard → copy |
+| **Quick grab** | `npx -y webcake-landing-mcp@latest install` | Open <https://webcake.io/mcp-remote> in the dashboard → copy |
 
 > 💡 Not technical? **Pick Way ②** — just copy one link and you're done.
 
@@ -59,13 +59,13 @@ The token is the "key" that lets the AI use *your* Webcake account. Two options:
 
 ```bash
 # Opens the browser: click Connect, installed IDEs get configured (prod). Add --dev for the step-by-step wizard
-npx -y webcake-landing-mcp install
+npx -y webcake-landing-mcp@latest install
 
 # One shot: configure every IDE
-npx -y webcake-landing-mcp install --ide all --jwt <TOKEN>
+npx -y webcake-landing-mcp@latest install --ide all --jwt <TOKEN>
 
 # Remove from every IDE
-npx -y webcake-landing-mcp uninstall
+npx -y webcake-landing-mcp@latest uninstall
 ```
 
 ### Or paste it into the config file by hand
@@ -173,6 +173,7 @@ Append to the URL (`&key=value`) or set as env / header:
 | Saving tools return **`missing_env`** | No token | Add `?jwt=` or `x-webcake-jwt` |
 | Pages land in the **wrong account** | Wrong / expired token | Grab a fresh one (`login` or <https://webcake.io/mcp-remote>) |
 | Can't add `localhost` to claude.ai | claude.ai fetches from its own servers | Use a **public HTTPS** URL |
+| Claude Desktop shows no server after install | Config written to a different file than the one Claude reads (or stale cached `npx`) | Compare the path(s) printed by `install` with **Settings → Developer → Edit Config**; fully quit Claude Desktop (tray icon → Quit) and reopen; use `npx -y webcake-landing-mcp@latest install` |
 
 Check the server is alive:
 ```bash
