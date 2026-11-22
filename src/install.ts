@@ -127,7 +127,7 @@ function mergeJson(file: string, launch: Launch, env: Env, key: "mcpServers" | "
   mkdirSync(dirname(file), { recursive: true });
   let cfg: any = {};
   if (existsSync(file)) {
-    const raw = readFileSync(file, "utf8").trim();
+    const raw = readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim();
     if (raw) {
       try {
         cfg = JSON.parse(raw);
@@ -154,7 +154,7 @@ function mergeOpencodeJson(file: string, launch: Launch, env: Env): boolean {
   mkdirSync(dirname(file), { recursive: true });
   let cfg: any = {};
   if (existsSync(file)) {
-    const raw = readFileSync(file, "utf8").trim();
+    const raw = readFileSync(file, "utf8").replace(/^\uFEFF/, "").trim();
     if (raw) {
       try {
         cfg = JSON.parse(raw);
@@ -195,28 +195,69 @@ function configureCodex(launch: Launch, env: Env) {
 }
 
 // ── IDE config-file locations ────────────────────────────────────────────────
-function claudeDesktopPath(): string {
+// Every location a Claude Desktop build may read its config from. A machine can have
+// several (MSIX/Store package container, Claude-Data, classic %APPDATA%) and only one is
+// the live one, so on Windows we write to all candidates.
+function findConfigsUnder(dir: string, depth: number, out: string[]) {
+  if (depth < 0) return;
+  let entries;
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    const full = join(dir, e.name);
+    if (e.isFile() && e.name.toLowerCase() === "claude_desktop_config.json") out.push(full);
+    else if (e.isDirectory()) findConfigsUnder(full, depth - 1, out);
+  }
+}
+function claudeDesktopPaths(): string[] {
   if (PLAT === "win32") {
-    // Microsoft Store build is MSIX-sandboxed: it reads/writes config inside
-    // its package container, NOT %APPDATA%\Claude. Detect that container first
-    // (the package name is Claude_<publisher-hash>, e.g. Claude_pzs8sxrjxfjjc)
-    // so installs land in the file the Store app actually loads.
+    const found: string[] = [];
     const packages = join(LOCALAPPDATA, "Packages");
-    if (existsSync(packages)) {
-      try {
-        const pkg = readdirSync(packages).find((n) => /^Claude_/i.test(n));
-        if (pkg) {
-          return join(packages, pkg, "LocalCache", "Roaming", "Claude", "claude_desktop_config.json");
+    try {
+      if (existsSync(packages)) {
+        for (const n of readdirSync(packages)) {
+          if (!/claude/i.test(n)) continue;
+          const cache = join(packages, n, "LocalCache");
+          if (existsSync(cache)) found.push(join(cache, "Roaming", "Claude", "claude_desktop_config.json"));
         }
-      } catch {
-        /* fall through to the Win32 default */
       }
+    } catch {
+      /* ignore */
     }
-    return join(APPDATA, "Claude", "claude_desktop_config.json");
+    try {
+      const data = join(LOCALAPPDATA, "Claude-Data");
+      if (existsSync(data)) findConfigsUnder(data, 4, found);
+    } catch {
+      /* ignore */
+    }
+    const roaming = join(APPDATA, "Claude");
+    if (existsSync(roaming) || found.length === 0) found.push(join(roaming, "claude_desktop_config.json"));
+    const seen = new Set<string>();
+    return found.filter((p) => {
+      const k = p.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
   }
   const mac = join(HOME, "Library", "Application Support", "Claude");
   const dir = existsSync(mac) ? mac : join(HOME, ".config", "Claude");
-  return join(dir, "claude_desktop_config.json");
+  return [join(dir, "claude_desktop_config.json")];
+}
+function claudeDesktopRunning(): boolean {
+  try {
+    if (PLAT === "win32") {
+      const r = spawnSync("tasklist", ["/FI", "IMAGENAME eq claude.exe", "/NH"], { stdio: "pipe", encoding: "utf8" });
+      return /claude\.exe/i.test(String(r.stdout ?? ""));
+    }
+    if (PLAT === "darwin") return spawnSync("pgrep", ["-x", "Claude"], { stdio: "pipe" }).status === 0;
+  } catch {
+    /* ignore */
+  }
+  return false;
 }
 function vscodeUserDir(): string {
   if (PLAT === "win32") return join(APPDATA, "Code", "User");
@@ -250,7 +291,7 @@ function hasClaudeCli(): boolean {
 // install needs no IDE question and never creates config for an app the user lacks.
 function detectIdes(): string[] {
   const marks: Record<string, string> = {
-    "claude-desktop": dirname(claudeDesktopPath()),
+    "claude-desktop": "",
     "claude-code": claudeJsonPath(),
     cursor: join(HOME, ".cursor"),
     windsurf: join(HOME, ".codeium", "windsurf"),
@@ -262,7 +303,8 @@ function detectIdes(): string[] {
     kiro: join(HOME, ".kiro"),
     opencode: dirname(opencodePath()),
   };
-  return Object.keys(marks).filter((id) => existsSync(marks[id]) || (id === "claude-code" && hasClaudeCli()));
+  return Object.keys(marks).filter((id) =>
+    (id === "claude-desktop" ? claudeDesktopPaths().some((p) => existsSync(dirname(p))) : existsSync(marks[id])) || (id === "claude-code" && hasClaudeCli()));
 }
 
 // ── per-IDE configure ────────────────────────────────────────────────────────
@@ -286,10 +328,19 @@ function configureClaudeCode(launch: Launch, env: Env) {
 }
 function configureClaudeDesktop(launch: Launch, env: Env) {
   info("Claude Desktop…");
-  if (mergeJson(claudeDesktopPath(), launch, env)) {
-    ok(`Claude Desktop configured (${claudeDesktopPath()})`);
-    warn("Restart Claude Desktop to load the server.");
+  if (claudeDesktopRunning()) {
+    warn("Claude Desktop đang chạy — thoát hẳn (chuột phải icon khay → Quit) rồi mở lại để nạp server");
   }
+  const paths = claudeDesktopPaths();
+  let wrote = 0;
+  for (const p of paths) {
+    if (mergeJson(p, launch, env)) {
+      ok(`Claude Desktop configured (${p})`);
+      wrote++;
+    }
+  }
+  if (paths.length > 1) info("Wrote to every location Claude Desktop may read its config from.");
+  if (wrote) warn("Restart Claude Desktop to load the server.");
 }
 function configureCursor(launch: Launch, env: Env) {
   info("Cursor…");
@@ -388,7 +439,7 @@ function runConfigure(ides: string[], launch: Launch, env: Env) {
 function removeFromJson(file: string) {
   if (!existsSync(file)) return;
   try {
-    const cfg = JSON.parse(readFileSync(file, "utf8"));
+    const cfg = JSON.parse(readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
     const holders = [cfg.mcpServers, cfg.servers].filter((s) => s && s[NAME]);
     if (holders.length) {
       for (const s of holders) delete s[NAME];
@@ -404,7 +455,7 @@ function uninstall() {
   if (hasClaudeCli()) spawnSync("claude", ["mcp", "remove", NAME], { stdio: "ignore" });
   [
     claudeJsonPath(),
-    claudeDesktopPath(),
+    ...claudeDesktopPaths(),
     join(HOME, ".config", "Claude", "claude_desktop_config.json"),
     cursorPath(),
     windsurfPath(),
@@ -419,7 +470,7 @@ function uninstall() {
   const oc = opencodePath();
   if (existsSync(oc)) {
     try {
-      const cfg = JSON.parse(readFileSync(oc, "utf8"));
+      const cfg = JSON.parse(readFileSync(oc, "utf8").replace(/^\uFEFF/, ""));
       if (cfg.mcp && cfg.mcp[NAME]) {
         delete cfg.mcp[NAME];
         writeFileSync(oc, JSON.stringify(cfg, null, 2) + "\n");

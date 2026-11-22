@@ -102,17 +102,19 @@ Zero install, always the latest version, needs Node.js 18+. **One line** grabs y
 
 ```bash
 # Opens the browser — click Connect, your installed IDEs are configured (prod)
-npx -y webcake-landing-mcp install
+npx -y webcake-landing-mcp@latest install
 
 # Developers only — step by step: environment, login or JWT, org, IDE(s)
-npx -y webcake-landing-mcp install --dev
+npx -y webcake-landing-mcp@latest install --dev
 
 # Scripts and CI — every supported IDE, even ones not installed yet
-npx -y webcake-landing-mcp install --ide all --jwt <your-jwt>
+npx -y webcake-landing-mcp@latest install --ide all --jwt <your-jwt>
 
 # Remove the server from every IDE config
-npx -y webcake-landing-mcp uninstall
+npx -y webcake-landing-mcp@latest uninstall
 ```
+
+> **Troubleshooting (Claude Desktop):** compare the path(s) printed by `install` with **Settings → Developer → Edit Config**, and fully quit Claude Desktop (tray icon → Quit) before reopening.
 
 **`install` asks nothing.** It connects to production, opens your browser so you can click *Connect*, then adds the server
 to every AI app it finds on this computer. Your other servers are kept, and any config file it changes is backed up next to
