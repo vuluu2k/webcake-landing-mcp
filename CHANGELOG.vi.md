@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.7] - 2026-11-22
+
+### Fixed
+- `install` nay ghi config Claude Desktop vào mọi vị trí Claude có thể đọc trên Windows (container gói Store/MSIX, `Claude-Data`, `%APPDATA%\Claude`) thay vì đoán một nơi, bỏ BOM UTF-8 trước khi parse config có sẵn, và cảnh báo khi Claude Desktop đang chạy (phải thoát hẳn rồi mở lại để nạp server). `uninstall` dọn mọi vị trí đó. `install.ps1` làm tương tự.
+
 ## [Unreleased]
 
 ### Fixed
