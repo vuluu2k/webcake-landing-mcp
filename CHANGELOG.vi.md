@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-11-23
+
+### Added
+- Danh mục route của `api_find`/`api_get`/`api_call` nay có thêm `get:/api/v1/pages/options`, một endpoint lấy danh sách trang dạng gọn, lọc được, trên backend Webcake.
+
 ## [1.14.0] - 2026-11-23
 
 ### Added

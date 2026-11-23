@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-11-23
+
+### Added
+- `api_find`/`api_get`/`api_call`'s route catalog now includes `get:/api/v1/pages/options`, a slim, filterable page list endpoint on the Webcake backend.
+
 ## [1.14.0] - 2026-11-23
 
 ### Added
