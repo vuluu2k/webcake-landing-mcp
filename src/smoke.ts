@@ -33,6 +33,7 @@ import { isLocalPath, resolveLocalPath, sniffMime, localContentType } from "./to
 import { buildMicrolinkUrl } from "./persistence/screenshot-client.js";
 import { isPrivateHost, isAllowedScreenshotUrl, acquireSlot, releaseSlot, slotStats } from "./persistence/screenshot-playwright.js";
 import { iconifyCandidates } from "./persistence/icon-client.js";
+import { withBase } from "./persistence/ingest/browser-capture.js";
 import { collectExternalImageUrls, rewriteImageUrls, isRehostableImageUrl, isInlineBase64Image, parseInlineBase64Image, healBrokenResizeUrls } from "./persistence/rehost.js";
 import { key as rehostCacheKey } from "./persistence/rehost-cache.js";
 import {
@@ -1308,6 +1309,44 @@ check("clone: form_item → input child w/ mapped field_name", cForm?.type === "
   check("clone: ladi checkbox item → checkbox-group with choices", kids[2]?.type === "checkbox-group" && kids[2].specials.options.map((o: any) => o.name).join() === "Đỏ,Xanh", kids[2]);
   check("clone: ladi textarea → textarea", kids[3]?.type === "textarea" && kids[3].specials.field_placeholder === "Lời nhắn", kids[3]);
   check("clone: ladi form fields validate", landingDomain.validate(landingDomain.expand(src)).valid, landingDomain.validate(landingDomain.expand(src)).errors);
+}
+
+console.log("== clone fidelity: accordion / tabs / keyframes / svg / base href ==");
+{
+  const bx = (top: number, h = 40) => ({ top, left: 20, width: 400, height: h });
+  const canvas: any = {
+    builder: "browser", width: 960, element_count: 9, measured_mobile: false,
+    sections: [{ id: "SECTION1", height: 700, elements: [
+      { id: "PARAGRAPH1", type: "paragraph", text: "Câu hỏi 1?", box: bx(0), style: {}, events: [{ type: "collapse", action: "ACC1" }] },
+      { id: "ACC1", type: "group", box: bx(50, 80), style: {}, children: [{ id: "PARAGRAPH2", type: "paragraph", text: "Trả lời 1", box: bx(0), style: {} }] },
+      { id: "PARAGRAPH3", type: "paragraph", text: "Tab B", box: bx(150), style: {}, events: [{ type: "tab", action: "TABS1", index: 1 }] },
+      { id: "TABS1", type: "slider", box: bx(200, 100), style: {}, config: { tabs: true }, children: [
+        { id: "SLIDE1", type: "slide", box: bx(0, 100), style: {}, children: [{ id: "PARAGRAPH4", type: "paragraph", text: "A", box: bx(0), style: {} }] },
+        { id: "SLIDE2", type: "slide", box: bx(0, 100), style: {}, children: [{ id: "PARAGRAPH5", type: "paragraph", text: "B", box: bx(0), style: {} }] },
+      ] },
+      { id: "BOX1", type: "box", box: bx(320), style: { "background-color": "rgba(0,0,0,1)" }, keyframes: { css: "@keyframes floaty { 0% { transform: translateY(0px); } 100% { transform: translateY(-10px); } }", animation: "3s ease-in-out 0s infinite normal none floaty" } },
+      { id: "BOX2", type: "box", box: bx(380), style: { "background-color": "rgba(0,0,0,1)" }, keyframes: { css: "@keyframes floaty { 0% { transform: translateY(0px); } 100% { transform: translateY(-10px); } }", animation: "3s ease-in-out 0s infinite normal none floaty" } },
+      { id: "IMAGE1", type: "image", src: "data:image/svg+xml;base64,PHN2Zy8+", box: bx(440), style: {} },
+    ] }],
+  };
+  const out = landingDomain.canvasToSource!(canvas, { title: "fx" }).source as any;
+  const flat: any[] = [];
+  const walk = (n: any) => { flat.push(n); (n.children ?? []).forEach(walk); };
+  out.page.forEach(walk);
+  const byId = (id: string) => flat.find((n) => n.id === id);
+  const q = byId("paragraph1")?.events?.[0];
+  check("fx: accordion trigger → click collapse on the panel group", q?.action === "collapse" && q?.target === "acc1" && byId("acc1")?.type === "group", q);
+  const tb = byId("paragraph3")?.events?.[0];
+  check("fx: tab button → change_tab index on the carousel", tb?.action === "change_tab" && tb?.target === "tabs1" && tb?.tabIndex === 1 && tb?.moveTo === "index" && byId("tabs1")?.type === "carousel", tb);
+  check("fx: tab carousel has autoplay off, no arrows", byId("tabs1")?.responsive.desktop.config.autoplayMode === "off" && byId("tabs1")?.responsive.desktop.config.showNavigation === false, byId("tabs1")?.responsive.desktop.config);
+  const css = String(out.settings.extra_css ?? "");
+  check("fx: @keyframes copied once + animation scoped to each #w-<id>", (css.match(/@keyframes floaty/g) ?? []).length === 1 && css.includes("#w-box1{animation:") && css.includes("#w-box2{animation:"), css);
+  check("fx: svg image keeps vector (no compression)", byId("image1")?.specials.imageCompression === false, byId("image1")?.specials);
+  const v = landingDomain.validate(landingDomain.expand(out));
+  check("fx: collapse / tab clone validates", v.valid, v.errors);
+  check("fx: <base href> injected into head", withBase("<html><head><title>x</title></head></html>", "https://a.com/p/").includes('<head><base href="https://a.com/p/">'));
+  check("fx: <header> is not mistaken for <head>", withBase("<body><header>x</header></body>", "https://a.com/").startsWith('<base href="https://a.com/">'));
+  check("fx: existing <base> / non-http base left alone", withBase('<head><base href="/x/"></head>', "https://a.com/") === '<head><base href="/x/"></head>' && withBase("<p>x</p>", "javascript:alert(1)") === "<p>x</p>");
 }
 const cList = cSec2.children.find((c: any) => c.id === "list_paragraph80");
 check("clone: list → list-paragraph w/ <li> items", cList?.type === "list-paragraph" && cList.specials.text.includes("<li>Thành phần thiên nhiên</li>"), cList?.specials);

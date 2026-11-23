@@ -26,7 +26,13 @@ type Raw = {
   __el?: any;
   key: string; kind: string; tag?: string; text?: string; src?: string; href?: string; svg?: string; video?: string;
   /** in-page click target: { type:'popup', action:'POPUPn' } | { type:'section', action:'SECTIONn' }. */
-  target?: { type: string; action: string };
+  target?: { type: string; action: string; index?: number; show?: boolean };
+  /** a collapsible panel (ACCn) / a tab set (TABSn): the element id its triggers' events target. */
+  ref?: string;
+  /** slider: a tab set (one panel shown, switched by its tab buttons) — no autoplay, no arrows. */
+  tabs?: boolean;
+  /** a CSS animation the landing set has no native name for: the page's @keyframes + the animation shorthand. */
+  keyframes?: { css: string; animation: string };
   box: { top: number; left: number; width: number; height: number };
   style: Record<string, string>;
   input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean; label?: string; options?: string[]; multiple?: boolean };
@@ -210,15 +216,19 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
   // The page's own :hover rules (same-origin / CORS-readable sheets; @media that matches; @supports,
   // @layer): `X:hover` on the subject only — the hovered element is the one restyled.
   const hoverRules: { base: string; css: string }[] = [];
+  const keyframeRules = new Map<string, string>();
   const readRules = (rules: any) => {
     for (const r of Array.from<any>(rules ?? [])) {
+      if (r.type === 7 && r.name && keyframeRules.size < 60 && r.cssText.length < 6000) keyframeRules.set(r.name, r.cssText); // CSSKeyframesRule
       if (hoverRules.length > 400) return;
       if (r.media && !window.matchMedia(r.media.mediaText).matches) continue;
       if (r.cssRules && !r.selectorText) readRules(r.cssRules);
       if (!r.selectorText || !r.selectorText.includes(":hover") || !r.style?.cssText) continue;
       for (const part of r.selectorText.split(",")) {
         const sel = part.trim();
-        if (!/:hover(?=[^\s>+~]*$)/.test(sel)) continue;
+        // `X:hover` restyles X; `.card:hover img` restyles the img — a flat landing canvas has no such
+        // ancestor, so it is applied when the img itself is hovered.
+        // ponytail: ancestor hover → self hover; exact only when the ancestor becomes a group
         const base = sel.replace(/:hover/, "");
         if (base && !base.includes(":hover")) hoverRules.push({ base, css: r.style.cssText });
       }
@@ -241,6 +251,18 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
       }
     }
     return [...css].join(";");
+  };
+  /** A running CSS animation with no native counterpart (loops, pulses, floats): its @keyframes + shorthand. */
+  const keyframesOf = (el: Element): { css: string; animation: string } | undefined => {
+    const s = cs(el);
+    if (!s.animationName || s.animationName === "none") return undefined;
+    const names = s.animationName.split(",").map((n: string) => n.trim());
+    const css = names.map((n: string) => keyframeRules.get(n)).filter(Boolean);
+    if (css.length !== names.length) return undefined;
+    const at = (v: string, i: number) => { const p = v.split(","); return (p[i] ?? p[0]).trim(); };
+    const animation = names.map((n: string, i: number) =>
+      [at(s.animationDuration, i), at(s.animationTimingFunction, i), at(s.animationDelay, i), at(s.animationIterationCount, i), at(s.animationDirection, i), at(s.animationFillMode, i), n].join(" ")).join(",");
+    return { css: css.join(""), animation };
   };
   // Entrance animations from the usual libraries → animate.css names (the landing animation set).
   const AOS: Record<string, string> = {
@@ -265,7 +287,12 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
   // Sliders of the usual libraries → native carousel; their own slides (library clones excluded).
   const SLIDER_SEL = ".swiper, .swiper-container, .slick-slider, .splide, .owl-carousel, .carousel, .glide, .flickity-enabled, .keen-slider, .embla";
   const SLIDE_SEL = ".swiper-slide:not(.swiper-slide-duplicate), .slick-slide:not(.slick-cloned), .splide__slide:not(.splide__slide--clone), .owl-item:not(.cloned), .carousel-item, .glide__slide:not(.glide__slide--clone), .flickity-slider > *, .keen-slider__slide, .embla__slide";
-  const slidesOf = (el: Element) => (el.matches(SLIDER_SEL) ? Array.from<any>(el.querySelectorAll(SLIDE_SEL)).filter((s: any) => s.closest(SLIDER_SEL) === el) : []);
+  const TAB_PANE = '[role="tabpanel"], .tab-pane';
+  const tabPanes = (el: Element) => Array.from<any>(el.children).filter((c: any) => c.matches(TAB_PANE));
+  const tabSets = Array.from<any>(document.querySelectorAll("body *")).filter((c: any) => tabPanes(c).length >= 2);
+  const slidesOf = (el: Element) =>
+    el.matches(SLIDER_SEL) ? Array.from<any>(el.querySelectorAll(SLIDE_SEL)).filter((s: any) => s.closest(SLIDER_SEL) === el)
+    : tabSets.includes(el) ? tabPanes(el) : [];
   const ICON_FONT = /awesome|material|icon|remix|boxicons|ionicons|icomoon|fontello|themify|feather|phosphor|tabler/i;
 
   // Popups: modal-like boxes hidden on load (Bootstrap .modal, <dialog>, [role=dialog], .popup…), in DOM
@@ -282,7 +309,20 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
     const i = target ? popupEls.findIndex((p: any) => p === target || p.contains(target)) : -1;
     return i >= 0 ? `POPUP${i + 1}` : "";
   };
-  const targetOf = (el: Element): { type: string; action: string } | undefined => {
+  const targetOf = (el: Element): { type: string; action: string; index?: number; show?: boolean } | undefined => {
+    const acc = el.closest("[data-wc-acc-trigger]");
+    if (acc) {
+      const ref = acc.getAttribute("data-wc-acc-trigger");
+      return { type: "collapse", action: ref, show: !!document.querySelector(`[data-wc-acc="${ref}"][data-wc-acc-open]`) };
+    }
+    const tab = el.closest('[role="tab"], [data-bs-toggle="tab"], [data-toggle="tab"]');
+    if (tab) {
+      const ref = tab.getAttribute("aria-controls") || tab.getAttribute("data-bs-target") || tab.getAttribute("data-target") || tab.getAttribute("href") || "";
+      let pane: Element | null = null;
+      try { pane = ref.length > 1 ? document.querySelector(ref.startsWith("#") ? ref : `#${ref}`) : null; } catch { pane = null; }
+      const k = pane ? tabSets.findIndex((t: any) => t === pane!.parentElement) : -1;
+      if (k >= 0) return { type: "tab", action: `TABS${k + 1}`, index: tabPanes(tabSets[k]).indexOf(pane) };
+    }
     const trig = el.closest('[data-bs-target], [data-target], [data-popup], a[href^="#"], [aria-controls]');
     if (!trig) return undefined;
     const ref = trig.getAttribute("data-bs-target") || trig.getAttribute("data-target") || trig.getAttribute("data-popup") || trig.getAttribute("aria-controls") || trig.getAttribute("href") || "";
@@ -473,6 +513,12 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
           if (es.transitionDuration && es.transitionDuration.split(",").some((d: string) => parseFloat(d) > 0)) raw.transition = es.transition.slice(0, 300);
           const a = animationOf(el);
           if (a) raw.animation = a;
+          // a looping / custom animation (float, pulse, spin…) on the element or the wrapper that moves it
+          // ponytail: a wrapper's animation is copied onto each captured child (same motion for translate/opacity)
+          else for (let n = el; n && n !== band && n !== document.body; n = n.parentElement) {
+            const k = keyframesOf(n);
+            if (k) { raw.keyframes = k; break; }
+          }
         }
       }
       if (count >= maxElements) {
@@ -498,6 +544,33 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
         return;
       }
       if (tag.toLowerCase() === "svg") {
+        // A multi-colour svg (logos, illustrations, gradients) cannot be a single-colour mask: it becomes an
+        // image of itself, every shape's computed paint inlined (page CSS does not travel with the file).
+        const SHAPES = "path,circle,rect,ellipse,polygon,polyline,line,text";
+        const paints = new Set<string>();
+        el.querySelectorAll(SHAPES).forEach((n: any) => {
+          const c = cs(n);
+          if (c.fill && c.fill !== "none") paints.add(c.fill);
+          if (c.stroke && c.stroke !== "none" && parseFloat(c.strokeWidth) > 0) paints.add(c.stroke);
+        });
+        if (paints.size > 1 || el.querySelector("image, linearGradient, radialGradient, pattern")) {
+          const copy = el.cloneNode(true) as any;
+          const src = Array.from<any>(el.querySelectorAll(SHAPES));
+          Array.from<any>(copy.querySelectorAll(SHAPES)).forEach((n: any, i: number) => {
+            const c = src[i] && cs(src[i]);
+            if (!c) return;
+            for (const [a, v] of [["fill", c.fill], ["stroke", c.stroke], ["stroke-width", c.strokeWidth], ["opacity", c.opacity], ["fill-opacity", c.fillOpacity], ["stroke-opacity", c.strokeOpacity]]) if (v) n.setAttribute(a, v);
+          });
+          const b = boxOf(el);
+          copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+          copy.setAttribute("width", String(b.width));
+          copy.setAttribute("height", String(b.height));
+          const markup = copy.outerHTML;
+          if (markup.length <= 60000) {
+            push({ __el: el, key: keyOf(el), kind: "image", src: "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(markup))), box: b, style, href });
+            return;
+          }
+        }
         paint(s, style);
         style["fill"] = s.fill && s.fill !== "none" ? s.fill : s.color;
         // <use href="#sprite"> points into a sprite elsewhere in the page: inline the symbol.
@@ -517,6 +590,25 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
         // a playable file url only (MSE / HLS players expose blob: urls)
         const video = tag === "VIDEO" ? [(el as HTMLVideoElement).currentSrc, el.querySelector("source")?.src].find((u: any) => /^https?:/i.test(u || "")) || "" : "";
         push({ __el: el, key: keyOf(el), kind: tag === "VIDEO" ? "video" : "embed", src, ...(video ? { video } : {}), box: boxOf(el), style });
+        return;
+      }
+      // a collapsible panel (opened for the measurement): one group, the target of its trigger's collapse
+      const accRef = el.getAttribute("data-wc-acc");
+      if (accRef) {
+        const er = el.getBoundingClientRect();
+        const group: Raw = { __el: el, key: keyOf(el) + "~acc", kind: "group", ref: accRef, box: boxOf(el), style: {}, children: [] };
+        const [outerSink, outerOrigin] = [sink, origin];
+        sink = group.children!;
+        origin = { top: er.top + sy, left: er.left };
+        if (painted(s)) {
+          const url = bgUrl(s);
+          paint(s, style);
+          push({ key: keyOf(el) + "~bg", kind: url ? "image" : "box", src: url || undefined, box: boxOf(el), style });
+        }
+        Array.from<any>(el.children).forEach((c) => visit(c, inForm));
+        group.children!.sort((a, b) => layer(a) - layer(b));
+        [sink, origin] = [outerSink, outerOrigin];
+        if (group.children!.length) push(group);
         return;
       }
       if ((tag === "FORM" || looseForm(el)) && !inForm) {
@@ -615,7 +707,8 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
       if (slides.length >= 2) {
         const er0 = el.getBoundingClientRect();
         const first = slides[0].getBoundingClientRect();
-        const slider: Raw = { __el: el, key: keyOf(el) + "~slider", kind: "slider", box: boxOf(el), style: {}, children: [], nav: !!el.querySelector(".swiper-button-next, .slick-next, .splide__arrow, .owl-next, .carousel-control-next, .glide__arrow, .flickity-prev-next-button, [class*='next']") };
+        const tk = tabSets.indexOf(el);
+        const slider: Raw = { __el: el, key: keyOf(el) + "~slider", kind: "slider", box: boxOf(el), style: {}, children: [], ...(tk >= 0 ? { ref: `TABS${tk + 1}`, tabs: true } : {}), nav: tk < 0 && !!el.querySelector(".swiper-button-next, .slick-next, .splide__arrow, .owl-next, .carousel-control-next, .glide__arrow, .flickity-prev-next-button, [class*='next']") };
         const [outerSink, outerOrigin, outerStop] = [sink, origin, clipStop];
         for (const sl of slides.slice(0, 12)) {
           const saved = sl.getAttribute("style");
@@ -762,7 +855,59 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
   };
 }
 
-async function captureAt(target: { url?: string; html?: string }, width: number): Promise<RawCapture> {
+/** Saved / copied HTML: a <base href> so its relative images, stylesheets and fonts load from the original site. */
+export function withBase(html: string, baseUrl?: string): string {
+  if (!baseUrl || !/^https?:\/\//i.test(baseUrl) || /<base\s[^>]*href/i.test(html)) return html;
+  const tag = `<base href="${baseUrl.replace(/["<>]/g, encodeURIComponent)}">`;
+  const head = /<head(\s[^>]*)?>/i; // not <header>
+  return head.test(html) ? html.replace(head, (h) => h + tag) : tag + html;
+}
+
+/**
+ * Runs in the page BEFORE the measurement: every collapsible panel (accordion / FAQ: <details>, Bootstrap
+ * collapse, [aria-expanded][aria-controls]) is opened so its content is measured, and marked — the panel
+ * data-wc-acc="ACCn" (+ data-wc-acc-open when it was open on load), its trigger data-wc-acc-trigger="ACCn".
+ * The clone then closes it again natively: a click→collapse event on the trigger (collapsed on load).
+ * Nav menus (navbar-collapse, menus inside header/nav) are left alone — they are a layout, not a FAQ.
+ */
+function openCollapsibles() {
+  let n = 0;
+  const force = (el: any) => {
+    for (const [k, v] of [["display", "block"], ["height", "auto"], ["max-height", "none"], ["overflow", "visible"], ["visibility", "visible"], ["opacity", "1"]]) el.style.setProperty(k, v, "important");
+  };
+  const mark = (panel: any, trigger: any, open: boolean) => {
+    if (!panel || !trigger || panel.hasAttribute("data-wc-acc") || panel.closest("nav, header, .navbar, [role=dialog], .modal")) return;
+    const ref = `ACC${++n}`;
+    panel.setAttribute("data-wc-acc", ref);
+    if (open) panel.setAttribute("data-wc-acc-open", "");
+    trigger.setAttribute("data-wc-acc-trigger", ref);
+  };
+  document.querySelectorAll("details").forEach((d: any) => {
+    const summary = d.querySelector(":scope > summary");
+    if (!summary || summary.hasAttribute("data-wc-acc-trigger")) return; // already opened + marked
+    const wasOpen = d.open;
+    d.open = true;
+    // the content is every child but the summary: one wrapper so it collapses as one panel
+    const body = document.createElement("div");
+    Array.from<any>(d.childNodes).filter((c: any) => c !== summary).forEach((c: any) => body.appendChild(c));
+    d.appendChild(body);
+    mark(body, summary, wasOpen);
+  });
+  document.querySelectorAll('[data-bs-toggle="collapse"], [data-toggle="collapse"], [aria-expanded][aria-controls]').forEach((t: any) => {
+    if (t.matches('[role="tab"], [aria-haspopup]') || t.closest("nav, header, .navbar")) return;
+    const ref = t.getAttribute("data-bs-target") || t.getAttribute("data-target") || t.getAttribute("aria-controls") || t.getAttribute("href") || "";
+    let panel: any = null;
+    try { panel = ref.length > 1 ? document.querySelector(ref.startsWith("#") || ref.startsWith(".") ? ref : `#${ref}`) : null; } catch { panel = null; }
+    if (!panel || panel.matches(".navbar-collapse") || panel.contains(t)) return;
+    const s = getComputedStyle(panel);
+    const open = s.display !== "none" && s.visibility !== "hidden" && panel.getBoundingClientRect().height > 2;
+    panel.classList.add("show");
+    force(panel);
+    mark(panel, t, open);
+  });
+}
+
+async function captureAt(target: { url?: string; html?: string; baseUrl?: string }, width: number): Promise<RawCapture> {
   const r = await withContext(width, 1, async (ctx: any) => {
     // Every request the page makes (subresources, redirects, html-embedded urls) passes the same
     // public-host guard as the url itself: no SSRF into the host's private network.
@@ -774,8 +919,11 @@ async function captureAt(target: { url?: string; html?: string }, width: number)
     await ctx.routeWebSocket?.("**/*", (ws: any) => ws.close()).catch?.(() => undefined);
     const page = await ctx.newPage();
     try {
-      if (target.url) await page.goto(target.url, { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
-      else await page.setContent(target.html!, { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
+      if (target.url) {
+        await page.goto(target.url, { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
+      }
+      else await page.setContent(withBase(target.html!, target.baseUrl), { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
+      await page.evaluate(openCollapsibles).catch(() => undefined);
       // An app shell that scrolls inside a full-height box (body = one viewport, content in a
       // overflow:auto div): unlock it so the document is as tall as the page.
       await page.evaluate(() => {
@@ -855,11 +1003,12 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
   }
   let n = 0;
   /** mob: the mobile measurement, null = hidden on mobile, undefined = unknown (scaled fallback). */
-  const toEl = (e: Raw, mob: Raw | null | undefined, kk: number): CanvasElement => {
+  /** pw / pmw: the width a text's slack may grow into — the canvas, or the group / slide / form it sits in. */
+  const toEl = (e: Raw, mob: Raw | null | undefined, kk: number, pw = DESKTOP_CANVAS, pmw = MOBILE_CANVAS): CanvasElement => {
     const el: CanvasElement = {
-      id: `${e.kind.toUpperCase()}${++n}`,
+      id: e.ref ?? `${e.kind.toUpperCase()}${++n}`,
       type: e.kind === "embed" ? "html_code" : e.kind,
-      box: { ...slack(scaleBox(e.box, kk), scaleStyle(e.style, kk), e.kind), ...(e.fixed ? { fixed: true } : {}) },
+      box: { ...slack(scaleBox(e.box, kk), scaleStyle(e.style, kk), e.kind, pw), ...(e.fixed ? { fixed: true } : {}) },
       style: scaleStyle(e.style, kk),
     };
     if (e.text) el.text = e.text;
@@ -876,16 +1025,18 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
     if (mob === null) el.mobile = null; // not shown in the mobile layout
     else if (mob) {
       const ms = scaleStyle(mob.style, km);
-      el.mobile = { box: slack(scaleBox(mob.box, km), ms, e.kind, MOBILE_CANVAS), style: Object.fromEntries(TYPO.filter((p) => ms[p]).map((p) => [p, ms[p]])), ...(mob.crop ? { crop: scaleBox(mob.crop, km) } : {}) };
+      el.mobile = { box: slack(scaleBox(mob.box, km), ms, e.kind, pmw), style: Object.fromEntries(TYPO.filter((p) => ms[p]).map((p) => [p, ms[p]])), ...(mob.crop ? { crop: scaleBox(mob.crop, km) } : {}) };
     }
     if (e.fields) {
-      el.children = e.fields.map((f) => toEl(f, mob ? mob.fields?.find((x) => x.key === f.key) ?? null : undefined, kk));
+      el.children = e.fields.map((f) => toEl(f, mob ? mob.fields?.find((x) => x.key === f.key) ?? null : undefined, kk, el.box!.width, el.mobile?.box.width));
     }
     if (e.children) {
       // a clip group: children are relative to it on both layouts; mobile counterparts live in the mobile group
-      el.children = e.children.map((c) => toEl(c, mob ? mob.children?.find((x) => x.key === c.key) ?? null : undefined, kk));
+      el.children = e.children.map((c) => toEl(c, mob ? mob.children?.find((x) => x.key === c.key) ?? null : undefined, kk, el.box!.width, el.mobile?.box.width));
     }
     if (e.nav) el.config = { ...(el.config ?? {}), nav: true };
+    if (e.tabs) el.config = { ...(el.config ?? {}), tabs: true };
+    if (e.keyframes) el.keyframes = e.keyframes;
     if (e.hover) el.hover = e.hover;
     if (e.transition) el.transition = e.transition;
     if (e.animation) el.animation = e.animation;
@@ -1013,7 +1164,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
 }
 
 /** Load the page in Chrome at DESKTOP_VIEWPORT and at the mobile canvas width; measure; merge. */
-export async function captureLayout(target: { url?: string; html?: string }) {
+export async function captureLayout(target: { url?: string; html?: string; baseUrl?: string }) {
   if (target.url) {
     const ok = isAllowedScreenshotUrl(target.url);
     if (!ok.ok) throw new Error(ok.error);
