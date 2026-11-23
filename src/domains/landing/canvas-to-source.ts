@@ -206,6 +206,9 @@ function mapEvents(ctx: Ctx, e: CanvasElement): SourceNode["events"] {
     else if (ev.type === "section") out.push({ id, type: "click", action: "scroll_to", target: idOf(ev.action) });
     else if (ev.type === "link") out.push({ id, type: "click", action: "open_link", target: ev.action, targetURL: "_blank" });
     else if (ev.type === "phone") out.push({ id, type: "click", action: "open_link", target: `tel:${ev.action}` });
+    // accordion trigger: the renderer collapses the panel on load (unless showCollapse) and shifts what is below
+    else if (ev.type === "collapse") out.push({ id, type: "click", action: "collapse", target: idOf(ev.action), ...(ev.show ? { showCollapse: true } : {}) });
+    else if (ev.type === "tab") out.push({ id, type: "click", action: "change_tab", target: idOf(ev.action), moveTo: "index", tabIndex: ev.index ?? 0 });
     else ctx.notes.push(`${e.id}: unsupported event type '${ev.type}' skipped`);
   }
   if (!out.length && e.href && !e.href.startsWith("#")) {
@@ -280,6 +283,7 @@ function convertElement(ctx: Ctx, e: CanvasElement, sectionH?: number): SourceNo
   const node = convertElementInner(ctx, e, sectionH);
   if (node && e.box?.fixed) applySticky(ctx, node, e);
   if (node && (e.hover || e.transition)) ctx.css.push(hoverCss(node, e.hover, e.transition));
+  if (node && e.keyframes) ctx.css.push(keyframesCss(ctx, node, e.keyframes));
   return node;
 }
 
@@ -312,6 +316,16 @@ function hoverCss(node: SourceNode, hover?: string, transition?: string): string
   if (wrap.length) css += `${id}:hover{${wrap.join(";")}}`;
   if (paint.length) css += `${id}:hover${inner}{${paint.join(";")}}`;
   return css;
+}
+
+/**
+ * A source animation the native set cannot express (loop, float, pulse…): the page's own @keyframes
+ * (once per name) + the animation on #w-<id>. Raw CSS goes into <style>: nothing that could close it.
+ */
+function keyframesCss(ctx: Ctx, node: SourceNode, kf: { css: string; animation: string }): string {
+  if (/[<\\]/.test(kf.css) || /[<>{}\\;]/.test(kf.animation)) return "";
+  const defs = ctx.css.some((c) => c.includes(kf.css)) ? "" : kf.css; // each @keyframes once
+  return `${defs}#w-${node.id}{animation:${kf.animation}}`;
 }
 
 function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): SourceNode | null {
@@ -378,7 +392,8 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       id: uniqueId(ctx, e.id),
       type: "image-block",
       responsive: responsiveOf(ctx, e.box, mapStyles(style, "image-block"), sectionH),
-      specials: { src: e.src ?? "", imageCompression: true },
+      // an svg (incl. a multi-colour inline svg captured as data:image/svg+xml) stays vector
+      specials: { src: e.src ?? "", imageCompression: !/^data:image\/svg|\.svg(\?|#|$)/i.test(e.src ?? "") },
     };
     if (e.crop) {
       const crop: Record<string, number> = {};
@@ -582,10 +597,13 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
     const mshow = m ? Math.max(1, Math.round(m.width / msw)) : show;
     node.responsive.desktop.styles.width = show * sw;
     node.responsive.mobile.styles.width = mshow * msw;
-    const base = { showNavigation: !!e.config?.["nav"], autoplayMode: "repeat", delayTimeMs: 5000, infinity: true };
+    // a tab set: one panel at a time, switched only by its tab buttons (change_tab)
+    const base = e.config?.["tabs"]
+      ? { showNavigation: false, autoplayMode: "off", infinity: false, transition: "none" }
+      : { showNavigation: !!e.config?.["nav"], autoplayMode: "repeat", delayTimeMs: 5000, infinity: true };
     node.responsive.desktop.config = { ...(node.responsive.desktop.config ?? {}), ...base, slideWidth: sw, slideToShow: show };
     node.responsive.mobile.config = { ...(node.responsive.mobile.config ?? {}), ...base, slideWidth: msw, slideToShow: mshow };
-    ctx.notes.push(`${e.id}: slider → native carousel (${slides.length} slides, ${show} visible on desktop, ${mshow} on mobile)`);
+    ctx.notes.push(`${e.id}: ${e.config?.["tabs"] ? "tab set" : "slider"} → native carousel (${slides.length} slides, ${show} visible on desktop, ${mshow} on mobile)`);
     return node;
   }
 
@@ -766,7 +784,7 @@ export function canvasToPageSource(canvas: IngestedCanvas, meta: CanvasToSourceM
   const css = ctx.css.filter(Boolean).join("\n");
   if (css) {
     source.settings.extra_css = css;
-    ctx.notes.push(`hover effects of ${ctx.css.filter(Boolean).length} element(s) → settings.extra_css (scoped to #w-<id>)`);
+    ctx.notes.push(`hover / animation effects of ${ctx.css.filter(Boolean).length} element(s) → settings.extra_css (scoped to #w-<id>)`);
   }
   // icon-font stylesheets only from the public CDNs that serve them (a cloned page must not get an
   // arbitrary third-party stylesheet on the user's domain)

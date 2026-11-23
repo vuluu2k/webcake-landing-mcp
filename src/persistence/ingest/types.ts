@@ -185,7 +185,9 @@ export type CanvasElement = {
   /** form_item: the real <input>/<select>/<textarea> facts. */
   input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean; pattern?: string; label?: string; options?: string[]; multiple?: boolean };
   /** simplified builder events: { type: 'popup'|'section'|'link'|'phone', action: target }. */
-  events?: { type: string; action: string }[];
+  events?: { type: string; action: string; index?: number; show?: boolean }[];
+  /** browser capture: a CSS animation with no native counterpart — the page's @keyframes + the animation shorthand. */
+  keyframes?: { css: string; animation: string };
   /** builder sticky-position keyword (bottom_left…) when the element is pinned. */
   sticky?: string;
   /** widget config from the event-data JSON (countdown_minute, thankyou_value, delay_popup_welcome_page, autoplay…). */
