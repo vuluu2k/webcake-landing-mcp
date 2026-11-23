@@ -31,6 +31,28 @@ import type { Domain } from "../core/domain.js";
 import type { IngestedAst, IngestedCanvas } from "../persistence/html-ingest.js";
 import { text } from "../mcp/response.js";
 import { parseHtml, fetchHtml, fetchStylesheets, applyCloneFonts } from "../persistence/html-ingest.js";
+import { cloneToDraft, isNoBrowserError } from "./clone.js";
+
+/**
+ * intent:'clone' on a page that is NOT an absolute-canvas export: the static AST would leave the model
+ * to rebuild the page by hand (the lossy step), so measure it in a real browser instead — the same
+ * deterministic draft clone_page makes. No browser on the host (or the measurement fails) → undefined,
+ * and the caller returns the AST with a warning saying why.
+ */
+async function browserClone(domain: Domain, target: { url?: string; html?: string; baseUrl?: string }, title?: string) {
+  try {
+    return { mode: "browser_clone", ...(await cloneToDraft(domain, target, title)) };
+  } catch (e: any) {
+    const error = String(e?.message ?? e);
+    return { fallback: isNoBrowserError(error) ? "no browser on this host (Playwright/Chrome) — returned the reference AST; rebuild by hand from it" : `browser measurement failed (${error.slice(0, 160)}) — returned the reference AST` };
+  }
+}
+
+/** The AST result, with the reason the browser clone was not used folded into its warnings. */
+function withFallback(ast: Record<string, unknown>, why?: string) {
+  if (!why) return ast;
+  return { ...ast, warnings: [...((ast.warnings as string[] | undefined) ?? []), why] };
+}
 
 const sectionsParam = z
   .array(z.string())
@@ -92,7 +114,7 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
       intent: z
         .enum(["adapt", "clone"])
         .optional()
-        .describe("How the result will be used. 'adapt' (default): the reference provides layout and imagery while the text is rewritten for the user's brand. 'clone': text and images stay close to the original. Absolute-canvas exports return a clone `source` either way."),
+        .describe("How the result will be used. 'adapt' (default): the reference provides layout and imagery while the text is rewritten for the user's brand. 'clone': a faithful copy — when the host has a browser (Playwright) the page is MEASURED like clone_page and the result is a ready `draft_id` (mode:'browser_clone') to save with create_page({ draft_id }); without one the AST comes back with a warning. Absolute-canvas exports return a clone `source` either way."),
       detail: detailParam,
       sections: sectionsParam,
       base_url: z
@@ -104,7 +126,13 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
     async ({ html, intent, detail, sections, base_url }) => {
       const baseUrl = base_url && /^https?:\/\//i.test(base_url) ? base_url : undefined;
       const extraCss = baseUrl ? await fetchStylesheets(html, baseUrl) : undefined;
-      return text({ intent: intent ?? "adapt", ...withCloneSource(domain, parseHtml(html, detail ?? "compact", { sections, baseUrl, extraCss })) });
+      const parsed = parseHtml(html, detail ?? "compact", { sections, baseUrl, extraCss });
+      if (intent === "clone" && !parsed.canvas) {
+        const bc = await browserClone(domain, { html, baseUrl }, parsed.title);
+        if ("draft_id" in bc) return text({ intent, ...bc });
+        return text({ intent, ...withFallback(parsed as unknown as Record<string, unknown>, bc.fallback) });
+      }
+      return text({ intent: intent ?? "adapt", ...withCloneSource(domain, parsed) });
     }
   );
 
@@ -116,7 +144,7 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
       intent: z
         .enum(["adapt", "clone"])
         .optional()
-        .describe("How the result will be used. 'adapt' (default): the reference provides layout and imagery while the text is rewritten for the user's brand. 'clone': text and images stay close to the original. Absolute-canvas exports return a clone `source` either way."),
+        .describe("How the result will be used. 'adapt' (default): the reference provides layout and imagery while the text is rewritten for the user's brand. 'clone': a faithful copy — when the host has a browser (Playwright) the page is MEASURED like clone_page (JavaScript runs, so client-rendered sites work too) and the result is a ready `draft_id` (mode:'browser_clone') to save with create_page({ draft_id }); without one the AST comes back with a warning. Absolute-canvas exports return a clone `source` either way."),
       detail: detailParam,
       sections: sectionsParam,
     },
@@ -133,12 +161,18 @@ export function registerIngestTools(server: McpServer, domain: Domain) {
         });
       }
       const extraCss = await fetchStylesheets(fetched.html!, url);
+      const parsed = parseHtml(fetched.html!, detail ?? "compact", { sections, baseUrl: url, extraCss });
+      if (intent === "clone" && !parsed.canvas) {
+        const bc = await browserClone(domain, { url }, parsed.title);
+        if ("draft_id" in bc) return text({ url, status: fetched.status, intent, ...bc });
+        return text({ ok: true, url, status: fetched.status, intent, ...withFallback(parsed as unknown as Record<string, unknown>, bc.fallback) });
+      }
       return text({
         ok: true,
         url,
         status: fetched.status,
         intent: intent ?? "adapt",
-        ...withCloneSource(domain, parseHtml(fetched.html!, detail ?? "compact", { sections, baseUrl: url, extraCss })),
+        ...withCloneSource(domain, parsed),
       });
     }
   );
