@@ -768,6 +768,9 @@ export function validatePage(input: unknown): ValidationResult {
     const hasField = (n: any): boolean => (n?.children ?? []).some((c: any) => FIELD_TYPES.has(c?.type) || c?.type === "group-select" || hasField(c));
     if (type === "form" && !hasField(node)) {
       warnings.push(`[EMPTY_RENDER] ${path} (form): has no input fields — nothing to fill in or submit. Add fields (input with field_name full_name / phone_number, …) and a button.`);
+    } else if (type === "form" && !(node.children ?? []).some((c: any) => c?.type === "button")) {
+      // the build emits the hidden <button type=submit> only inside a button whose parent is the form
+      warnings.push(`${path} (form): no button among its direct children — the form can never be submitted. Add a button as a DIRECT child of the form (inside a group/rectangle it does not submit).`);
     }
     if (OPTION_NAME_FIELDS.has(type) && type !== "select" && !(Array.isArray(node.specials?.options) && node.specials.options.length)) {
       warnings.push(`[EMPTY_RENDER] ${path} (${type}): specials.options is empty — no choices render. Add [{ id, name }, …].`);

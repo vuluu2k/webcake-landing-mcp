@@ -3,7 +3,20 @@
  */
 
 export type IngestedCta = { text: string; href?: string };
-export type IngestedFormField = { label?: string; type: string; name?: string; required?: boolean };
+/**
+ * One form control of the source. `webcake` = the field element that renders + submits it on Webcake
+ * (type + specials incl. a canonical field_name and {id,name} options) — copy it as the form child.
+ */
+export type IngestedFormField = {
+  label?: string;
+  type: string;
+  name?: string;
+  placeholder?: string;
+  required?: boolean;
+  /** select / radio / checkbox choices (visible text). */
+  options?: string[];
+  webcake?: { type: string; specials: Record<string, unknown> };
+};
 
 /**
  * Desktop section-height hint (px on the 960px canvas) so the rebuilt page's
@@ -170,7 +183,7 @@ export type CanvasElement = {
   /** whitelisted declarations from the element's stylesheet rules (typography, colors, borders, background…). */
   style?: Record<string, string>;
   /** form_item: the real <input>/<select>/<textarea> facts. */
-  input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean; pattern?: string };
+  input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean; pattern?: string; label?: string; options?: string[]; multiple?: boolean };
   /** simplified builder events: { type: 'popup'|'section'|'link'|'phone', action: target }. */
   events?: { type: string; action: string }[];
   /** builder sticky-position keyword (bottom_left…) when the element is pinned. */

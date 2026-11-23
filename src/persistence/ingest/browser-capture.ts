@@ -29,7 +29,7 @@ type Raw = {
   target?: { type: string; action: string };
   box: { top: number; left: number; width: number; height: number };
   style: Record<string, string>;
-  input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean };
+  input?: { name?: string; placeholder?: string; input_type?: string; required?: boolean; label?: string; options?: string[]; multiple?: boolean };
   fields?: Raw[];
   /** clip group (an overflow:hidden box whose content spills out) / slider / slide: children are relative to it. */
   children?: Raw[];
@@ -56,6 +56,8 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
   const sy = window.scrollY;
   const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "META", "LINK", "BR", "HEAD", "OPTION"]);
   const FIELD = new Set(["INPUT", "TEXTAREA", "SELECT"]);
+  /** labels of radio/checkbox choices: drawn by the choice field itself, not as separate texts. */
+  const consumed = new Set<Element>();
   const cs = (el: Element) => getComputedStyle(el);
   const keyOf = (el: Element): string => {
     const parts: string[] = [];
@@ -299,9 +301,21 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
   // sections
   let root: Element = document.body;
   const sizeable = (el: Element) => Array.from<any>(el.children).filter((c) => !SKIP.has(c.tagName) && shown(c) && c.getBoundingClientRect().height >= 16);
+  // A <form> is measured whole (its fields only exist as the form's children) — never entered as the
+  // root or split into bands. A page-wrapping form (ASP.NET WebForms) is entered like any wrapper.
+  // ponytail: "page wrapper" = taller than 2 viewports; a very long order form gets split instead.
+  // A form without a <form> tag (JS-submitted): the TIGHTEST box holding 2+ fields and a button, outside any <form>.
+  const ctrls = (el: Element) => el.querySelectorAll("input:not([type=hidden]):not([type=search]):not([type=submit]):not([type=button]),textarea,select").length;
+  const hasBtn = (el: Element) => !!el.querySelector("button,[type=submit],[role=button]");
+  const looseForm = (el: Element) => {
+    const n = ctrls(el);
+    return n >= 2 && hasBtn(el) && !el.closest("form") && !el.querySelector("form") &&
+      !Array.from<any>(el.children).some((c) => ctrls(c) === n && hasBtn(c));
+  };
+  const realForm = (el: Element) => (el.tagName === "FORM" || looseForm(el)) && el.getBoundingClientRect().height <= window.innerHeight * 2;
   for (let i = 0; i < 12; i++) {
     const kids = sizeable(root);
-    if (kids.length === 1 && kids[0].children.length) root = kids[0];
+    if (kids.length === 1 && kids[0].children.length && !realForm(kids[0])) root = kids[0];
     else break;
   }
   const byTop = (a: any, b: any) => a.getBoundingClientRect().top - b.getBoundingClientRect().top;
@@ -321,7 +335,7 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
         const prev = i ? kids[i - 1].getBoundingClientRect() : null;
         return q.width >= r.width * 0.5 && (!prev || q.top >= prev.top + prev.height * 0.5);
       });
-      return depth < 3 && r.height > window.innerHeight * 1.5 && stacked ? flatten(kids, depth + 1) : [b];
+      return depth < 3 && !realForm(b) && r.height > window.innerHeight * 1.5 && stacked ? flatten(kids, depth + 1) : [b];
     });
   const topLevel = sizeable(root).sort(byTop);
   const overlayEls = topLevel.filter(isOverlay);
@@ -505,30 +519,86 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
         push({ __el: el, key: keyOf(el), kind: tag === "VIDEO" ? "video" : "embed", src, ...(video ? { video } : {}), box: boxOf(el), style });
         return;
       }
-      if (tag === "FORM" && !inForm) {
+      if ((tag === "FORM" || looseForm(el)) && !inForm) {
         const fr = el.getBoundingClientRect();
         const base = { top: fr.top + sy, left: fr.left };
         const fields: Raw[] = [];
+        const clean = (t: string) => (t || "").replace(/\s+/g, " ").replace(/[\s:*]+$/, "").trim();
+        // a control's label: <label for>, a wrapping <label>, aria-label, aria-labelledby
+        const labelOf = (f: any): { text: string; el?: Element } => {
+          const l = (f.labels && f.labels[0]) || f.closest("label");
+          if (l) {
+            const c = l.cloneNode(true) as any;
+            c.querySelectorAll("input,select,textarea").forEach((x: any) => x.remove());
+            return { text: clean(c.textContent), el: l };
+          }
+          const by = f.getAttribute("aria-labelledby");
+          const lb = by ? document.getElementById(by.split(/\s+/)[0]) : null;
+          return { text: clean(f.getAttribute("aria-label") || lb?.textContent || "") };
+        };
+        const union = (els: Element[]) => {
+          const bs = els.map((x) => boxOf(x, base)).filter((b) => b.width > 0 && b.height > 0);
+          const t = Math.min(...bs.map((b) => b.top)), l = Math.min(...bs.map((b) => b.left));
+          return { top: t, left: l, width: Math.max(...bs.map((b) => b.left + b.width)) - l, height: Math.max(...bs.map((b) => b.top + b.height)) - t };
+        };
+        const grouped = new Set<string>();
         el.querySelectorAll("input,textarea,select,button,[type=submit]").forEach((f: any) => {
-          if (!shown(f) || (f as HTMLInputElement).type === "hidden") return;
+          const ty = String(f.type || "").toLowerCase();
+          if (ty === "hidden" || ty === "reset") return;
+          if (ty === "radio" || ty === "checkbox") {
+            // ONE choice field per name: the inputs are often visually hidden behind styled labels,
+            // so the group is the union of every input + label box that shows.
+            const gk = f.name || keyOf(f);
+            if (grouped.has(gk)) return;
+            grouped.add(gk);
+            const members: any[] = f.name ? Array.from(el.querySelectorAll(`input[type=${ty}]`)).filter((x: any) => x.name === f.name) : [f];
+            const labels = members.map(labelOf);
+            const parts = [...members, ...labels.map((x) => x.el)].filter((x) => x && shown(x));
+            const gbox = parts.length ? union(parts) : null;
+            if (!gbox || !isFinite(gbox.top)) return;
+            labels.forEach((x) => x.el && consumed.add(x.el));
+            const legend = clean(f.closest("fieldset")?.querySelector("legend")?.textContent || "");
+            const st: Record<string, string> = {};
+            typo(cs(labels[0].el || f), st);
+            fields.push({
+              key: keyOf(f), kind: "form_item", box: gbox, style: st,
+              input: {
+                name: f.name || undefined, input_type: ty, required: members.some((x) => x.required) || undefined,
+                label: legend || (members.length === 1 ? labels[0].text : undefined),
+                options: members.map((x, i) => labels[i].text || x.value).filter(Boolean),
+              },
+            });
+            return;
+          }
+          if (!shown(f)) return;
           const fs = cs(f);
           const st: Record<string, string> = {};
           paint(fs, st);
           typo(fs, st);
-          if (f.tagName === "BUTTON" || (f as HTMLInputElement).type === "submit")
+          if (f.tagName === "BUTTON" || ty === "submit") {
             fields.push({ key: keyOf(f), kind: "button", text: (f as HTMLElement).innerText?.trim() || (f as HTMLInputElement).value || "Gửi", box: boxOf(f, base), style: st });
-          else
-            fields.push({
-              key: keyOf(f), kind: "form_item", box: boxOf(f, base), style: st,
-              input: { name: (f as HTMLInputElement).name || undefined, placeholder: (f as HTMLInputElement).placeholder || undefined, input_type: (f as HTMLInputElement).type, required: (f as HTMLInputElement).required || undefined },
-            });
+            return;
+          }
+          const opts = f.tagName === "SELECT" ? Array.from<any>(f.options) : [];
+          // a value-less first option ("-- Chọn --") is the select's prompt, not a choice
+          const prompt = opts[0] && (!opts[0].value || opts[0].disabled) ? clean(opts.shift().text) : "";
+          fields.push({
+            key: keyOf(f), kind: "form_item", box: boxOf(f, base), style: st,
+            input: {
+              name: f.name || undefined, placeholder: f.placeholder || prompt || undefined,
+              input_type: f.tagName === "SELECT" ? "select" : f.tagName === "TEXTAREA" ? "textarea" : ty,
+              required: f.required || undefined, label: labelOf(f).text || undefined,
+              ...(opts.length ? { options: opts.map((o: any) => clean(o.text)).filter(Boolean) } : {}),
+              ...(f.multiple ? { multiple: true } : {}),
+            },
+          });
         });
         paint(s, style);
         push({ __el: el, key: keyOf(el), kind: "form", box: boxOf(el), style, fields });
         Array.from<any>(el.children).forEach((c) => visit(c, true));
         return;
       }
-      if (inForm && (FIELD.has(tag) || tag === "BUTTON")) return; // already a form field
+      if (inForm && (FIELD.has(tag) || tag === "BUTTON" || consumed.has(el))) return; // already a form field
       if (FIELD.has(tag)) return; // a field outside a form cannot submit on a landing page
       const text = visibleText(el);
       const buttonish = (tag === "A" || tag === "BUTTON" || el.getAttribute("role") === "button") && painted(s) && text.length > 0 && text.length <= 60 && el.getBoundingClientRect().height <= 120;
@@ -642,7 +712,8 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
       Array.from<any>(el.children).forEach((c) => visit(c, inForm));
     };
     // a band that IS a slider is measured as one (its children are slides, not elements)
-    if (slidesOf(band).length >= 2) visit(band, false);
+    // … and so is a band that IS a form (its fields are only found from the form itself)
+    if (slidesOf(band).length >= 2 || realForm(band)) visit(band, false);
     else Array.from<any>(band.children).forEach((c) => visit(c, false));
     if (!opt.popups) {
       for (const ov of overlayEls) {
