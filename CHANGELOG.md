@@ -6,6 +6,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-11-23
+
+### Added
+- `ingest_html` and `ingest_url` with `intent:'clone'` now measure a page that is not an absolute-canvas export in a real browser, the same way `clone_page` does, and return a ready `draft_id` (`mode:'browser_clone'`) to save with `create_page`; without a browser on the host they fall back to the static AST with a warning explaining why.
+- `clone_page` accepts a `base_url` alongside raw `html` so a saved or exported page's relative images, stylesheets and fonts resolve against its original URL.
+- `clone_page` now rebuilds accordions and FAQ panels (`<details>`, Bootstrap collapse, `aria-expanded`) as a click-to-collapse group and tab sets (`[role=tabpanel]`, `.tab-pane`) as a carousel switched by its own tab buttons, instead of flattening either into static content.
+- `clone_page` now carries a page's `@keyframes` animations into `settings.extra_css` scoped to the matching element, alongside the existing `:hover`/transition handling.
+- `clone_page` now converts multi-colour SVGs (logos, illustrations, gradients) into an `image-block` instead of a single-colour mask; single-colour icons keep the native `svgMask`.
+
+### Fixed
+- `clone_page` and `ingest_html`/`ingest_url` now build each form control (`select`, radio, checkbox, textarea, date/time, file) as the matching Webcake field type with its options and placeholder preserved, instead of turning every control into a plain `input`.
+- `clone_page` now measures a `<form>` chosen as a clone's band/root as a whole block instead of dropping its inputs, picks up forms that submit via JavaScript without a `<form>` tag, and groups a radio/checkbox control hidden behind a styled label into one field instead of drawing the label twice.
+- `ingest_html`/`ingest_url`'s `form_fields` entries now carry placeholder text, options and label text (wrapping label, `aria-label`, `legend`) plus a `webcake: {type, specials}` object that can be pasted directly as the form's child, and now also detect forms without a `<form>` tag; a section containing a form keeps its surrounding text and images instead of losing them.
+- `validate_page` now warns when a `form` has no `button` among its direct children, since such a form can never be submitted.
+- Text inside a `group`, carousel slide or form built by `clone_page`/`ingest_html`/`ingest_url` no longer stretches past its container, removing false text-overflow warnings.
+
 ## [1.13.7] - 2026-11-22
 
 ### Fixed

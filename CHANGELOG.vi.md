@@ -6,6 +6,22 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-11-23
+
+### Added
+- `ingest_html` và `ingest_url` với `intent:'clone'` nay đo trang không phải export dạng canvas tuyệt đối bằng một trình duyệt thật, giống cách `clone_page` làm, và trả về một `draft_id` dựng sẵn (`mode:'browser_clone'`) để lưu bằng `create_page`; không có trình duyệt trên host thì quay về AST tĩnh kèm cảnh báo giải thích lý do.
+- `clone_page` nhận thêm `base_url` đi cùng `html` thô, để ảnh, stylesheet và font tương đối của một trang đã lưu/export load đúng theo URL gốc của trang.
+- `clone_page` nay dựng accordion và FAQ (`<details>`, Bootstrap collapse, `aria-expanded`) thành một nhóm click-để-thu-gọn, và các bộ tab (`[role=tabpanel]`, `.tab-pane`) thành một carousel chuyển bằng chính nút tab của nó, thay vì làm phẳng cả hai thành nội dung tĩnh.
+- `clone_page` nay mang `@keyframes` của trang vào `settings.extra_css` theo đúng phần tử, cùng với xử lý `:hover`/transition đã có.
+- `clone_page` nay chuyển SVG nhiều màu (logo, minh hoạ, gradient) thành `image-block` thay vì mask một màu; icon một màu vẫn giữ `svgMask` gốc.
+
+### Fixed
+- `clone_page` và `ingest_html`/`ingest_url` nay dựng mỗi control của form (`select`, radio, checkbox, textarea, ngày/giờ, file) thành đúng kiểu field Webcake, giữ nguyên options và placeholder, thay vì biến mọi control thành một `input` trơn.
+- `clone_page` nay đo nguyên khối một `<form>` được chọn làm band/root của clone thay vì làm rớt input của nó, nhận cả form submit bằng JavaScript không có thẻ `<form>`, và gộp một control radio/checkbox ẩn sau nhãn tự vẽ thành một field thay vì vẽ nhãn hai lần.
+- Các mục `form_fields` của `ingest_html`/`ingest_url` nay mang theo placeholder, options và nhãn (label bọc ngoài, `aria-label`, `legend`) cùng một object `webcake: {type, specials}` có thể dán thẳng làm con của form, và nay cũng nhận diện form không có thẻ `<form>`; một section chứa form giữ nguyên chữ và ảnh xung quanh thay vì mất chúng.
+- `validate_page` nay cảnh báo khi một `form` không có `button` nào trong số con trực tiếp, vì form như vậy không thể submit được.
+- Chữ trong một `group`, slide carousel hoặc form do `clone_page`/`ingest_html`/`ingest_url` dựng nay không còn nới quá khung chứa, hết các cảnh báo tràn chữ giả.
+
 ## [1.13.7] - 2026-11-22
 
 ### Fixed
