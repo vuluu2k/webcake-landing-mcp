@@ -428,9 +428,95 @@ const SYSTEM_FIELD_ALIASES: Record<string, string> = {
   ma_giam_gia: "coupon", voucher: "coupon",
 };
 
+/** lowercase, accents stripped, non-alphanumerics → `_` ("Số điện thoại" → "so_dien_thoai"). */
+function slugField(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
 /** The system column a non-canonical field_name was clearly meant to be, else undefined. */
 export function systemFieldAlias(fieldName: string): string | undefined {
-  const slug = fieldName.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d")
-    .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  return SYSTEM_FIELD_ALIASES[slug];
+  return SYSTEM_FIELD_ALIASES[slugField(fieldName)];
+}
+
+/** What a source page says about one form control (HTML <input>/<select>/<textarea>, or a radio/checkbox group). */
+export type RawFormField = {
+  /** input type attr ("text", "email", "radio"…) or the tag ("select", "textarea"). */
+  input_type?: string;
+  name?: string;
+  label?: string;
+  placeholder?: string;
+  required?: boolean;
+  /** select / radio / checkbox choices (visible text). */
+  options?: string[];
+  /** <select multiple>. */
+  multiple?: boolean;
+};
+
+/**
+ * Map one source form control onto the Webcake field element that renders AND submits it:
+ * select → select ({id,name} options + field_placeholder), multi-select / checkbox → checkbox-group,
+ * radio → radio, textarea → textarea, date/time → input-datetime, file → input-file, else input
+ * (field_type email/phone/number/text). field_name = the system column when the name, label or
+ * placeholder clearly means one (name/"Họ và tên" → full_name, tel/"Số điện thoại" → phone_number),
+ * else the slugged name/label; `taken` (one Set per form) keeps names unique.
+ */
+export function fieldSpec(f: RawFormField, taken: Set<string>): { type: string; specials: Record<string, unknown> } {
+  const kind = (f.input_type || "text").toLowerCase();
+  const options = (f.options ?? []).map((o) => o.trim()).filter(Boolean)
+    .map((name, i) => ({ id: `opt${i + 1}`, name }));
+  const type =
+    kind === "select" ? (f.multiple ? "checkbox-group" : "select")
+    : kind === "checkbox" ? "checkbox-group"
+    : kind === "radio" ? "radio"
+    : kind === "textarea" ? "textarea"
+    : /^(date|time|datetime-local|month|week)$/.test(kind) ? "input-datetime"
+    : kind === "file" ? "input-file"
+    : "input";
+
+  // system columns only for free-text fields (a <select name="name"> is not the customer's name)
+  const cands = [f.name, f.label, f.placeholder].filter((s): s is string => !!s && !!s.trim());
+  let fieldName: string | undefined;
+  if (type === "input" || type === "textarea") {
+    for (const c of cands) {
+      const sys = SYSTEM_FIELD_NAMES.has(c) ? c : systemFieldAlias(c);
+      if (sys && !sys.includes("/") && !taken.has(sys)) { fieldName = sys; break; }
+    }
+    if (!fieldName && kind === "email" && !taken.has("email")) fieldName = "email";
+    if (!fieldName && kind === "tel" && !taken.has("phone_number")) fieldName = "phone_number";
+  }
+  if (!fieldName) {
+    const base = cands.map(slugField).find((s) => s && s.length <= 40) || type.replace(/-/g, "_");
+    fieldName = base;
+    for (let n = 2; taken.has(fieldName); n++) fieldName = `${base}_${n}`;
+  }
+  taken.add(fieldName);
+
+  const prompt = f.placeholder || f.label || "";
+  const specials: Record<string, unknown> = { field_name: fieldName };
+  if (f.required) specials.required = true;
+  if (type === "input") {
+    specials.field_placeholder = prompt;
+    specials.field_type =
+      fieldName === "phone_number" || kind === "tel" ? "phone"
+      : fieldName === "email" || kind === "email" ? "email"
+      : kind === "number" || kind === "range" ? "number"
+      : "text";
+  } else if (type === "textarea" || type === "input-file") {
+    specials.field_placeholder = prompt;
+  } else if (type === "input-datetime") {
+    specials.field_placeholder = prompt;
+    specials.datetime_type = kind === "time" || kind === "datetime-local" ? kind : "date";
+  } else if (type === "select") {
+    specials.field_placeholder = prompt || "Chọn...";
+    specials.default_value = "default-none";
+    specials.options = options;
+  } else {
+    // radio / checkbox-group: a lone checkbox ("Tôi đồng ý…") is a one-option group; the runtime
+    // splits these DOM ids on "-", so option names carry an en dash instead of a hyphen
+    const opts = options.length ? options : [{ id: "opt1", name: f.label || f.placeholder || "Đồng ý" }];
+    specials.options = opts.map((o) => ({ ...o, name: o.name.replace(/-/g, "–") }));
+    if (type === "radio") specials.default_value = "none";
+  }
+  return { type, specials };
 }

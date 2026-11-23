@@ -624,6 +624,35 @@ const form = ast.sections.find((s) => s.role === "form");
 check("ingest: form fields captured", (form?.form_fields?.length ?? 0) >= 2, form?.form_fields);
 check("ingest: form submit CTA captured", !!form?.ctas?.[0]?.text?.includes("Place"), form?.ctas);
 
+console.log("== ingest: form controls → the Webcake field that renders them ==");
+{
+  const fa = parseHtml(`<html><body><section><h2>Đăng ký tư vấn</h2><p>Để lại thông tin, chúng tôi gọi lại trong 5 phút.</p>
+    <form>
+      <label>Họ và tên * <input name="hoten" required></label>
+      <input type="tel" placeholder="Số điện thoại">
+      <select name="goi"><option value="">-- Chọn gói --</option><option>Cơ bản</option><option>Nâng cao</option></select>
+      <fieldset><legend>Giới tính</legend><label><input type="radio" name="gt" value="m">Nam</label><label><input type="radio" name="gt" value="f">Nữ</label></fieldset>
+      <label><input type="checkbox" name="agree" required> Tôi đồng ý điều khoản</label>
+      <textarea name="note" placeholder="Ghi chú"></textarea>
+      <input type="date" name="ngay">
+      <button>Gửi ngay</button>
+    </form></section></body></html>`);
+  const ff = fa.sections.find((s) => s.role === "form")?.form_fields ?? [];
+  const wc = ff.map((f) => f.webcake!);
+  check("form: one field per control, radio group collapsed", ff.length === 7, ff.map((f) => f.type));
+  check("form: wrapping <label> read + aliased to full_name", ff[0]?.label === "Họ và tên" && wc[0]?.specials.field_name === "full_name" && wc[0]?.specials.required === true, ff[0]);
+  check("form: tel → phone_number input", wc[1]?.type === "input" && wc[1]?.specials.field_name === "phone_number" && wc[1]?.specials.field_type === "phone", wc[1]);
+  check("form: select keeps options + prompt", wc[2]?.type === "select" && (wc[2]?.specials.options as any[])?.map((o) => o.name).join("|") === "Cơ bản|Nâng cao" && wc[2]?.specials.field_placeholder === "-- Chọn gói --", wc[2]);
+  check("form: radio group → radio with legend + choices", wc[3]?.type === "radio" && ff[3]?.label === "Giới tính" && (wc[3]?.specials.options as any[])?.length === 2, ff[3]);
+  check("form: lone checkbox → one-option checkbox-group", wc[4]?.type === "checkbox-group" && (wc[4]?.specials.options as any[])?.[0]?.name === "Tôi đồng ý điều khoản", wc[4]);
+  check("form: textarea / date map to their types", wc[5]?.type === "textarea" && wc[6]?.type === "input-datetime", wc.map((w) => w.type));
+  check("form: section copy kept", !!fa.sections.find((s) => s.role === "form")?.paragraphs?.length);
+  const dupes = parseHtml(`<html><body><section><form><input name="email"><input type="email" placeholder="Email"><button>OK</button></form><p>Long enough body text so this is not treated as a client-rendered shell.</p></section></body></html>`).sections[0]?.form_fields ?? [];
+  check("form: field_names unique within a form", new Set(dupes.map((f) => f.webcake!.specials.field_name)).size === dupes.length, dupes.map((f) => f.webcake!.specials.field_name));
+  const noTag = parseHtml(`<html><body><section><h2>Nhận báo giá</h2><div class="f"><input placeholder="Họ tên"><input placeholder="SĐT"><button>Gửi</button></div><p>Body copy long enough to not be treated as an empty client-rendered shell.</p></section></body></html>`).sections[0];
+  check("form: <form>-less block with 2 controls + button is a form", noTag?.role === "form" && noTag.form_fields?.length === 2, noTag);
+}
+
 console.log("== ingest: Stitch-structure section classification (generalizes to any Stitch HTML) ==");
 {
   // Mirrors the real Stitch shape: <nav> top bar (no <header>), <main> with a
@@ -1261,6 +1290,25 @@ const cSec2: any = cloneSrc.page[1];
 const cForm = cSec2.children.find((c: any) => c.id === "form60");
 const cInput = cForm?.children?.[0];
 check("clone: form_item → input child w/ mapped field_name", cForm?.type === "form" && cInput?.type === "input" && cInput.specials.field_name === "phone_number" && cInput.specials.field_type === "phone" && cInput.specials.required === true, cInput?.specials);
+{
+  const lf = parseHtml(`<html><head><style>.ladi-wraper{width:420px}
+#SECTION1{height:500px}#FORM1{width:300px;height:400px;top:10px;left:10px}
+#FORM_ITEM2{width:300px;height:40px;top:0;left:0}#FORM_ITEM3{width:300px;height:40px;top:50px;left:0}
+#FORM_ITEM4{width:300px;height:60px;top:100px;left:0}#FORM_ITEM5{width:300px;height:80px;top:170px;left:0}</style></head><body><div class="ladi-wraper">
+<div id="SECTION1" class="ladi-section"><div class="ladi-container"><div id="FORM1" class="ladi-element"><form class="ladi-form">
+<div id="FORM_ITEM2" class="ladi-element"><div class="ladi-form-item"><select name="size" required><option value="">Chọn size</option><option value="S">S</option><option value="M">M</option></select></div></div>
+<div id="FORM_ITEM3" class="ladi-element"><div class="ladi-form-item"><input name="ten" placeholder="Họ và tên"></div></div>
+<div id="FORM_ITEM4" class="ladi-element"><div class="ladi-form-checkbox"><div class="ladi-form-checkbox-item"><input type="checkbox" name="mau" value="do"><span>Đỏ</span></div><div class="ladi-form-checkbox-item"><input type="checkbox" name="mau" value="xanh"><span>Xanh</span></div></div></div>
+<div id="FORM_ITEM5" class="ladi-element"><div class="ladi-form-item"><textarea name="msg" placeholder="Lời nhắn"></textarea></div></div>
+</form></div></div></div></div></body></html>`);
+  const src = landingDomain.canvasToSource!(lf.canvas!, { title: "f" }).source as any;
+  const kids = src.page[0].children[0].children as any[];
+  check("clone: ladi select keeps options + prompt", kids[0]?.type === "select" && kids[0].specials.options.map((o: any) => o.name).join() === "S,M" && kids[0].specials.field_placeholder === "Chọn size", kids[0]);
+  check("clone: ladi 'Họ và tên' input → full_name", kids[1]?.type === "input" && kids[1].specials.field_name === "full_name", kids[1]?.specials);
+  check("clone: ladi checkbox item → checkbox-group with choices", kids[2]?.type === "checkbox-group" && kids[2].specials.options.map((o: any) => o.name).join() === "Đỏ,Xanh", kids[2]);
+  check("clone: ladi textarea → textarea", kids[3]?.type === "textarea" && kids[3].specials.field_placeholder === "Lời nhắn", kids[3]);
+  check("clone: ladi form fields validate", landingDomain.validate(landingDomain.expand(src)).valid, landingDomain.validate(landingDomain.expand(src)).errors);
+}
 const cList = cSec2.children.find((c: any) => c.id === "list_paragraph80");
 check("clone: list → list-paragraph w/ <li> items", cList?.type === "list-paragraph" && cList.specials.text.includes("<li>Thành phần thiên nhiên</li>"), cList?.specials);
 const cCd = cSec2.children.find((c: any) => c.id === "countdown90");
@@ -1478,6 +1526,7 @@ const bindingsGood = {
           children: [
             { id: "n1", type: "input", properties: {}, responsive: mkBox(), specials: { field_name: "full_name" }, events: [] },
             { id: "p1", type: "input", properties: {}, responsive: mkBox(), specials: { field_name: "phone_number" }, events: [] },
+            { id: "b1", type: "button", properties: {}, responsive: mkBox(), specials: { text: "Gửi" }, events: [] },
           ],
         },
       ],
@@ -1486,6 +1535,11 @@ const bindingsGood = {
 };
 const rbg = validatePage(bindingsGood);
 check("clean form has no binding warnings", rbg.warnings.length === 0, rbg.warnings);
+{
+  const noBtn = structuredClone(bindingsGood);
+  noBtn.page[0].children[0].children.pop();
+  check("form without a direct-child button warned", validatePage(noBtn).warnings.some((w: string) => w.includes("never be submitted")));
+}
 
 console.log("== config: named environment presets (local/staging/prod) ==");
 {

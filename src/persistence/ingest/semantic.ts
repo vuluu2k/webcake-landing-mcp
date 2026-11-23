@@ -23,6 +23,7 @@ import {
   mergeTopNFonts,
 } from "./stylesheets.js";
 import { type TailwindConfig, resolveTailwindColors, resolveTailwindGradients } from "./tailwind.js";
+import { fieldSpec } from "../../domains/landing/elements/form.js";
 
 export const HEADING_TAGS = ["h1", "h2", "h3", "h4"];
 
@@ -106,7 +107,9 @@ export function classifySection(el: HTMLElement, detail: "compact" | "full"): In
   // A top nav bar without a <header> tag (Stitch uses <nav class="fixed top-0…">) is the header.
   if (looksLikeTopBar(el)) return classifyHeader(el, detail);
 
-  const form = el.querySelector("form");
+  // a <form>, or a form-shaped block without one (2+ text controls + a button — JS-submitted forms)
+  const form = el.querySelector("form") ??
+    (el.querySelectorAll("input:not([type=hidden]):not([type=search]), textarea, select").length >= 2 && el.querySelector("button, input[type=submit], a[class*=btn], a[class*=button]") ? el : null);
   if (form) return classifyForm(el, form, detail);
 
   const heading = pickHeading(el);
@@ -229,37 +232,86 @@ function classifyFooter(el: HTMLElement, detail: "compact" | "full"): IngestedSe
   return { role: "footer", links: links.length ? links : undefined, paragraphs: paragraphs.length ? paragraphs : undefined };
 }
 
+/** Collapse whitespace; drop the trailing ":" / "*" of a label ("Họ tên *:" → "Họ tên"). */
+const cleanLabel = (t?: string) => (t ?? "").replace(/\s+/g, " ").replace(/[\s:*]+$/, "").trim();
+
+/** A control's label: <label for=id>, a wrapping <label>, aria-label, else a <label> right before it. */
+function labelOf(form: HTMLElement, inp: HTMLElement): string | undefined {
+  const id = inp.getAttribute("id");
+  let lbl = id ? form.querySelector(`label[for="${id}"]`) : null;
+  for (let p = inp.parentNode as HTMLElement | null; !lbl && p && p !== form; p = p.parentNode as HTMLElement | null) {
+    if (p.tagName?.toLowerCase() === "label") lbl = p;
+  }
+  if (lbl) {
+    // the label's OWN text, without a nested select's options / input values
+    const own = lbl.childNodes
+      .filter((n: any) => !["select", "textarea", "input"].includes(n.tagName?.toLowerCase?.()))
+      .map((n: any) => n.text ?? "").join(" ");
+    const t = cleanLabel(own);
+    if (t) return t;
+  }
+  const aria = cleanLabel(inp.getAttribute("aria-label"));
+  if (aria) return aria;
+  const prev = inp.previousElementSibling;
+  if (prev && ["label", "span", "p"].includes(prev.tagName?.toLowerCase()) && prev.text.length <= 60) return cleanLabel(prev.text) || undefined;
+  return undefined;
+}
+
+/**
+ * Every control of a form, as the user sees it: a radio/checkbox GROUP is one field with its choices
+ * (not one field per input), a select carries its options (a value-less first option is its prompt).
+ * `webcake` is the field element that renders + submits it (shared with the clone path: fieldSpec).
+ */
+function formFields(form: HTMLElement): IngestedFormField[] {
+  const out: IngestedFormField[] = [];
+  const taken = new Set<string>();
+  const groups = new Set<string>();
+  for (const inp of form.querySelectorAll("input, textarea, select")) {
+    const tag = inp.tagName?.toLowerCase();
+    const type = tag === "input" ? (inp.getAttribute("type") ?? "text").toLowerCase() : tag;
+    if (["hidden", "submit", "button", "reset", "image"].includes(type)) continue;
+    const name = inp.getAttribute("name") || undefined;
+    let label = labelOf(form, inp);
+    let placeholder = inp.getAttribute("placeholder") || undefined;
+    let options: string[] | undefined;
+    let required = inp.hasAttribute("required");
+    if (type === "radio" || type === "checkbox") {
+      const key = `${type}:${name ?? inp.getAttribute("id") ?? out.length}`;
+      if (groups.has(key)) continue;
+      groups.add(key);
+      const members = name ? form.querySelectorAll(`input[type="${type}"]`).filter((m) => m.getAttribute("name") === name) : [inp];
+      options = members.map((m) => labelOf(form, m) || m.getAttribute("value") || "").filter(Boolean);
+      required = members.some((m) => m.hasAttribute("required"));
+      const legend = cleanLabel(inp.closest("fieldset")?.querySelector("legend")?.text);
+      label = legend || (members.length === 1 ? label : undefined);
+    } else if (type === "select") {
+      const opts = inp.querySelectorAll("option");
+      if (opts[0] && (!opts[0].getAttribute("value") || opts[0].hasAttribute("disabled"))) placeholder = cleanLabel(opts.shift()!.text) || placeholder;
+      options = opts.map((o) => cleanLabel(o.text)).filter(Boolean);
+    }
+    const raw = { input_type: type, name, label, placeholder, required: required || undefined, options: options?.length ? options : undefined, multiple: type === "select" && inp.hasAttribute("multiple") };
+    out.push({ type, name, label, placeholder, required: raw.required, options: raw.options, webcake: fieldSpec(raw, taken) });
+  }
+  return out;
+}
+
 function classifyForm(el: HTMLElement, form: HTMLElement, detail: "compact" | "full"): IngestedSection {
   const heading = pickHeading(el);
   const subheading = heading ? pickSubheading(el, heading) : undefined;
-  const inputs = form.querySelectorAll("input, textarea, select");
-  const form_fields: IngestedFormField[] = inputs
-    .map((inp) => {
-      const tag = inp.tagName?.toLowerCase();
-      const type =
-        tag === "input" ? inp.getAttribute("type") ?? "text" : tag === "textarea" ? "textarea" : "select";
-      const name = inp.getAttribute("name") || undefined;
-      const id = inp.getAttribute("id");
-      let label: string | undefined;
-      if (id) {
-        const lbl = form.querySelector(`label[for="${id}"]`);
-        if (lbl) label = lbl.text.trim();
-      }
-      if (!label) {
-        const placeholder = inp.getAttribute("placeholder");
-        if (placeholder) label = placeholder;
-      }
-      return { type, name, required: inp.hasAttribute("required") || undefined, label };
-    })
-    .filter((f) => f.type !== "hidden" && f.type !== "submit" && f.type !== "button");
+  const form_fields = formFields(form);
   const submit = form.querySelector('button[type="submit"], input[type="submit"]') ?? form.querySelector("button");
   const submitText =
     (submit?.text?.trim() || submit?.getAttribute?.("value") || "").trim() || (form_fields.length ? "Submit" : undefined);
   const ctas: IngestedCta[] = submitText ? [{ text: submitText }] : [];
+  // a form often sits inside a hero / offer band: keep that band's copy + images too
+  const paragraphs = pickParagraphs(el, detail).filter((p) => !form_fields.some((f) => f.label === p)).slice(0, detail === "full" ? 6 : 3);
+  const images = pickImages(el, detail);
   const sec: IngestedSection = {
     role: "form",
     heading: elText(heading),
     subheading,
+    paragraphs: paragraphs.length ? paragraphs : undefined,
+    images: images.length ? images : undefined,
     form_fields: form_fields.length ? form_fields : undefined,
     ctas: ctas.length ? ctas : undefined,
   };

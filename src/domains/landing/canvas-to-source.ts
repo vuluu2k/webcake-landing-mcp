@@ -17,6 +17,7 @@
  */
 import { createPageSource } from "./page.js";
 import { ANIMATABLE_TYPES, ANIMATION_NAMES, CANVAS } from "./vocab.js";
+import { fieldSpec } from "./elements/form.js";
 import type { IngestedCanvas, CanvasElement, CanvasSection } from "../../persistence/html-ingest.js";
 
 const MOBILE_W = CANVAS.mobileWidth;
@@ -269,17 +270,6 @@ function applySticky(ctx: Ctx, node: SourceNode, e: CanvasElement): void {
   ctx.notes.push(`${e.id}: position:fixed → pinned as a sticky '${pos}' element (was floating ${e.sticky ?? "bottom_right"}).`);
 }
 
-const FIELD_NAME_MAP: Record<string, string> = {
-  name: "full_name",
-  fullname: "full_name",
-  full_name: "full_name",
-  phone: "phone_number",
-  tel: "phone_number",
-  phone_number: "phone_number",
-  email: "email",
-  address: "address",
-};
-
 // ─── element conversion ──────────────────────────────────────────────────────
 function convertChildren(ctx: Ctx, e: CanvasElement, sectionH?: number): SourceNode[] {
   return (e.children ?? []).map((c) => convertElement(ctx, c, sectionH)).filter(Boolean) as SourceNode[];
@@ -495,23 +485,18 @@ function convertElementInner(ctx: Ctx, e: CanvasElement, sectionH?: number): Sou
       node.specials!.redirect_url = redirect;
       node.specials!.target_url = "_self";
     }
-    // Inputs/buttons must be DIRECT children of the form to submit.
+    // Inputs/buttons must be DIRECT children of the form to submit. Each control becomes the field
+    // type that renders it (select keeps its options, radio/checkbox their choices, textarea…).
+    const taken = new Set<string>();
     for (const c of e.children ?? []) {
       if (c.type === "form_item") {
-        const rawName = c.input?.name ?? `input_${idOf(c.id)}`;
-        const fieldName = FIELD_NAME_MAP[rawName.toLowerCase()] ?? rawName;
-        const child: SourceNode = {
+        const spec = fieldSpec(c.input ?? {}, taken);
+        node.children!.push({
           id: uniqueId(ctx, c.id),
-          type: "input",
+          type: spec.type,
           responsive: responsiveOf(ctx, c.box, mapStyles(c.style, "rectangle"), sectionH),
-          specials: {
-            field_name: fieldName,
-            field_placeholder: c.input?.placeholder ?? "",
-            field_type: fieldName === "phone_number" ? "phone" : c.input?.input_type === "email" ? "email" : "text",
-            ...(c.input?.required ? { required: true } : {}),
-          },
-        };
-        node.children!.push(child);
+          specials: spec.specials,
+        });
       } else {
         const conv = convertElement(ctx, c, sectionH);
         if (conv) node.children!.push(conv);

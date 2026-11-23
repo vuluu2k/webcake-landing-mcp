@@ -372,12 +372,28 @@ function buildCanvasElement(el: HTMLElement, id: string, ctx: LadiCtx): CanvasEl
     const inp = el.querySelector("input, textarea, select");
     if (inp) {
       const tag = inp.tagName?.toLowerCase();
+      const inputType = tag === "input" ? (inp.getAttribute("type") ?? "text").toLowerCase() : tag;
+      // select: its <option>s (a value-less first option is the prompt); radio/checkbox
+      // (.ladi-form-checkbox-item): each input's label span, else its value
+      let options: string[] | undefined;
+      let placeholder = inp.getAttribute("placeholder") || undefined;
+      if (tag === "select") {
+        const opts = inp.querySelectorAll("option");
+        if (opts[0] && !opts[0].getAttribute("value")) placeholder = collapseWs(opts.shift()!.text) || placeholder;
+        options = opts.map((o) => collapseWs(o.text)).filter(Boolean);
+      } else if (inputType === "radio" || inputType === "checkbox") {
+        options = el.querySelectorAll(`input[type="${inputType}"]`)
+          .map((i) => collapseWs(i.parentNode?.querySelector("span")?.text ?? "") || i.getAttribute("value") || "")
+          .filter(Boolean);
+      }
       node.input = {
         name: inp.getAttribute("name") || undefined,
-        placeholder: inp.getAttribute("placeholder") || undefined,
-        input_type: tag === "input" ? inp.getAttribute("type") ?? "text" : tag,
+        placeholder,
+        input_type: inputType,
         required: inp.hasAttribute("required") || undefined,
         pattern: inp.getAttribute("pattern") || undefined,
+        ...(options?.length ? { options } : {}),
+        ...(tag === "select" && inp.hasAttribute("multiple") ? { multiple: true } : {}),
       };
     }
   }
