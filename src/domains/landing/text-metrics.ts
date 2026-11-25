@@ -27,7 +27,7 @@ const CHAR_INDEX = new Map<string, number>();
 [...METRICS.chars].forEach((ch, i) => CHAR_INDEX.set(ch, i));
 
 const DEFAULT_FAMILY = "roboto";
-const DEFAULT_LINE_HEIGHT = 1.4; // matches the renderer default the guide documents
+const DEFAULT_LINE_HEIGHT = 1.5; // the renderer's html{line-height:1.5} (landing_page_build app_css), inherited by every text-block with no styles.lineHeight — measured in Chrome
 const EMOJI_RE = /\p{Extended_Pictographic}/u;
 
 /** First family of a CSS font-family stack: `'Be Vietnam Pro', sans-serif` → `be vietnam pro`. */
