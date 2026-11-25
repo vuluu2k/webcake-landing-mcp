@@ -6,6 +6,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-11-25
+
+### Added
+- `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page`, and `publish_page` now accept an `organization_id` argument (an organization id, or `'personal'`) to scope the call to the page's organization; with 2+ organizations and none chosen they return `ok:false reason:'organization_required'` together with the organization list instead of silently missing the page.
+- `get_page` now remembers which organization a page belongs to, so later `update_page`/`add_section`/`patch_page`/`publish_page` calls on the same `page_id` resolve the organization automatically without asking again.
+- A "page not found" response from `get_page`, `patch_page`, or `publish_page` now includes an `organization_hint` when the account has multiple organizations, pointing at a possibly wrong or missing `organization_id`.
+
 ## [1.15.0] - 2026-11-23
 
 ### Added

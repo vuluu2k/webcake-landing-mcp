@@ -6,6 +6,13 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-11-25
+
+### Added
+- `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page` và `publish_page` nay nhận thêm tham số `organization_id` (một id tổ chức, hoặc `'personal'`) để giới hạn lượt gọi vào đúng tổ chức của trang; với tài khoản có 2+ tổ chức và chưa chọn tổ chức nào, các tool này trả về `ok:false reason:'organization_required'` kèm danh sách tổ chức, thay vì âm thầm không thấy trang.
+- `get_page` nay ghi nhớ trang thuộc tổ chức nào, nên các lượt gọi `update_page`/`add_section`/`patch_page`/`publish_page` sau đó trên cùng `page_id` tự xác định tổ chức mà không cần hỏi lại.
+- Phản hồi "không tìm thấy trang" từ `get_page`, `patch_page`, hoặc `publish_page` nay kèm `organization_hint` khi tài khoản có nhiều tổ chức, gợi ý khả năng `organization_id` bị sai hoặc thiếu.
+
 ## [1.15.0] - 2026-11-23
 
 ### Added
