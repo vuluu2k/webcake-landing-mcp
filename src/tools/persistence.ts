@@ -50,6 +50,7 @@ import {
   cachedPageSourceVersion,
   dropCachedPageSource,
 } from "../persistence/page-version.js";
+import { resolveOrgScope, rememberPageOrg, notFoundOrgHint } from "../persistence/org-scope.js";
 import type { WebcakeConfig } from "../persistence/types.js";
 import {
   locate as locateNode,
@@ -111,6 +112,23 @@ function addedAgainst(prior: string[], after: string[]): string[] {
 export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // Resolve config from THIS request's headers (remote per-user JWT) first, then env.
   const cfgFor = (extra: any) => readConfig(configFromHeaders(extra?.requestInfo?.headers));
+
+  // Organization scope for the page tools: explicit organization_id > org remembered for the page >
+  // WEBCAKE_ORG_ID / header > the account's only org > ask (organization_required). See org-scope.ts.
+  const orgArg = () =>
+    z
+      .string()
+      .optional()
+      .describe(
+        "Organization the page(s) belong to: an organization id, or 'personal' (= no organization). Settle it first (list_organizations; ask the user when the account has 2+). When omitted: the org remembered for this page_id (from get_page), else WEBCAKE_ORG_ID / x-webcake-org-id, else the account's only organization, else ok:false reason:'organization_required' with the list."
+      );
+  const scopedCfg = async (extra: any, organization_id: string | undefined, pageId?: string, retryTool?: string) => {
+    const r = cfgFor(extra);
+    if (!r.config) return { config: undefined as WebcakeConfig | undefined, missing: r.missing, refusal: undefined as Record<string, unknown> | undefined };
+    const sc = await resolveOrgScope(r.config, organization_id, { pageId, retryTool });
+    if (!sc.ok) return { config: undefined, missing: r.missing, refusal: sc.response };
+    return { config: sc.config as WebcakeConfig | undefined, missing: r.missing, refusal: undefined };
+  };
 
   // ---- live source read (version-validated cache) ---------------------------
   // Every live read used to download the whole tree, and the concurrency guard
@@ -657,11 +675,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
   // 10) List pages ------------------------------------------------------------
   server.tool(
     "list_pages",
-    "Lists the pages owned by the account (id, name, organization_id, updated_at), most-recent first. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
-    {},
+    "Lists the pages owned by the account (id, name, organization_id, updated_at), most-recent first. Pages are scoped per organization: pass organization_id (an id, or 'personal'); with 2+ organizations and none chosen it returns ok:false reason:'organization_required' with the list. Needs WEBCAKE_API_BASE + WEBCAKE_JWT.",
+    { organization_id: orgArg() },
     { title: "List Webcake Pages", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-    async (_args, extra) => {
-      const { config, missing } = cfgFor(extra);
+    async ({ organization_id }, extra) => {
+      const { config, missing, refusal } = await scopedCfg(extra, organization_id, undefined, "list_pages");
+      if (refusal) return text(refusal);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
       return text(await listPages(config));
     }
@@ -688,10 +707,12 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .describe("Case-insensitive substring of the page's domain (matches custom_domain OR default_domain)."),
       page_id: z.string().optional().describe("Exact page id — narrows to that single page (useful to confirm it exists/owned)."),
       limit: z.number().int().positive().max(100).optional().describe("Max results (default 50, capped at 100)."),
+      organization_id: orgArg(),
     },
     { title: "Find Webcake Pages", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-    async ({ name, domain, page_id, limit }, extra) => {
-      const { config, missing } = cfgFor(extra);
+    async ({ name, domain, page_id, limit, organization_id }, extra) => {
+      const { config, missing, refusal } = await scopedCfg(extra, organization_id, page_id, "find_pages");
+      if (refusal) return text(refusal);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
 
       const res = await searchPages(config, { name, domain, id: page_id, limit });
@@ -730,9 +751,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .boolean()
         .optional()
         .describe("Default TRUE — strip factory-default boilerplate from every element (sparse shape, far fewer tokens). false returns the raw stored tree."),
+      organization_id: orgArg(),
     },
     { title: "Get Webcake Page Source", readOnlyHint: true, destructiveHint: false, openWorldHint: true },
-    async ({ page_id, draft_id, outline, element_id, compact }, extra) => {
+    async ({ page_id, draft_id, outline, element_id, compact, organization_id }, extra) => {
       // Outline / one element / a draft: a narrow read of the same tree.
       const narrow = (src: any, meta: Record<string, unknown>) => {
         if (typeof src === "string") src = JSON.parse(src);
@@ -762,10 +784,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         return narrow(d.source, { draft_id, draft_kind: d.kind ?? "page", ...(d.page_id ? { page_id: d.page_id } : {}) });
       }
       if (!page_id) return text({ ok: false, reason: "no_target", hint: "Pass page_id (a live page) or draft_id (a cached draft)." });
-      const { config, missing } = cfgFor(extra);
+      const { config, missing, refusal } = await scopedCfg(extra, organization_id, page_id, "get_page");
+      if (refusal) return text(refusal);
       if (!config) return text({ ok: false, reason: "missing_env", missing_env: missing });
       const res = await readLiveSource(config, page_id);
-      if (!res.ok || res.source == null) return text(res);
+      if (!res.ok || res.source == null) return text({ ...res, ...(await notFoundOrgHint(config, res.status, res.error)) });
+      // the page's own org: later update/add_section/patch/publish on it need no question
+      if ("organization_id" in res) rememberPageOrg(config, page_id, res.organization_id);
       // Fingerprint what the page holds RIGHT NOW: this read is the baseline a
       // later update_page is checked against, so an edit made in the Webcake
       // editor after this point cannot be silently overwritten.
@@ -807,9 +832,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .optional()
         .describe("Default false. true saves even when the page changed outside this session, discarding those outside changes."),
       dry_run: z.boolean().optional().describe("Default TRUE — validate, cache the source as draft_id, and preview without sending. Set false to actually save."),
+      organization_id: orgArg(),
     },
     { title: "Update Webcake Page (Overwrite)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ page_id, source, draft_id, base_version, force, dry_run }, extra) => {
+    async ({ page_id, source, draft_id, base_version, force, dry_run, organization_id }, extra) => {
       const isDry = dry_run !== false;
 
       // --- Resolve source: from cache (draft_id) or from the argument ---
@@ -858,7 +884,9 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
       // The live page as it is now (version-validated cache): a text whose content changed against it
       // loses its stale measured height, and only errors this overwrite ADDS refuse it.
-      const cfg0 = cfgFor(extra).config;
+      const sc0 = await scopedCfg(extra, organization_id, resolvedPageId, "update_page");
+      if (sc0.refusal) return text({ updated: false, ...sc0.refusal });
+      const cfg0 = sc0.config;
       // no explicit base: the version of the tree get_page last handed the model
       if (!resolvedBaseVersion && cfg0 && !draft_id) resolvedBaseVersion = servedOf(cfg0, resolvedPageId);
       let liveSrc: any = null;
@@ -894,7 +922,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
       const parsed = domain.coerce(expanded);
-      const { config, missing } = cfgFor(extra);
+      const config = cfg0;
+      const missing = sc0.missing;
 
       if (isDry) {
         // Cache (or refresh) the validated source so the model can confirm with
@@ -1026,9 +1055,10 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .boolean()
         .optional()
         .describe("Default TRUE — validate the section(s) and preview the request without writing. Set false to actually append."),
+      organization_id: orgArg(),
     },
     { title: "Append Section(s) to Webcake Page", readOnlyHint: false, destructiveHint: false, openWorldHint: true },
-    async ({ page_id, sections, draft_id, dry_run }, extra) => {
+    async ({ page_id, sections, draft_id, dry_run, organization_id }, extra) => {
       const isDry = dry_run !== false; // default true (safe)
 
       // --- Resolve section payload: from cache (draft_id) or from the argument ---
@@ -1110,7 +1140,8 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         });
       }
 
-      const { config, missing } = cfgFor(extra);
+      const { config, missing, refusal } = await scopedCfg(extra, organization_id, page_id, "add_section");
+      if (refusal) return text({ added: false, ...refusal });
       if (!config) {
         return text({
           added: false,
@@ -1311,7 +1342,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
 
   // patch_page body. `fresh`: the retry after the backend refused a write made against a cached
   // tree (page_changed) — re-read the live page and apply the same ops to it, once.
-  const runPatch = async ({ page_id, draft_id, patches, force, dry_run }: any, extra: any, fresh = false): Promise<any> => {
+  const runPatch = async ({ page_id, draft_id, patches, force, dry_run, organization_id }: any, extra: any, fresh = false): Promise<any> => {
     const isDry = dry_run !== false; // default true (safe)
     const ops = asArray(patches).filter((p) => p != null && typeof p === "object");
     // Empty ops are only valid when a draft_id is supplied (commit-as-is / retry path).
@@ -1323,7 +1354,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       return text({ patched: false, reason: "no_target", hint: "Pass page_id (a live page) or draft_id (the cached source from a failed/timed-out create_page, update_page, or add_section)." });
     }
 
-    const { config, missing } = cfgFor(extra);
+    // A live page (page_id, or an update/section draft that targets one) is scoped by organization;
+    // a create draft is not — createPage resolves its own org.
+    const draftPre = draft_id ? await getDraft(draft_id) : null;
+    const scopePid: string | undefined = page_id ?? (draftPre && draftPre.kind !== "page" ? draftPre.page_id : undefined);
+    const scoped = scopePid ? await scopedCfg(extra, organization_id, scopePid, "patch_page") : { ...cfgFor(extra), refusal: undefined as Record<string, unknown> | undefined };
+    if (scoped.refusal) return text({ patched: false, ...scoped.refusal });
+    const { config, missing } = scoped;
 
     // Resolve the base source: a cached draft (create-before-save), else a live page.
     let base: any;
@@ -1358,6 +1395,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
           status: current.status,
           error: current.error ?? "Page source not found.",
           hint: "Check the page_id (find_pages/list_pages) and that the account owns it.",
+          ...(await notFoundOrgHint(config, current.status, current.error)),
         });
       }
       // This read is by definition current, so it becomes the baseline: a later
@@ -1767,7 +1805,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
     if (outcome.page_changed) {
       await deleteDraft(liveDraftId);
       invalidateSource(config!, page_id!);
-      if (!fresh) return runPatch({ page_id, draft_id, patches, force, dry_run }, extra, true);
+      if (!fresh) return runPatch({ page_id, draft_id, patches, force, dry_run, organization_id }, extra, true);
       return text({ patched: false, ...pageChangedPayload(page_id!, outcome, "patch_page"), hint: "The page was saved by someone else between this patch's read and its write — nothing was written. Re-run the SAME patch_page call: it re-reads the live page and applies your ops to it." });
     }
     if (outcome.ok) {
@@ -1818,6 +1856,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .boolean()
         .optional()
         .describe("Default TRUE — load, merge, validate and preview the resulting save WITHOUT writing. Set false to actually save."),
+      organization_id: orgArg(),
     },
     { title: "Patch Webcake Page (by element id)", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     async (args: any, extra: any) => runPatch(args, extra),
@@ -1835,11 +1874,13 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
         .describe("Optional custom domain to serve the page at (e.g. 'shop.example.com' — must already point at Webcake). Use it EXACTLY as the account lists it: 'www.example.com' and 'example.com' are DIFFERENT domain records — a www/non-www mismatch is corrected to the stored form, and a domain the account never added is refused (nothing published). OMIT to reuse the page's CURRENTLY-ATTACHED domain (so republishing keeps it live at the same URL, like the editor's publish modal); if the page has none it publishes domain-less (preview-host URL). Pass an empty string '' to force a domain-less publish even when the page has a domain."),
       custom_path: z.string().optional().describe("Optional path under the custom domain (e.g. 'sale')."),
       dry_run: z.boolean().optional().describe("Default TRUE — preview the request without sending. Does NOT call the build host. Set false to actually publish (build + publish)."),
+      organization_id: orgArg(),
     },
     { title: "Publish Webcake Page", readOnlyHint: false, destructiveHint: true, openWorldHint: true },
-    async ({ page_id, custom_domain, custom_path, dry_run }, extra) => {
+    async ({ page_id, custom_domain, custom_path, dry_run, organization_id }, extra) => {
       const isDry = dry_run !== false; // default true (safe)
-      const { config, missing } = cfgFor(extra);
+      const { config, missing, refusal } = await scopedCfg(extra, organization_id, page_id, "publish_page");
+      if (refusal) return text({ published: false, ...refusal });
       if (!config) return text({ published: false, reason: "missing_env", missing_env: missing });
 
       // Publish re-saves the page's CURRENT stored source (the publish endpoint
@@ -1847,7 +1888,7 @@ export function registerPersistenceTools(server: McpServer, domain: Domain) {
       // the real payload.
       const res = await readLiveSource(config, page_id);
       if (!res.ok || res.source == null) {
-        return text({ published: false, reason: "page_not_found", status: res.status, error: res.error ?? "No source on this page." });
+        return text({ published: false, reason: "page_not_found", status: res.status, error: res.error ?? "No source on this page.", ...(await notFoundOrgHint(config, res.status, res.error)) });
       }
       // An editor publish may have stored a 404 `sNaN` thumbnail/favicon — don't republish it (#5).
       const source = healBrokenResizeUrls(res.source);
