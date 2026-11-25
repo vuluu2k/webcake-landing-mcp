@@ -94,6 +94,7 @@ Reference docs in this repo: [docs/page-element-schema.md](../../../docs/page-el
 
 ## Workflow — edit existing page
 
+0. **Settle the organization FIRST** — `list_organizations` (ask the user which one if the account has 2+), then pass `organization_id` (an id, or `'personal'`) to every page tool: `list_pages`, `find_pages`, `get_page`, `update_page`, `add_section`, `patch_page` (page_id mode), `publish_page`. With 2+ orgs and none chosen they return `ok:false, reason:"organization_required"` + the list; `get_page` remembers the page's own org for later calls on that page_id; "Page not found" with several orgs means re-check `organization_id`.
 1. `find_pages({ name?, domain?, page_id? })` to locate the page by name/domain/id (or `list_pages` to browse; or take a `page_id` straight from a URL).
 2. `get_page(page_id)` → the live `{ page, popup, settings, ... }`, COMPACTED to the sparse shape (pass `compact:false` only if you need the raw stored tree).
 3. **Edit surgically**: change only what was asked; keep every other element, its `id`, and coordinates; send the compacted tree back as-is (no boilerplate). To add: `new_element`, unique id, place in the right section's `children`.
