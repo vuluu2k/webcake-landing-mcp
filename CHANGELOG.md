@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-11-25
+
+### Fixed
+- `validate_page`'s text height estimate now matches the renderer's actual `line-height: 1.5` default (previously assumed 1.4), so a `text-block` with no `styles.lineHeight` no longer gets flagged as under-sized by about 7% and overlapped by the element below it; the badge/pill height formula in the generation guide is updated to match.
+
 ## [1.16.0] - 2026-11-25
 
 ### Added

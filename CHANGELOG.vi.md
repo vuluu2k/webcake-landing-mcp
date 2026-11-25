@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-11-25
+
+### Fixed
+- Công thức ước lượng chiều cao chữ của `validate_page` nay khớp với giá trị `line-height: 1.5` thật của renderer (trước đó giả định 1.4), nên một `text-block` không đặt `styles.lineHeight` không còn bị báo thiếu chiều cao khoảng 7% và bị phần tử phía dưới tràn đè lên; công thức chiều cao badge/pill trong generation guide cũng được cập nhật theo.
+
 ## [1.16.0] - 2026-11-25
 
 ### Added
