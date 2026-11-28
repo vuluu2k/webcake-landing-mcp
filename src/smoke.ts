@@ -1632,6 +1632,8 @@ console.log("== config: named environment presets (local/staging/prod) ==");
   check("previewBase defaults to www.webcake.me without a preset", readConfig({ base: "https://api.example.com", jwt: "t" }).config?.previewBase === "https://www.webcake.me");
   check("explicit previewBase overrides the preset", readConfig({ env: "prod", previewBase: "https://p.test/", jwt: "t" }).config?.previewBase === "https://p.test");
   check("x-webcake-preview-base header parsed", configFromHeaders({ "x-webcake-preview-base": "https://p.example" }).previewBase === "https://p.example");
+  check("x-webcake-session-id header → config.sessionId", readConfig({ ...configFromHeaders({ "x-webcake-jwt": "t", "x-webcake-session-id": "w" }), env: "prod" }).config?.sessionId === "w");
+  check("no session id → config.sessionId undefined", readConfig({ env: "prod", jwt: "t" }).config?.sessionId === undefined);
   check("preview url from a path → preview host (not builder)", toPreviewUrl(localCfg, "/preview/abc") === "http://preview.localhost:5800/preview/abc");
   check("preview url from an absolute api url → preview host", toPreviewUrl(localCfg, "http://localhost:5800/preview/abc?x=1") === "http://preview.localhost:5800/preview/abc?x=1");
   check("preview url passthrough when empty", toPreviewUrl(localCfg, undefined) === undefined);
@@ -1668,6 +1670,8 @@ console.log("== login: connect URL + loopback callback parsing (offline) ==");
 
   const okCb = parseCallback("/callback?token=tok&state=abc", "abc");
   check("callback with token+state accepted", okCb.ok && okCb.token === "tok", okCb);
+  const wsidCb = parseCallback("/callback?token=tok&wsid=w&state=abc", "abc");
+  check("callback carries the optional wsid", wsidCb.ok && wsidCb.sessionId === "w" && okCb.ok && okCb.sessionId === undefined, wsidCb);
   const wrongState = parseCallback("/callback?token=tok&state=other", "abc");
   check("callback with wrong state rejected (400)", !wrongState.ok && wrongState.status === 400, wrongState);
   const noState = parseCallback("/callback?token=tok", "abc");

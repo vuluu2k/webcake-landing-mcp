@@ -17,6 +17,7 @@
  *                     explicit WEBCAKE_API_BASE / WEBCAKE_APP_BASE still wins over it.
  *   WEBCAKE_API_BASE  e.g. http://localhost:5800   (required to call the backend)
  *   WEBCAKE_JWT       the account JWT               (required to call the backend)
+ *   WEBCAKE_SESSION_ID  optional landing session id (`lwsid`), sent as `x-session-id`
  *   WEBCAKE_ORG_ID    optional default organization id for create_page
  *   WEBCAKE_APP_BASE  optional SPA base (used for the login connect page)
  *   WEBCAKE_BUILDER_BASE  optional builder host for the editor URLs in the result
@@ -95,7 +96,7 @@ export function deriveBuilderBase(apiBase: string | undefined): string | undefin
 }
 
 /** Request-scoped overrides for the env config (used by the HTTP transport). */
-export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "orgId" | "appBase" | "builderBase" | "previewBase" | "buildBase">> & {
+export type ConfigOverrides = Partial<Pick<WebcakeConfig, "base" | "jwt" | "sessionId" | "orgId" | "appBase" | "builderBase" | "previewBase" | "buildBase">> & {
   /** Named environment (local|staging|prod) — fills in base/appBase/builderBase/previewBase/buildBase when not given explicitly. */
   env?: string;
 };
@@ -109,6 +110,8 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
   const envJwt = process.env.WEBCAKE_JWT;
   const renewed = !!envJwt && jwtExpired(envJwt) && !!saved.jwt && !jwtExpired(saved.jwt);
   const jwt = overrides.jwt ?? (renewed ? saved.jwt : envJwt) ?? saved.jwt;
+  // The session id belongs to the JWT it was issued with — take it from the same source.
+  const sessionId = overrides.jwt ? overrides.sessionId : envJwt && !renewed ? process.env.WEBCAKE_SESSION_ID : saved.sessionId;
   const missing: string[] = [];
   if (!base) missing.push("WEBCAKE_API_BASE");
   if (!jwt) missing.push("WEBCAKE_JWT");
@@ -149,6 +152,7 @@ export function readConfig(overrides: ConfigOverrides = {}): { config: WebcakeCo
     config: {
       base: cleanBase,
       jwt: jwt!,
+      sessionId: sessionId || undefined,
       orgId: overrides.orgId ?? process.env.WEBCAKE_ORG_ID ?? saved.orgId,
       appBase: stripTrailingSlash(overrides.appBase ?? process.env.WEBCAKE_APP_BASE ?? preset?.appBase ?? saved.appBase),
       builderBase,
@@ -171,6 +175,7 @@ function header(headers: HeaderBag, name: string): string | undefined {
  * Build request-scoped config overrides from HTTP headers. Lets a remote client
  * send its own credentials per request instead of a server-wide env token:
  *   x-webcake-jwt        the account JWT (or `Authorization: Bearer <jwt>`)
+ *   x-webcake-session-id landing session id (`lwsid`), forwarded as `x-session-id`
  *   x-webcake-org-id     organization id
  *   x-webcake-env        named environment (local|staging|prod) for the base URLs
  *   x-webcake-api-base   backend base URL (overrides the env preset)
@@ -185,6 +190,7 @@ export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
   return {
     base: header(headers, "x-webcake-api-base"),
     jwt: header(headers, "x-webcake-jwt") ?? bearer,
+    sessionId: header(headers, "x-webcake-session-id"),
     orgId: header(headers, "x-webcake-org-id"),
     appBase: header(headers, "x-webcake-app-base"),
     builderBase: header(headers, "x-webcake-builder-base"),
@@ -202,6 +208,7 @@ export function configFromHeaders(headers: HeaderBag): ConfigOverrides {
 export type SavedConfig = {
   base?: string;
   jwt?: string;
+  sessionId?: string;
   orgId?: string;
   appBase?: string;
   builderBase?: string;

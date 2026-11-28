@@ -124,11 +124,12 @@ type AuthCode = {
   code_challenge: string;
   scope?: string;
   ljwt: string; // the user's resolved landing JWT
+  wsid: string; // the user's landing session id (`lwsid`); "" when the SPA sent none
   expiresAt: number;
 };
 
-type AccessToken = { ljwt: string; scope?: string; expiresAt: number };
-type RefreshToken = { ljwt: string; client_id: string; scope?: string; expiresAt: number };
+type AccessToken = { ljwt: string; wsid: string; scope?: string; expiresAt: number };
+type RefreshToken = { ljwt: string; wsid: string; client_id: string; scope?: string; expiresAt: number };
 
 function now(): number {
   return Date.now();
@@ -284,14 +285,14 @@ class PgStore implements OAuthStore {
   }
   async putCode(code: string, c: AuthCode) {
     await this.pool.query(
-      `INSERT INTO oauth_codes (code, client_id, redirect_uri, code_challenge, scope, ljwt, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [code, c.client_id, c.redirect_uri, c.code_challenge, c.scope ?? null, c.ljwt, c.expiresAt]
+      `INSERT INTO oauth_codes (code, client_id, redirect_uri, code_challenge, scope, ljwt, wsid, expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [code, c.client_id, c.redirect_uri, c.code_challenge, c.scope ?? null, c.ljwt, c.wsid, c.expiresAt]
     );
   }
   async takeCode(code: string) {
     const { rows } = await this.pool.query(
-      `DELETE FROM oauth_codes WHERE code=$1 RETURNING client_id, redirect_uri, code_challenge, scope, ljwt, expires_at`,
+      `DELETE FROM oauth_codes WHERE code=$1 RETURNING client_id, redirect_uri, code_challenge, scope, ljwt, wsid, expires_at`,
       [code]
     );
     const r = rows[0];
@@ -302,18 +303,19 @@ class PgStore implements OAuthStore {
       code_challenge: r.code_challenge,
       scope: r.scope ?? undefined,
       ljwt: r.ljwt,
+      wsid: r.wsid ?? "",
       expiresAt: Number(r.expires_at),
     } as AuthCode;
   }
   async putAccess(t: string, a: AccessToken) {
     await this.pool.query(
-      `INSERT INTO oauth_access_tokens (token, ljwt, scope, expires_at) VALUES ($1,$2,$3,$4)`,
-      [t, a.ljwt, a.scope ?? null, a.expiresAt]
+      `INSERT INTO oauth_access_tokens (token, ljwt, wsid, scope, expires_at) VALUES ($1,$2,$3,$4,$5)`,
+      [t, a.ljwt, a.wsid, a.scope ?? null, a.expiresAt]
     );
   }
   async getAccess(t: string) {
     const { rows } = await this.pool.query(
-      `SELECT ljwt, scope, expires_at FROM oauth_access_tokens WHERE token=$1`,
+      `SELECT ljwt, wsid, scope, expires_at FROM oauth_access_tokens WHERE token=$1`,
       [t]
     );
     const r = rows[0];
@@ -322,23 +324,24 @@ class PgStore implements OAuthStore {
       await this.pool.query(`DELETE FROM oauth_access_tokens WHERE token=$1`, [t]);
       return undefined;
     }
-    return { ljwt: r.ljwt, scope: r.scope ?? undefined, expiresAt: Number(r.expires_at) } as AccessToken;
+    return { ljwt: r.ljwt, wsid: r.wsid ?? "", scope: r.scope ?? undefined, expiresAt: Number(r.expires_at) } as AccessToken;
   }
   async putRefresh(t: string, r: RefreshToken) {
     await this.pool.query(
-      `INSERT INTO oauth_refresh_tokens (token, ljwt, client_id, scope, expires_at) VALUES ($1,$2,$3,$4,$5)`,
-      [t, r.ljwt, r.client_id, r.scope ?? null, r.expiresAt]
+      `INSERT INTO oauth_refresh_tokens (token, ljwt, wsid, client_id, scope, expires_at) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [t, r.ljwt, r.wsid, r.client_id, r.scope ?? null, r.expiresAt]
     );
   }
   async takeRefresh(t: string) {
     const { rows } = await this.pool.query(
-      `DELETE FROM oauth_refresh_tokens WHERE token=$1 RETURNING ljwt, client_id, scope, expires_at`,
+      `DELETE FROM oauth_refresh_tokens WHERE token=$1 RETURNING ljwt, wsid, client_id, scope, expires_at`,
       [t]
     );
     const r = rows[0];
     if (!r || Number(r.expires_at) < now()) return undefined;
     return {
       ljwt: r.ljwt,
+      wsid: r.wsid ?? "",
       client_id: r.client_id,
       scope: r.scope ?? undefined,
       expiresAt: Number(r.expires_at),
@@ -499,14 +502,15 @@ export type CompleteAuthorizeResult =
   | { ok: false; error: string; error_description: string };
 
 /**
- * The login page (/mcp-connect) bounced back with the user's `ljwt` and our
- * `internalState`. Mint a one-time authorization code bound to that ljwt + the
+ * The login page (/mcp-connect) bounced back with the user's `ljwt` (+ optional
+ * `wsid`) and our `internalState`. Mint a one-time authorization code bound to that ljwt + the
  * parked PKCE challenge, and return where to redirect the user (the client's
  * redirect_uri with ?code=&state=).
  */
 export async function completeAuthorize(
   internalState: string | undefined | null,
-  ljwt: string | undefined | null
+  ljwt: string | undefined | null,
+  wsid?: string | null
 ): Promise<CompleteAuthorizeResult> {
   const store = await getStore();
   const p = internalState ? await store.takePending(internalState) : undefined;
@@ -523,6 +527,7 @@ export async function completeAuthorize(
     code_challenge: p.code_challenge,
     scope: p.scope,
     ljwt,
+    wsid: wsid ?? "",
     expiresAt: now() + CODE_TTL,
   });
   return { ok: true, redirectUri: p.redirect_uri, code, state: p.state };
@@ -550,13 +555,14 @@ export type TokenResult = { ok: true; body: TokenSuccess } | { ok: false; status
 async function issueTokens(
   store: OAuthStore,
   ljwt: string,
+  wsid: string,
   client_id: string,
   scope: string | undefined
 ): Promise<TokenSuccess> {
   const access = token(32);
   const refresh = token(32);
-  await store.putAccess(access, { ljwt, scope, expiresAt: now() + ACCESS_TTL });
-  await store.putRefresh(refresh, { ljwt, client_id, scope, expiresAt: now() + REFRESH_TTL });
+  await store.putAccess(access, { ljwt, wsid, scope, expiresAt: now() + ACCESS_TTL });
+  await store.putRefresh(refresh, { ljwt, wsid, client_id, scope, expiresAt: now() + REFRESH_TTL });
   return { access_token: access, token_type: "Bearer", expires_in: Math.floor(ACCESS_TTL / 1000), refresh_token: refresh, scope };
 }
 
@@ -576,7 +582,7 @@ export async function exchangeToken(p: TokenParams): Promise<TokenResult> {
     if (!p.code_verifier || !verifyPkce(p.code_verifier, c.code_challenge)) {
       return { ok: false, status: 400, error: "invalid_grant", error_description: "PKCE verification failed." };
     }
-    return { ok: true, body: await issueTokens(store, c.ljwt, c.client_id, c.scope) };
+    return { ok: true, body: await issueTokens(store, c.ljwt, c.wsid, c.client_id, c.scope) };
   }
   if (p.grant_type === "refresh_token") {
     const r = p.refresh_token ? await store.takeRefresh(p.refresh_token) : undefined; // rotate
@@ -586,17 +592,17 @@ export async function exchangeToken(p: TokenParams): Promise<TokenResult> {
     if (await isDeadJwt(r.ljwt)) {
       return { ok: false, status: 400, error: "invalid_grant", error_description: "Webcake session expired — sign in again (Connect)." };
     }
-    return { ok: true, body: await issueTokens(store, r.ljwt, r.client_id, r.scope) };
+    return { ok: true, body: await issueTokens(store, r.ljwt, r.wsid, r.client_id, r.scope) };
   }
   return { ok: false, status: 400, error: "unsupported_grant_type", error_description: "grant_type must be authorization_code or refresh_token." };
 }
 
 // ---- Resource-server side: resolve a Bearer access token to its ljwt -------
-/** Returns the user's ljwt for a valid, unexpired access token, else undefined. */
-export async function resolveAccessToken(accessToken: string | undefined | null): Promise<string | undefined> {
+/** Returns the user's { ljwt, wsid } for a valid, unexpired access token, else undefined. */
+export async function resolveAccessToken(accessToken: string | undefined | null): Promise<{ ljwt: string; wsid: string } | undefined> {
   if (!accessToken) return undefined;
   const a = await (await getStore()).getAccess(accessToken);
-  return a && !isDeadLocally(a.ljwt) ? a.ljwt : undefined;
+  return a && !isDeadLocally(a.ljwt) ? { ljwt: a.ljwt, wsid: a.wsid } : undefined;
 }
 
 /** Revoke an access or refresh token (best-effort; for /revoke). */

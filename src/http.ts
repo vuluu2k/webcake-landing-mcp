@@ -127,6 +127,8 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 // require HTTPS, and disable query-string logging on your reverse proxy.
 const QUERY_AUTH: Record<string, string> = {
   jwt: "x-webcake-jwt",
+  wsid: "x-webcake-session-id",
+  session_id: "x-webcake-session-id",
   env: "x-webcake-env",
   api_base: "x-webcake-api-base",
   org_id: "x-webcake-org-id",
@@ -134,7 +136,7 @@ const QUERY_AUTH: Record<string, string> = {
   builder_base: "x-webcake-builder-base",
 };
 
-function applyQueryAuth(req: IncomingMessage) {
+export function applyQueryAuth(req: IncomingMessage) {
   const q = (req.url ?? "").indexOf("?");
   if (q === -1) return;
   const params = new URLSearchParams((req.url ?? "").slice(q + 1));
@@ -275,7 +277,7 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
       }
       return htmlError(res, 400, result.error_description), true;
     }
-    // Send the user to the SPA login; it returns here with ?token=<ljwt>&state=<internalState>.
+    // Send the user to the SPA login; it returns here with ?token=<ljwt>[&wsid=<lwsid>]&state=<internalState>.
     const callback = `${issuer}${OAUTH_CALLBACK}`;
     const loginUrl = buildConnectUrl(connectPageUrl(), callback, result.internalState);
     res.writeHead(302, { location: loginUrl });
@@ -285,7 +287,7 @@ async function handleOAuth(req: IncomingMessage, res: ServerResponse, path: stri
   // ---- Login callback: the SPA handed back the user's ljwt → mint a code ----
   if (req.method === "GET" && path === OAUTH_CALLBACK) {
     const sp = new URL(req.url ?? "/", "http://x").searchParams;
-    const done = await completeAuthorize(sp.get("state"), sp.get("token"));
+    const done = await completeAuthorize(sp.get("state"), sp.get("token"), sp.get("wsid") || sp.get("session_id"));
     if (!done.ok) return htmlError(res, 400, done.error_description), true;
     const r = new URL(done.redirectUri);
     r.searchParams.set("code", done.code);
@@ -512,10 +514,14 @@ export async function startHttpServer(port: number): Promise<void> {
     // ?jwt= / x-webcake-jwt: a Bearer from our OAuth flow is what the last Connect issued,
     // so it's the renewed credential when the URL still carries an old, expired JWT.
     const bearer = bearerFrom(req);
-    const oauthLjwt = await resolveAccessToken(bearer);
-    if (oauthLjwt) {
-      req.headers["x-webcake-jwt"] = oauthLjwt;
-      req.rawHeaders.push("x-webcake-jwt", oauthLjwt);
+    const oauthCred = await resolveAccessToken(bearer);
+    if (oauthCred) {
+      req.headers["x-webcake-jwt"] = oauthCred.ljwt;
+      req.rawHeaders.push("x-webcake-jwt", oauthCred.ljwt);
+      if (oauthCred.wsid) {
+        req.headers["x-webcake-session-id"] = oauthCred.wsid;
+        req.rawHeaders.push("x-webcake-session-id", oauthCred.wsid);
+      }
     }
 
     // Enforcement: no credential, or an expired/rejected Webcake JWT, gets a 401 +

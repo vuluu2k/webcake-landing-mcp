@@ -68,6 +68,7 @@ flow can also be done entirely in the SPA, no backend route needed.)
 | `WEBCAKE_ENV` | No | Named environment: `local` \| `staging` \| `prod`. Fills in `WEBCAKE_API_BASE` + `WEBCAKE_APP_BASE` from a preset (see table below). Also settable with the `--env <name>` flag. Explicit vars win. |
 | `WEBCAKE_API_BASE` | No* | Backend base URL, e.g. `http://localhost:5800`. Required to persist (or set `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | No* | Account JWT (dashboard auth). Required to persist — expires, refresh when needed. |
+| `WEBCAKE_SESSION_ID` | No | Landing session id (the SPA's `lwsid` cookie), sent as `x-session-id`. `login` saves it automatically; remote clients send `x-webcake-session-id` or `?wsid=`. |
 | `WEBCAKE_ORG_ID` | No | Default organization id for `create_page` (overridden by its `organization_id` arg). Omit → personal page. |
 | `WEBCAKE_APP_BASE` | No | Optional SPA base — used for the browser `login` connect page. |
 | `WEBCAKE_BUILDER_BASE` | No | Optional builder host for the editor links in the result. Defaults to the env preset, else derived from the API host (`api.x`→`builder.x`). |
