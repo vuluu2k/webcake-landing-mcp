@@ -1158,7 +1158,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
   // element is placed by its absolute page position; each desktop section gets a mobile FRAME — from its
   // matched elements down to the next section's frame — and its mobile boxes are relative to that frame.
   // Matching is by DOM path, else by what the element shows (text / picture / icon); a section that
-  // barely matches hides nothing on mobile (scaled fallback) and gets no mobile-only additions.
+  // barely matches (and is not the same band there) hides nothing on mobile (scaled fallback) and gets no mobile-only additions.
   const sigOf = (e: Raw) => (e.text ? `t:${e.text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 80)}` : e.src ? `s:${e.src}` : e.svg ? `v:${e.svg.slice(0, 120)}` : "");
   type MobRef = { e: Raw; abs: number; sec: RawSection };
   const mobAll: MobRef[] = (mob?.sections ?? []).flatMap((ms) => ms.elements.map((e) => ({ e, abs: ms.top + e.box.top, sec: ms })));
@@ -1215,9 +1215,12 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
       s.elements.forEach((e, j) => (matchesOf[i][j] ??= bySigPick(e, (r) => r.abs >= frames[i] && r.abs < end)));
     });
   const relative = (r: MobRef, frameTop: number): Raw => ({ ...r.e, box: { ...r.e.box, top: Math.round(r.abs - frameTop) } });
+  // the mobile layout of a section is known when the same band exists there (a header whose desktop nav
+  // collapses into a burger matches little, yet what is missing IS hidden) or enough of it matched
+  const reliableAt = (i: number) => !!mob && ((keysHold && mobSec.has(desk.sections[i].key)) || desk.sections[i].elements.length === 0 || matchesOf[i].filter(Boolean).length / desk.sections[i].elements.length >= 0.3);
   const sections: CanvasSection[] = desk.sections.map((s, i) => {
     const hits = matchesOf[i];
-    const reliable = !!mob && (s.elements.length === 0 || hits.filter(Boolean).length / s.elements.length >= 0.3);
+    const reliable = reliableAt(i);
     const fTop = frames[i];
     const fEnd = i + 1 < frames.length ? frames[i + 1] : mobEnd;
     const sec: CanvasSection = {
@@ -1235,8 +1238,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
   for (const r of mobAll) {
     if (used.has(r)) continue;
     const i = frameOf(r.abs);
-    const hits = matchesOf[i] ?? [];
-    if (!desk.sections[i] || (desk.sections[i].elements.length && hits.filter(Boolean).length / desk.sections[i].elements.length < 0.3)) continue;
+    if (!desk.sections[i] || !reliableAt(i)) continue;
     const el = toEl(relative(r, frames[i]), undefined, km);
     mobileOnly(el, true);
     sections[i].elements.push(el);

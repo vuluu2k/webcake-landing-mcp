@@ -38,6 +38,22 @@ test("merge: desktop scaled to 960, mobile measured, hidden / mobile-only flagge
   assert.equal(c.sections[0].mobile.height, 700);
 });
 
+test("merge: a header whose desktop nav collapses on mobile (same band, few matches) hides the nav there", () => {
+  const sec = (key, top, height, elements) => ({ key, top, height, background: {}, elements });
+  const t = (key, top, left) => el(key, "paragraph", { top, left, width: 100, height: 20 }, { text: key });
+  const d = { title: "T", description: "", width: 1200, truncated: false, sections: [
+    sec("header0", 0, 80, [t("logo", 20, 20), t("nav1", 20, 300), t("nav2", 20, 420), t("nav3", 20, 540)]),
+    sec("main0", 80, 500, [t("a", 100, 20), t("b", 200, 20), t("c", 300, 20)]),
+  ] };
+  const m = { ...d, width: 420, sections: [
+    sec("header0", 0, 60, [t("logo", 10, 10), el("burger", "shape", { top: 10, left: 370, width: 30, height: 30 }, { svg: "<svg viewBox='0 0 1 1'><rect width='1' height='1'/></svg>" })]),
+    sec("main0", 60, 700, [t("a", 100, 10), t("b", 300, 10), t("c", 500, 10)]),
+  ] };
+  const [head] = mergeCaptures(d, m).sections;
+  assert.deepEqual(head.elements.slice(1, 4).map((e) => e.mobile), [null, null, null]);
+  assert.equal(head.elements.find((e) => e.svg)?.mobile.only, true, "the burger is added as mobile-only");
+});
+
 test("merge → source: mobile hide / desktop hide / rotation land in the page and it validates", () => {
   const c = mergeCaptures(desk, mob);
   const { source, notes } = D.canvasToSource(c, { title: c.title });
