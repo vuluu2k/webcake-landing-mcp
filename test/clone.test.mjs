@@ -1,7 +1,7 @@
 // clone_page merge step (no browser): desktop boxes scale onto 960, mobile boxes are used as
 // measured, an element missing on mobile is hidden there, a mobile-only one is hidden on desktop,
 // rotation survives, and the result saves as a valid page.
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mergeCaptures } from "../dist/persistence/ingest/browser-capture.js";
 import { landingDomain as D } from "../dist/domains/landing/index.js";
@@ -149,4 +149,31 @@ test("measured text keeps its height (virtualHeight) and tight gaps; containers 
   assert.deepEqual(texts.map((t) => t.responsive.desktop.styles.top), [8, 26, 43]);
   assert.ok(texts.every((t) => t.responsive.desktop.config.virtualHeight === t.responsive.desktop.styles.height));
   assert.equal(saved.page[0].responsive.desktop.styles.height, 300, fixed.join("\n"));
+});
+
+// In Chrome (skipped on a host without Playwright + Chrome): a store-like page — fixed header over a
+// spacer, <main> with ONE wrapper around its sections, a cookie bar with its dim backdrop, a chat bubble.
+const { playwrightInstalled } = await import("../dist/persistence/screenshot-playwright.js");
+const { captureLayout } = await import("../dist/persistence/ingest/browser-capture.js");
+after(() => setTimeout(() => process.exit(), 100).unref()); // the shared Chrome stays open otherwise
+test("browser: overlays dismissed, fixed header = sticky section, a wrapped <main> split into its sections", { skip: !(await playwrightInstalled()) }, async () => {
+  const block = (i) => `<section style="height:700px;padding:40px;background:${i % 2 ? "#f4f4f4" : "transparent"}"><h2>Khối ${i}</h2><p>Nội dung ${i}</p></section>`;
+  const html = `<!doctype html><html><body style="margin:0;font-family:sans-serif">
+    <header style="position:fixed;top:0;left:0;right:0;height:80px;background:#fff"><nav><a href="/a">Nam</a> <a href="/b">Nữ</a> <a href="/c">Hỗ trợ</a></nav></header>
+    <div style="height:80px"></div>
+    <main><div style="background:#fafafa">${[1, 2, 3, 4].map(block).join("")}</div></main>
+    <div id="bd" style="position:fixed;inset:0;background:rgba(0,0,0,.5)"></div>
+    <div id="cb" style="position:fixed;bottom:0;left:0;right:0;padding:12px;background:#fff">Chúng tôi dùng cookie để cải thiện trải nghiệm
+      <button onclick="document.getElementById('cb').remove();document.getElementById('bd').remove()">Chấp nhận tất cả</button></div>
+    <div id="contact-fab" style="position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#22f"><button>Hỗ trợ</button></div>
+  </body></html>`;
+  const c = await captureLayout({ html });
+  const texts = JSON.stringify(c.sections);
+  assert.ok(!/cookie|Chấp nhận/.test(texts), "the cookie bar is left out");
+  assert.equal((texts.match(/Hỗ trợ/g) ?? []).length, 1, "the chat bubble is left out, the header's own link stays");
+  assert.equal(c.sections[0].sticky, true, "the fixed header is the sticky first section");
+  assert.equal(c.sections[0].height, 64); // 80 × 960/1200: the spacer's room
+  assert.equal(c.sections.length, 5, "header + the 4 sections inside main > div");
+  assert.ok(c.sections.slice(1).every((s) => /Khối/.test(JSON.stringify(s.elements))));
+  assert.equal(c.sections[2].background["background-color"], "rgba(250, 250, 250, 1)", "a transparent section shows its wrapper's background");
 });
