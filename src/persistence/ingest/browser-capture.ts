@@ -98,8 +98,11 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
     out["color"] = s.color;
     out["font-weight"] = s.fontWeight;
     if (s.fontStyle === "italic") out["font-style"] = "italic";
-    const fam = s.fontFamily.split(",")[0].trim().replace(/^['"]|['"]$/g, "");
-    if (fam) out["font-family"] = fam;
+    // the family + its generic fallback ('pangea', sans-serif): a self-hosted font that has not loaded yet
+    // (re-hosted on save) must not fall back to the browser's serif
+    const stack = s.fontFamily.split(",").map((f: string) => f.trim().replace(/^['"]|['"]$/g, ""));
+    const generic = stack.find((f: string) => /^(sans-serif|serif|monospace|cursive|fantasy|system-ui)$/.test(f)) ?? "sans-serif";
+    if (stack[0]) out["font-family"] = stack[0] === generic ? generic : `'${stack[0]}', ${generic}`;
     // landing lineHeight is a multiplier of the font size
     if (s.lineHeight !== "normal" && fs) out["line-height"] = String(Math.round((parseFloat(s.lineHeight) / fs) * 100) / 100);
     if (s.letterSpacing !== "normal" && parseFloat(s.letterSpacing)) out["letter-spacing"] = `${Math.round(parseFloat(s.letterSpacing) * 10) / 10}px`;
@@ -173,7 +176,9 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
     Array.from<any>(el.children).every((c) => {
       const d = cs(c).display;
       return (d.startsWith("inline") && !["IMG", "SVG", "svg", "BUTTON", "INPUT", "SELECT", "TEXTAREA", "VIDEO", "IFRAME"].includes(c.tagName)) || d === "none" || c.tagName === "BR" || icon(c);
-    });
+    }) &&
+    // …and nothing inside is laid out on its own (a badge absolutely placed over a menu link): that is drawn separately
+    !Array.from<any>(el.querySelectorAll("*")).some((d: any) => ["absolute", "fixed"].includes(cs(d).position) && shown(d));
   /** the text a visitor sees: skips screen-reader-only / hidden descendants (innerText keeps them). */
   const visibleText = (el: Element): string => {
     let out = "";
@@ -299,7 +304,7 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
   // order → POPUP1…; the buttons/links that open them become open_popup events.
   const POPUP_SEL = 'dialog, [role="dialog"], [aria-modal="true"], .modal, .popup, [class*="popup"], [class*="modal"], [id*="popup"], [id*="modal"]';
   const popupEls = Array.from<any>(document.querySelectorAll(POPUP_SEL)).filter((c: any, i: number, all: any[]) => {
-    if (all.some((o: any) => o !== c && o.contains(c))) return false; // outermost only
+    if (all.some((o: any) => o !== c && o.contains(c)) || c.closest("[data-wc-dismissed]")) return false; // outermost only; no dismissed cookie bar / chat
     const s = cs(c);
     // a modal overlays the page (fixed / dialog); a hidden "popup-menu" dropdown sits in the flow
     const overlay = c.tagName === "DIALOG" || s.position === "fixed" || c.getAttribute("role") === "dialog" || c.getAttribute("aria-modal") === "true" || c.classList.contains("modal");
@@ -361,13 +366,23 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
   const byTop = (a: any, b: any) => a.getBoundingClientRect().top - b.getBoundingClientRect().top;
   // fixed / absolute layers (floating widgets, side TOCs, overlays) are not bands: each becomes a pinned
   // group inside the section where it sits.
-  const isOverlay = (c: Element) => ["fixed", "absolute"].includes(cs(c).position);
+  // A fixed bar across the top (the site header) IS a band — the section's native sticky — when the
+  // page keeps room for it (nothing with content starts under it); a fixed header laid over the hero stays a layer.
+  const contentful = (b: Element) => !!(b as HTMLElement).innerText?.trim() || !!b.querySelector("img,svg,video,iframe,canvas,picture,input,select,textarea") || painted(cs(b));
+  const topBar = (c: Element) => {
+    const r = c.getBoundingClientRect();
+    return cs(c).position === "fixed" && r.top <= 1 && r.width >= vw * 0.9 && r.height <= window.innerHeight * 0.4 &&
+      Array.from<any>(root.children).every((o: any) => o === c || isOverlayRaw(o) || !shown(o) || !contentful(o) || o.getBoundingClientRect().top >= r.bottom - 4);
+  };
+  const isOverlayRaw = (c: Element) => ["fixed", "absolute"].includes(cs(c).position);
+  const isOverlay = (c: Element) => isOverlayRaw(c) && !(c.parentElement === root && topBar(c));
   // A tall band made of full-width blocks stacked one under another (<main> wrapping every section)
-  // is split into those blocks, down to 3 levels.
+  // is split into those blocks, down to 3 levels; a lone wrapper inside it (<main><div>…) is looked through.
   const flatten = (els: Element[], depth: number): Element[] =>
     els.flatMap((b: any) => {
       const r = b.getBoundingClientRect();
-      const kids = sizeable(b).filter((c: any) => !isOverlay(c)).sort(byTop);
+      let kids = sizeable(b).filter((c: any) => !isOverlay(c)).sort(byTop);
+      for (let i = 0; i < 4 && kids.length === 1 && !realForm(kids[0]) && !slidesOf(kids[0]).length; i++) kids = sizeable(kids[0]).filter((c: any) => !isOverlay(c)).sort(byTop);
       const stacked = kids.length >= 2 && kids.every((c: any, i: number) => {
         const q = c.getBoundingClientRect();
         // stacked: each block starts below the middle of the previous one (angled / overlapping
@@ -379,7 +394,8 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
     });
   const topLevel = sizeable(root).sort(byTop);
   const overlayEls = topLevel.filter(isOverlay);
-  const bandEls = flatten(topLevel.filter((c) => !isOverlay(c)), 0).sort(byTop);
+  // an empty band (a spacer under a fixed header) adds no section: the band above spans its room
+  const bandEls = flatten(topLevel.filter((c) => !isOverlay(c)), 0).filter(contentful).sort(byTop);
   // popups mode: show each hidden popup and measure its content box as its own band
   const popupContents: Element[] = [];
   if (opt.popups) {
@@ -435,7 +451,11 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
     const span = spanOf(bands.indexOf(band));
     const secTop = span.top;
     const bs = cs(band);
-    const background: Record<string, string> = { "background-color": rgba(alpha(bs.backgroundColor) > 0 ? bs.backgroundColor : pageBg) };
+    // a transparent band shows the wrapper it was split from (<main class="bg-light">), else the page's background
+    let bgEl: Element = band;
+    while (alpha(cs(bgEl).backgroundColor) === 0 && bgEl.parentElement && bgEl !== root) bgEl = bgEl.parentElement;
+    const bgColor = cs(bgEl).backgroundColor;
+    const background: Record<string, string> = { "background-color": rgba(alpha(bgColor) > 0 ? bgColor : pageBg) };
     if (bgUrl(bs)) background["background-image"] = bgUrl(bs);
     else if (gradient(bs)) background["background-image"] = colorsIn(gradient(bs));
     const elements: Raw[] = [];
@@ -530,7 +550,14 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
       sink.push(raw);
     };
     const visit = (el: Element, inForm: boolean) => {
-      if (SKIP.has(el.tagName) || !shown(el) || count >= maxElements) return;
+      if (SKIP.has(el.tagName) || count >= maxElements) return;
+      if (!shown(el)) {
+        // a 0×0 wrapper that does not clip (an inline <a> around an absolute ticker item) still shows its children
+        const z = cs(el), zr = el.getBoundingClientRect();
+        if ((zr.width <= 2 || zr.height <= 2) && z.display !== "none" && z.visibility !== "hidden" && parseFloat(z.opacity) > 0.02 && z.overflowX === "visible" && z.overflowY === "visible")
+          Array.from<any>(el.children).forEach((c) => visit(c, inForm));
+        return;
+      }
       const s = cs(el);
       const tag = el.tagName;
       const style: Record<string, string> = {};
@@ -691,7 +718,21 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
         return;
       }
       if (inForm && (FIELD.has(tag) || tag === "BUTTON" || consumed.has(el))) return; // already a form field
-      if (FIELD.has(tag)) return; // a field outside a form cannot submit on a landing page
+      if (FIELD.has(tag)) {
+        // a field outside a form cannot submit on a landing page: its look stays (a search box) — the box + its placeholder
+        if (painted(s)) {
+          paint(s, style);
+          push({ __el: el, key: keyOf(el) + "~bg", kind: "box", box: boxOf(el), style });
+        }
+        const hint = String(el.placeholder || (tag === "SELECT" ? el.selectedOptions?.[0]?.text : el.value) || "").trim();
+        if (hint && !["checkbox", "radio", "range", "color", "file", "hidden"].includes(el.type)) {
+          const st: Record<string, string> = {};
+          typo(s, st);
+          if (el.placeholder && !el.value) st.color = getComputedStyle(el, "::placeholder").color;
+          push({ key: keyOf(el), kind: "paragraph", text: esc(hint), box: contentBox(el, s), style: st });
+        }
+        return;
+      }
       const text = visibleText(el);
       const buttonish = (tag === "A" || tag === "BUTTON" || el.getAttribute("role") === "button") && painted(s) && text.length > 0 && text.length <= 60 && el.getBoundingClientRect().height <= 120;
       if (buttonish) {
@@ -907,6 +948,62 @@ function openCollapsibles() {
   });
 }
 
+/**
+ * Runs in the page BEFORE the measurement: what floats over the page that is not its design is taken away.
+ * Consent / newsletter / promo layers are dismissed the way a visitor does (their accept / close control
+ * clicked: Vietnamese + English texts, aria-labels); what still floats then — cookie bars, empty
+ * full-screen dim backdrops, chat widgets — is hidden and left out (data-wc-dismissed), and a promo modal
+ * left open is hidden too (the popup pass measures it as a landing popup). Only position:fixed layers are touched, never the site header
+ * or anything in the flow.
+ */
+function dismissOverlays() {
+  const vw = document.documentElement.clientWidth, vh = window.innerHeight;
+  const CONSENT = /cookie|consent|gdpr|quyền riêng tư|privacy/i;
+  const PROMO = /newsletter|subscribe|popup|modal|dialog|promo|đăng ký nhận/i;
+  const CHAT = /chat|messenger|zalo|tawk|crisp|intercom|tidio|zopim|livechat|hubspot-messages|freshchat|drift|contact-fab|hỗ trợ|support/i;
+  const CLOSE = /^(chấp nhận( tất cả)?|đồng ý( tất cả)?|tôi đồng ý|accept( all)?( cookies)?|allow( all)?( cookies)?|agree|i agree|got it|ok(ay)?|đã hiểu|đóng|close|dismiss|no,? thanks|không,? cảm ơn|bỏ qua|để sau|later|[×✕✖xX])$/i;
+  const attrs = (el: any) => `${el.id || ""} ${typeof el.className === "string" ? el.className : ""} ${el.getAttribute("aria-label") || ""} ${el.getAttribute("role") || ""}`;
+  const visible = (el: any) => {
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    return r.width > 2 && r.height > 2 && s.display !== "none" && s.visibility !== "hidden" && parseFloat(s.opacity) > 0.02;
+  };
+  const header = (el: any) => el.matches("header, [role=banner]") || !!el.querySelector("nav, [role=navigation]");
+  /** the outermost position:fixed ancestor-or-self (below <body>) */
+  const layerOf = (el: any) => {
+    let out: any = null;
+    for (let n = el; n && n !== document.body; n = n.parentElement) if (getComputedStyle(n).position === "fixed") out = n;
+    return out;
+  };
+  const kind = (el: any) => {
+    const text = (el.innerText || "").trim();
+    if (CONSENT.test(attrs(el)) || /cookie|consent|gdpr/i.test(text) || (CONSENT.test(text) && text.length < 800)) return "consent";
+    if (el.matches("dialog, [role=dialog], [aria-modal=true]") || PROMO.test(attrs(el))) return "promo";
+    return "";
+  };
+  // 1. the visitor's click: accept / close inside a consent or promo layer (no navigation, no form submit)
+  for (const b of Array.from<any>(document.querySelectorAll("button, a, [role=button], input[type=button]"))) {
+    const t = (b.innerText || b.value || b.getAttribute("aria-label") || b.getAttribute("title") || "").trim().replace(/\s+/g, " ");
+    if (!CLOSE.test(t) || !visible(b) || (b.tagName === "A" && /^https?:|^\//.test(b.getAttribute("href") || "")) || (b.closest("form") && b.type !== "button")) continue;
+    const layer = layerOf(b) || b.closest("dialog, [role=dialog], [aria-modal=true]");
+    if (layer && !header(layer) && kind(layer)) {
+      try { b.click(); } catch { /* a handler that throws */ }
+    }
+  }
+  // 2. what still floats
+  for (const el of Array.from<any>(document.querySelectorAll("body *"))) {
+    if (!el.isConnected || getComputedStyle(el).position !== "fixed" || layerOf(el) !== el || !visible(el) || header(el)) continue;
+    const r = el.getBoundingClientRect();
+    const k = kind(el);
+    const text = (el.innerText || "").trim();
+    const backdrop = r.width >= vw * 0.9 && r.height >= vh * 0.9 && !text && !el.querySelector("img, svg, video, iframe, picture, canvas");
+    const small = r.width * r.height < vw * vh * 0.15;
+    const chat = small && (CHAT.test(attrs(el)) || Array.from<any>(el.querySelectorAll("[id], [class], [aria-label], iframe")).some((d: any) => CHAT.test(attrs(d)) || CHAT.test(d.src || "")) || (text.length <= 24 && CHAT.test(text)));
+    // hidden, not removed: a framework (React…) that still owns the node crashes when it is gone
+    if (k === "consent" || backdrop || chat) el.setAttribute("data-wc-dismissed", "");
+    if (k || backdrop || chat) el.style.setProperty("display", "none", "important");
+  }
+}
+
 async function captureAt(target: { url?: string; html?: string; baseUrl?: string }, width: number): Promise<RawCapture> {
   const r = await withContext(width, 1, async (ctx: any) => {
     // Every request the page makes (subresources, redirects, html-embedded urls) passes the same
@@ -923,6 +1020,9 @@ async function captureAt(target: { url?: string; html?: string; baseUrl?: string
         await page.goto(target.url, { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
       }
       else await page.setContent(withBase(target.html!, target.baseUrl), { waitUntil: "networkidle", timeout: 30000 }).catch(() => undefined);
+      await page.evaluate(dismissOverlays).catch(() => undefined);
+      await page.waitForTimeout(300); // the dismissed layers' close animations
+      await page.evaluate(dismissOverlays).catch(() => undefined);
       await page.evaluate(openCollapsibles).catch(() => undefined);
       // An app shell that scrolls inside a full-height box (body = one viewport, content in a
       // overflow:auto div): unlock it so the document is as tall as the page.
@@ -951,6 +1051,8 @@ async function captureAt(target: { url?: string; html?: string; baseUrl?: string
         window.scrollTo({ top: 0, behavior: "instant" as any });
       });
       await page.waitForTimeout(400);
+      // a layer that only appeared while scrolling (a newsletter after N seconds / % scrolled)
+      await page.evaluate(dismissOverlays).catch(() => undefined);
       const main = await page.evaluate(captureInPage, { max: MAX_ELEMENTS, popups: false });
       // second pass reveals the hidden popups (mutates the page: after the main capture)
       const pop = await page.evaluate(captureInPage, { max: 200, popups: true }).catch(() => null);
@@ -1056,7 +1158,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
   // element is placed by its absolute page position; each desktop section gets a mobile FRAME — from its
   // matched elements down to the next section's frame — and its mobile boxes are relative to that frame.
   // Matching is by DOM path, else by what the element shows (text / picture / icon); a section that
-  // barely matches hides nothing on mobile (scaled fallback) and gets no mobile-only additions.
+  // barely matches (and is not the same band there) hides nothing on mobile (scaled fallback) and gets no mobile-only additions.
   const sigOf = (e: Raw) => (e.text ? `t:${e.text.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim().slice(0, 80)}` : e.src ? `s:${e.src}` : e.svg ? `v:${e.svg.slice(0, 120)}` : "");
   type MobRef = { e: Raw; abs: number; sec: RawSection };
   const mobAll: MobRef[] = (mob?.sections ?? []).flatMap((ms) => ms.elements.map((e) => ({ e, abs: ms.top + e.box.top, sec: ms })));
@@ -1113,9 +1215,12 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
       s.elements.forEach((e, j) => (matchesOf[i][j] ??= bySigPick(e, (r) => r.abs >= frames[i] && r.abs < end)));
     });
   const relative = (r: MobRef, frameTop: number): Raw => ({ ...r.e, box: { ...r.e.box, top: Math.round(r.abs - frameTop) } });
+  // the mobile layout of a section is known when the same band exists there (a header whose desktop nav
+  // collapses into a burger matches little, yet what is missing IS hidden) or enough of it matched
+  const reliableAt = (i: number) => !!mob && ((keysHold && mobSec.has(desk.sections[i].key)) || desk.sections[i].elements.length === 0 || matchesOf[i].filter(Boolean).length / desk.sections[i].elements.length >= 0.3);
   const sections: CanvasSection[] = desk.sections.map((s, i) => {
     const hits = matchesOf[i];
-    const reliable = !!mob && (s.elements.length === 0 || hits.filter(Boolean).length / s.elements.length >= 0.3);
+    const reliable = reliableAt(i);
     const fTop = frames[i];
     const fEnd = i + 1 < frames.length ? frames[i + 1] : mobEnd;
     const sec: CanvasSection = {
@@ -1133,8 +1238,7 @@ export function mergeCaptures(desk: RawCapture, mob: RawCapture | null): Ingeste
   for (const r of mobAll) {
     if (used.has(r)) continue;
     const i = frameOf(r.abs);
-    const hits = matchesOf[i] ?? [];
-    if (!desk.sections[i] || (desk.sections[i].elements.length && hits.filter(Boolean).length / desk.sections[i].elements.length < 0.3)) continue;
+    if (!desk.sections[i] || !reliableAt(i)) continue;
     const el = toEl(relative(r, frames[i]), undefined, km);
     mobileOnly(el, true);
     sections[i].elements.push(el);

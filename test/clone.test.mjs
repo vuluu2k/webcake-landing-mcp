@@ -1,7 +1,7 @@
 // clone_page merge step (no browser): desktop boxes scale onto 960, mobile boxes are used as
 // measured, an element missing on mobile is hidden there, a mobile-only one is hidden on desktop,
 // rotation survives, and the result saves as a valid page.
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { mergeCaptures } from "../dist/persistence/ingest/browser-capture.js";
 import { landingDomain as D } from "../dist/domains/landing/index.js";
@@ -36,6 +36,22 @@ test("merge: desktop scaled to 960, mobile measured, hidden / mobile-only flagge
   assert.equal(deco.style.transform, "rotate(30deg)");
   assert.equal(burger.mobile.only, true);
   assert.equal(c.sections[0].mobile.height, 700);
+});
+
+test("merge: a header whose desktop nav collapses on mobile (same band, few matches) hides the nav there", () => {
+  const sec = (key, top, height, elements) => ({ key, top, height, background: {}, elements });
+  const t = (key, top, left) => el(key, "paragraph", { top, left, width: 100, height: 20 }, { text: key });
+  const d = { title: "T", description: "", width: 1200, truncated: false, sections: [
+    sec("header0", 0, 80, [t("logo", 20, 20), t("nav1", 20, 300), t("nav2", 20, 420), t("nav3", 20, 540)]),
+    sec("main0", 80, 500, [t("a", 100, 20), t("b", 200, 20), t("c", 300, 20)]),
+  ] };
+  const m = { ...d, width: 420, sections: [
+    sec("header0", 0, 60, [t("logo", 10, 10), el("burger", "shape", { top: 10, left: 370, width: 30, height: 30 }, { svg: "<svg viewBox='0 0 1 1'><rect width='1' height='1'/></svg>" })]),
+    sec("main0", 60, 700, [t("a", 100, 10), t("b", 300, 10), t("c", 500, 10)]),
+  ] };
+  const [head] = mergeCaptures(d, m).sections;
+  assert.deepEqual(head.elements.slice(1, 4).map((e) => e.mobile), [null, null, null]);
+  assert.equal(head.elements.find((e) => e.svg)?.mobile.only, true, "the burger is added as mobile-only");
 });
 
 test("merge → source: mobile hide / desktop hide / rotation land in the page and it validates", () => {
@@ -149,4 +165,41 @@ test("measured text keeps its height (virtualHeight) and tight gaps; containers 
   assert.deepEqual(texts.map((t) => t.responsive.desktop.styles.top), [8, 26, 43]);
   assert.ok(texts.every((t) => t.responsive.desktop.config.virtualHeight === t.responsive.desktop.styles.height));
   assert.equal(saved.page[0].responsive.desktop.styles.height, 300, fixed.join("\n"));
+});
+
+// In Chrome (skipped on a host without Playwright + Chrome): a store-like page — fixed header over a
+// spacer, <main> with ONE wrapper around its sections, a cookie bar with its dim backdrop, a chat bubble.
+const { playwrightInstalled } = await import("../dist/persistence/screenshot-playwright.js");
+const { captureLayout } = await import("../dist/persistence/ingest/browser-capture.js");
+after(() => setTimeout(() => process.exit(), 100).unref()); // the shared Chrome stays open otherwise
+test("browser: overlays dismissed, fixed header = sticky section, a wrapped <main> split into its sections", { skip: !(await playwrightInstalled()) }, async () => {
+  const block = (i) => `<section style="height:700px;padding:40px;background:${i % 2 ? "#f4f4f4" : "transparent"}"><h2>Khối ${i}</h2><p>Nội dung ${i}</p></section>`;
+  const html = `<!doctype html><html><body style="margin:0;font-family:sans-serif">
+    <header style="position:fixed;top:0;left:0;right:0;height:80px;background:#fff;font-family:Pangea, 'Pangea Fallback'"><nav style="padding-top:30px"><a href="/a">Nam</a> <a href="/b">Nữ</a> <a href="/c">Hỗ trợ</a>
+      <span style="display:inline-block"><a href="/bf" style="position:relative;padding:20px">BLACK FRIDAY<span style="position:absolute;right:0;top:0;background:#d9ff00;font-size:10px">MUA 1 TẶNG 1</span></a></span>
+      <input placeholder="Tìm kiếm..." style="border:1px solid #ccc;border-radius:99px;padding:8px;width:200px">
+      <span style="position:relative;display:inline-block;width:300px;height:20px"><a href="/t"><span style="position:absolute;left:0;top:0">MIỄN PHÍ VẬN CHUYỂN</span></a></span></nav></header>
+    <div style="height:80px"></div>
+    <main><div style="background:#fafafa">${[1, 2, 3, 4].map(block).join("")}</div></main>
+    <div id="bd" style="position:fixed;inset:0;background:rgba(0,0,0,.5)"></div>
+    <div id="cb" style="position:fixed;bottom:0;left:0;right:0;padding:12px;background:#fff">Chúng tôi dùng cookie để cải thiện trải nghiệm
+      <button onclick="document.getElementById('cb').remove();document.getElementById('bd').remove()">Chấp nhận tất cả</button></div>
+    <div id="contact-fab" style="position:fixed;bottom:20px;right:20px;width:56px;height:56px;border-radius:50%;background:#22f"><button>Hỗ trợ</button></div>
+  </body></html>`;
+  const c = await captureLayout({ html });
+  const texts = JSON.stringify(c.sections);
+  assert.ok(!/cookie|Chấp nhận/.test(texts), "the cookie bar is left out");
+  assert.equal((texts.match(/Hỗ trợ/g) ?? []).length, 1, "the chat bubble is left out, the header's own link stays");
+  assert.equal(c.sections[0].sticky, true, "the fixed header is the sticky first section");
+  const head = c.sections[0].elements;
+  const textOf = (t) => head.find((e) => e.text?.includes(t));
+  assert.notEqual(textOf("BLACK FRIDAY"), textOf("MUA 1 TẶNG 1"), "an absolute badge over a link is its own element");
+  assert.ok(head.some((e) => e.type === "box" && e.style["background-color"] === "rgba(217, 255, 0, 1)"), "…with its paint");
+  assert.ok(textOf("Tìm kiếm...") && head.some((e) => e.type === "box" && e.style["border-radius"]), "a search field outside a form keeps its box + placeholder");
+  assert.ok(textOf("MIỄN PHÍ VẬN CHUYỂN"), "an absolute item inside a 0×0 link is measured");
+  assert.equal(textOf("Nam").style["font-family"], "'Pangea', sans-serif", "a custom family keeps a sans-serif fallback");
+  assert.equal(c.sections[0].height, 64); // 80 × 960/1200: the spacer's room
+  assert.equal(c.sections.length, 5, "header + the 4 sections inside main > div");
+  assert.ok(c.sections.slice(1).every((s) => /Khối/.test(JSON.stringify(s.elements))));
+  assert.equal(c.sections[2].background["background-color"], "rgba(250, 250, 250, 1)", "a transparent section shows its wrapper's background");
 });
