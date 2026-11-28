@@ -98,8 +98,11 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
     out["color"] = s.color;
     out["font-weight"] = s.fontWeight;
     if (s.fontStyle === "italic") out["font-style"] = "italic";
-    const fam = s.fontFamily.split(",")[0].trim().replace(/^['"]|['"]$/g, "");
-    if (fam) out["font-family"] = fam;
+    // the family + its generic fallback ('pangea', sans-serif): a self-hosted font that has not loaded yet
+    // (re-hosted on save) must not fall back to the browser's serif
+    const stack = s.fontFamily.split(",").map((f: string) => f.trim().replace(/^['"]|['"]$/g, ""));
+    const generic = stack.find((f: string) => /^(sans-serif|serif|monospace|cursive|fantasy|system-ui)$/.test(f)) ?? "sans-serif";
+    if (stack[0]) out["font-family"] = stack[0] === generic ? generic : `'${stack[0]}', ${generic}`;
     // landing lineHeight is a multiplier of the font size
     if (s.lineHeight !== "normal" && fs) out["line-height"] = String(Math.round((parseFloat(s.lineHeight) / fs) * 100) / 100);
     if (s.letterSpacing !== "normal" && parseFloat(s.letterSpacing)) out["letter-spacing"] = `${Math.round(parseFloat(s.letterSpacing) * 10) / 10}px`;
@@ -173,7 +176,9 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
     Array.from<any>(el.children).every((c) => {
       const d = cs(c).display;
       return (d.startsWith("inline") && !["IMG", "SVG", "svg", "BUTTON", "INPUT", "SELECT", "TEXTAREA", "VIDEO", "IFRAME"].includes(c.tagName)) || d === "none" || c.tagName === "BR" || icon(c);
-    });
+    }) &&
+    // …and nothing inside is laid out on its own (a badge absolutely placed over a menu link): that is drawn separately
+    !Array.from<any>(el.querySelectorAll("*")).some((d: any) => ["absolute", "fixed"].includes(cs(d).position) && shown(d));
   /** the text a visitor sees: skips screen-reader-only / hidden descendants (innerText keeps them). */
   const visibleText = (el: Element): string => {
     let out = "";
@@ -545,7 +550,14 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
       sink.push(raw);
     };
     const visit = (el: Element, inForm: boolean) => {
-      if (SKIP.has(el.tagName) || !shown(el) || count >= maxElements) return;
+      if (SKIP.has(el.tagName) || count >= maxElements) return;
+      if (!shown(el)) {
+        // a 0×0 wrapper that does not clip (an inline <a> around an absolute ticker item) still shows its children
+        const z = cs(el), zr = el.getBoundingClientRect();
+        if ((zr.width <= 2 || zr.height <= 2) && z.display !== "none" && z.visibility !== "hidden" && parseFloat(z.opacity) > 0.02 && z.overflowX === "visible" && z.overflowY === "visible")
+          Array.from<any>(el.children).forEach((c) => visit(c, inForm));
+        return;
+      }
       const s = cs(el);
       const tag = el.tagName;
       const style: Record<string, string> = {};
@@ -706,7 +718,21 @@ function captureInPage(opt: { max: number; popups: boolean }): RawCapture {
         return;
       }
       if (inForm && (FIELD.has(tag) || tag === "BUTTON" || consumed.has(el))) return; // already a form field
-      if (FIELD.has(tag)) return; // a field outside a form cannot submit on a landing page
+      if (FIELD.has(tag)) {
+        // a field outside a form cannot submit on a landing page: its look stays (a search box) — the box + its placeholder
+        if (painted(s)) {
+          paint(s, style);
+          push({ __el: el, key: keyOf(el) + "~bg", kind: "box", box: boxOf(el), style });
+        }
+        const hint = String(el.placeholder || (tag === "SELECT" ? el.selectedOptions?.[0]?.text : el.value) || "").trim();
+        if (hint && !["checkbox", "radio", "range", "color", "file", "hidden"].includes(el.type)) {
+          const st: Record<string, string> = {};
+          typo(s, st);
+          if (el.placeholder && !el.value) st.color = getComputedStyle(el, "::placeholder").color;
+          push({ key: keyOf(el), kind: "paragraph", text: esc(hint), box: contentBox(el, s), style: st });
+        }
+        return;
+      }
       const text = visibleText(el);
       const buttonish = (tag === "A" || tag === "BUTTON" || el.getAttribute("role") === "button") && painted(s) && text.length > 0 && text.length <= 60 && el.getBoundingClientRect().height <= 120;
       if (buttonish) {

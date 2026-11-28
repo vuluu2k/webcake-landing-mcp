@@ -159,7 +159,10 @@ after(() => setTimeout(() => process.exit(), 100).unref()); // the shared Chrome
 test("browser: overlays dismissed, fixed header = sticky section, a wrapped <main> split into its sections", { skip: !(await playwrightInstalled()) }, async () => {
   const block = (i) => `<section style="height:700px;padding:40px;background:${i % 2 ? "#f4f4f4" : "transparent"}"><h2>Khối ${i}</h2><p>Nội dung ${i}</p></section>`;
   const html = `<!doctype html><html><body style="margin:0;font-family:sans-serif">
-    <header style="position:fixed;top:0;left:0;right:0;height:80px;background:#fff"><nav><a href="/a">Nam</a> <a href="/b">Nữ</a> <a href="/c">Hỗ trợ</a></nav></header>
+    <header style="position:fixed;top:0;left:0;right:0;height:80px;background:#fff;font-family:Pangea, 'Pangea Fallback'"><nav style="padding-top:30px"><a href="/a">Nam</a> <a href="/b">Nữ</a> <a href="/c">Hỗ trợ</a>
+      <span style="display:inline-block"><a href="/bf" style="position:relative;padding:20px">BLACK FRIDAY<span style="position:absolute;right:0;top:0;background:#d9ff00;font-size:10px">MUA 1 TẶNG 1</span></a></span>
+      <input placeholder="Tìm kiếm..." style="border:1px solid #ccc;border-radius:99px;padding:8px;width:200px">
+      <span style="position:relative;display:inline-block;width:300px;height:20px"><a href="/t"><span style="position:absolute;left:0;top:0">MIỄN PHÍ VẬN CHUYỂN</span></a></span></nav></header>
     <div style="height:80px"></div>
     <main><div style="background:#fafafa">${[1, 2, 3, 4].map(block).join("")}</div></main>
     <div id="bd" style="position:fixed;inset:0;background:rgba(0,0,0,.5)"></div>
@@ -172,6 +175,13 @@ test("browser: overlays dismissed, fixed header = sticky section, a wrapped <mai
   assert.ok(!/cookie|Chấp nhận/.test(texts), "the cookie bar is left out");
   assert.equal((texts.match(/Hỗ trợ/g) ?? []).length, 1, "the chat bubble is left out, the header's own link stays");
   assert.equal(c.sections[0].sticky, true, "the fixed header is the sticky first section");
+  const head = c.sections[0].elements;
+  const textOf = (t) => head.find((e) => e.text?.includes(t));
+  assert.notEqual(textOf("BLACK FRIDAY"), textOf("MUA 1 TẶNG 1"), "an absolute badge over a link is its own element");
+  assert.ok(head.some((e) => e.type === "box" && e.style["background-color"] === "rgba(217, 255, 0, 1)"), "…with its paint");
+  assert.ok(textOf("Tìm kiếm...") && head.some((e) => e.type === "box" && e.style["border-radius"]), "a search field outside a form keeps its box + placeholder");
+  assert.ok(textOf("MIỄN PHÍ VẬN CHUYỂN"), "an absolute item inside a 0×0 link is measured");
+  assert.equal(textOf("Nam").style["font-family"], "'Pangea', sans-serif", "a custom family keeps a sans-serif fallback");
   assert.equal(c.sections[0].height, 64); // 80 × 960/1200: the spacer's room
   assert.equal(c.sections.length, 5, "header + the 4 sections inside main > div");
   assert.ok(c.sections.slice(1).every((s) => /Khối/.test(JSON.stringify(s.elements))));
