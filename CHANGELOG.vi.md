@@ -6,6 +6,18 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-11-28
+
+### Fixed
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay bỏ các lớp cookie/consent/newsletter, modal quảng cáo và widget chat (bấm nút chấp nhận/đóng của chúng trước, cả tiếng Việt và tiếng Anh) trước khi đo, thay vì chụp luôn chúng vào thiết kế.
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay biến thanh header cố định (fixed) của trang thành sticky native của section đầu tiên, thay vì một lớp overlay nổi, miễn là trang có chừa khoảng trống cho nó.
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay nhìn xuyên qua một lớp `div` bọc đơn bên trong `<main>` cao (ví dụ `<main><div>…`) khi tách nó thành các section, và section trong suốt hoàn toàn nay lấy màu nền của lớp bọc mà nó được tách ra thay vì lấy màu nền của trang; band rỗng còn sót lại do header cố định (một khoảng đệm) không còn trở thành một section trống riêng.
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay vẽ badge hoặc nhãn đặt tuyệt đối (absolute) đè lên một link (ví dụ nhãn "MUA 1 TẶNG 1" trên một mục menu) thành box và text riêng, thay vì gộp nó vào chung một đoạn text của link.
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay giữ lại trường nhập nằm ngoài mọi `<form>` (ví dụ ô tìm kiếm độc lập) dưới dạng một box có nền cùng placeholder, thay vì bỏ hẳn nó.
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay đo các phần tử con của một lớp bọc kích thước 0 và không clip (ví dụ thẻ `<a>` inline bọc một item ticker đặt tuyệt đối), thay vì bỏ qua chúng vì coi là ẩn.
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay giữ `font-family` tự host kèm fallback chung của nó (ví dụ `'pangea', sans-serif`) thay vì rơi về font serif mặc định của trình duyệt trong lúc font còn đang tải.
+- `clone_page` và `ingest_html`/`ingest_url` với `intent:'clone'` nay ẩn các phần tử mà bản mobile thực sự loại bỏ (ví dụ menu desktop gập thành nút burger) mỗi khi cùng band section đó có mặt trên mobile, thay vì chỉ ẩn khi phần lớn phần tử của section đã khớp; một header desktop trước đây khớp quá ít không còn bị thu nhỏ và chen chúc trên mobile nữa.
+
 ## [1.16.2] - 2026-11-28
 
 ### Fixed

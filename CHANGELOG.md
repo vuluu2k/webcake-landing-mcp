@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-11-28
+
+### Fixed
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now dismiss cookie/consent/newsletter banners, promo modals and chat widgets (clicking their accept/close control first, in Vietnamese and English) before measuring, instead of capturing them as part of the design.
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now turn a fixed site header into the first section's native sticky instead of a floating overlay layer, as long as the page leaves room for it.
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now look through a single wrapper `div` inside a tall `<main>` (e.g. `<main><div>…`) when splitting it into sections, and give a fully transparent section the background color of the wrapper it was split from instead of the page background; an empty band left over from a fixed header (a spacer) no longer becomes its own blank section.
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now draw a badge or pill absolutely positioned over a link (e.g. a "BUY 1 GET 1" tag on a menu item) as its own box and text instead of merging it into the link's single text run.
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now keep a form field that sits outside any `<form>` (e.g. a standalone search box) as a painted box with its placeholder text, instead of dropping it entirely.
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now measure the children of a zero-size, non-clipping wrapper (e.g. an inline `<a>` around an absolutely positioned ticker item) instead of skipping them as hidden.
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now keep a mobile layout's self-hosted `font-family` with its generic fallback (e.g. `'pangea', sans-serif`) instead of dropping to the browser's serif default while the font is still loading.
+- `clone_page` and `ingest_html`/`ingest_url` with `intent:'clone'` now hide the elements a mobile layout actually removes (e.g. a desktop nav collapsed into a burger menu) whenever the same section band is present on mobile, instead of only when most of the section's elements matched; a desktop header that previously matched too little is no longer left scaled down and crowded on mobile.
+
 ## [1.16.2] - 2026-11-28
 
 ### Fixed
