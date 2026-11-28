@@ -6,6 +6,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.2] - 2026-11-28
+
+### Fixed
+- `login` and the OAuth connect flow now also capture the landing session id (`wsid`, the SPA's `lwsid` cookie) alongside the JWT and persistence calls send it to the backend as an `x-session-id` header (sourced from the saved login, the `WEBCAKE_SESSION_ID` env var, or the `x-webcake-session-id` request header); the backend's `/users/@me` route requires this header and previously failed without it.
+
 ## [1.16.1] - 2026-11-25
 
 ### Fixed

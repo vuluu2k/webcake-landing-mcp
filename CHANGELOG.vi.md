@@ -6,6 +6,11 @@ Mọi thay đổi đáng chú ý của dự án được ghi lại trong file n�
 Định dạng dựa trên [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 và dự án tuân theo [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.2] - 2026-11-28
+
+### Fixed
+- `login` và luồng OAuth connect nay cũng lấy thêm session id landing (`wsid`, tức cookie `lwsid` của SPA) cùng với JWT, và các lượt gọi persistence gửi nó lên backend dưới dạng header `x-session-id` (lấy từ thông tin đăng nhập đã lưu, biến môi trường `WEBCAKE_SESSION_ID`, hoặc header request `x-webcake-session-id`); route `/users/@me` của backend yêu cầu header này và trước đó bị lỗi khi thiếu nó.
+
 ## [1.16.1] - 2026-11-25
 
 ### Fixed
