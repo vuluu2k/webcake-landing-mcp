@@ -6,6 +6,8 @@
 export type WebcakeConfig = {
   base: string;
   jwt: string;
+  /** Landing session id (the SPA's `lwsid` cookie) — sent as `x-session-id`; `/users/@me` requires it. Optional. */
+  sessionId?: string;
   orgId?: string;
   /** SPA base — used for the login connect page (`<appBase>/mcp-connect`). */
   appBase?: string;

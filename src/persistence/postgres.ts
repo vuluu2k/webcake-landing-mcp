@@ -115,6 +115,9 @@ export function ensureOAuthSchema(pool: PgPool): Promise<boolean> {
           scope       text,
           expires_at  bigint NOT NULL
         );
+        ALTER TABLE oauth_codes ADD COLUMN IF NOT EXISTS wsid text;
+        ALTER TABLE oauth_access_tokens ADD COLUMN IF NOT EXISTS wsid text;
+        ALTER TABLE oauth_refresh_tokens ADD COLUMN IF NOT EXISTS wsid text;
       `);
       return true;
     } catch (e: any) {

@@ -6,7 +6,7 @@
  *   1. open a loopback server on 127.0.0.1:<port>,
  *   2. open the browser to the Webcake "connect" URL with redirect_uri=<loopback>,
  *   3. the user is already logged in to Webcake, so Webcake reads their `jwt`
- *      cookie server-side and 302s back to the loopback with ?token=<jwt>,
+ *      cookie server-side and 302s back to the loopback with ?token=<jwt>[&wsid=<lwsid>],
  *   4. we save it to the credentials file (persistence/config.ts#saveSavedConfig),
  *      which the stdio/http server then reads automatically.
  *
@@ -165,7 +165,7 @@ export function buildConnectUrl(connectUrl: string, redirectUri: string, state: 
 }
 
 export type CallbackResult =
-  | { ok: true; token: string }
+  | { ok: true; token: string; sessionId?: string }
   | { ok: false; status: 400 | 404; reason: string };
 
 /** Decide what a loopback request means. Pure + exported so smoke can test it. */
@@ -176,7 +176,7 @@ export function parseCallback(reqUrl: string | undefined, expectedState: string)
   if (!token) return { ok: false, status: 400, reason: "no token in the callback — re-run the command" };
   if (url.searchParams.get("state") !== expectedState)
     return { ok: false, status: 400, reason: "state mismatch (login link truncated or expired) — re-run the command" };
-  return { ok: true, token };
+  return { ok: true, token, sessionId: url.searchParams.get("wsid") || url.searchParams.get("session_id") || undefined };
 }
 
 export async function runLogin(argv: string[]): Promise<void> {
@@ -213,6 +213,7 @@ export async function runLogin(argv: string[]): Promise<void> {
       try {
         path = saveSavedConfig({
           jwt: cb.token,
+          sessionId: cb.sessionId, // undefined drops a stale one from a previous login
           base: stripTrailingSlash(apiBase),
           appBase: stripTrailingSlash(appBase),
           ...(opts.orgId ? { orgId: opts.orgId } : {}),

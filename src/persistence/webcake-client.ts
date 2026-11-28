@@ -232,6 +232,7 @@ function authHeaders(config: WebcakeConfig, orgId?: string): Record<string, stri
     Authorization: `Bearer ${config.jwt}`,
     Cookie: `jwt=${config.jwt}`,
   };
+  if (config.sessionId) headers["x-session-id"] = config.sessionId;
   const org = orgId ?? config.orgId;
   if (org != null && `${org}` !== "") headers["x-org-id"] = `${org}`;
   return headers;
@@ -326,7 +327,7 @@ export function buildRequestRedacted(config: WebcakeConfig, name: string, source
   return {
     method: req.method,
     url: req.url,
-    headers: { ...req.headers, Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
+    headers: { ...req.headers, Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***", ...(config.sessionId ? { "x-session-id": "***" } : {}) },
     body: mask(req.body).slice(0, 400) + (req.body.length > 400 ? `… (${req.body.length} bytes)` : ""),
   };
 }
@@ -561,7 +562,7 @@ export function buildUpdateRequestRedacted(config: WebcakeConfig, pageId: string
   return {
     method: "POST",
     url: `${config.base}${UPDATE_ENDPOINT}`,
-    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
+    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***", ...(config.sessionId ? { "x-session-id": "***" } : {}) },
     body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
   };
 }
@@ -572,7 +573,7 @@ export function buildAppendRequestRedacted(config: WebcakeConfig, pageId: string
   return {
     method: "POST",
     url: `${config.base}${APPEND_ENDPOINT}`,
-    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
+    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***", ...(config.sessionId ? { "x-session-id": "***" } : {}) },
     body: body.replace(config.jwt, "***JWT***").slice(0, 400) + (body.length > 400 ? `… (${body.length} bytes)` : ""),
   };
 }
@@ -909,7 +910,7 @@ export function buildPublishRequestRedacted(
   return {
     method: "POST",
     url: publishUrl(config, pageId, willRender),
-    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***" },
+    headers: { ...authHeaders(config), Authorization: "Bearer ***JWT***", Cookie: "jwt=***JWT***", ...(config.sessionId ? { "x-session-id": "***" } : {}) },
     body: body.replace(config.jwt, "***JWT***").slice(0, 600) + (body.length > 600 ? `… (${body.length} bytes)` : ""),
     rendered: willRender,
   };
@@ -1083,6 +1084,7 @@ export async function uploadImageToCollection(
         Accept: "application/json, text/plain, */*", // builder host: application/json alone → 406
         Authorization: `Bearer ${config.jwt}`,
         Cookie: `jwt=${config.jwt}`,
+        ...(config.sessionId ? { "x-session-id": config.sessionId } : {}),
         "x-org-id": `${org}`,
       },
       body: form,

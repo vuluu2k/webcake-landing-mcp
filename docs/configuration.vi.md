@@ -67,6 +67,7 @@ SPA cũng được, khỏi cần route backend.)
 | `WEBCAKE_ENV` | Không | Môi trường có tên: `local` \| `staging` \| `prod`. Điền sẵn `WEBCAKE_API_BASE` + `WEBCAKE_APP_BASE` từ preset (xem bảng bên dưới). Cũng đặt được qua cờ `--env <name>`. Biến tường minh sẽ thắng. |
 | `WEBCAKE_API_BASE` | Không* | Base URL backend, ví dụ `http://localhost:5800`. Cần để lưu trang (hoặc đặt `WEBCAKE_ENV`). |
 | `WEBCAKE_JWT` | Không* | JWT tài khoản (auth dashboard). Cần để lưu trang — sẽ hết hạn, làm mới khi cần. |
+| `WEBCAKE_SESSION_ID` | Không | Session id landing (cookie `lwsid` của SPA), gửi kèm dưới header `x-session-id`. `login` tự lưu; client remote gửi `x-webcake-session-id` hoặc `?wsid=`. |
 | `WEBCAKE_ORG_ID` | Không | Organization mặc định cho `create_page` (bị ghi đè bởi tham số `organization_id`). Bỏ trống → trang cá nhân. |
 | `WEBCAKE_APP_BASE` | Không | SPA base tuỳ chọn — dùng cho trang connect khi `login` qua trình duyệt. |
 | `WEBCAKE_BUILDER_BASE` | Không | Host builder tuỳ chọn cho link editor/preview trong kết quả. Mặc định lấy theo preset môi trường, nếu không thì suy ra từ host API (`api.x`→`builder.x`). |
